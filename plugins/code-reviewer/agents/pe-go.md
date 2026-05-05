@@ -226,6 +226,77 @@ tdd_and_hygiene:
     grep -nE "\"database/sql\"" <file>
 ```
 
+## Pass 2b: Impact Propagation (trace flows, imagine breakage)
+
+After structural quality checks, trace the change through the runtime.
+Goal: catch what breaks under real concurrent/edge-case conditions.
+
+```
+shared_state_deep_check:
+  for each map, slice, or struct field written in the diff:
+    trace all readers across the codebase (not just the diff):
+      grep -rn "<variable_name>" <worktree> --include="*.go" | grep -v "_test.go"
+    if written by one goroutine/handler and read by another:
+      if no sync.Mutex, sync.RWMutex, atomic, or channel protecting access:
+        flag CRITICAL "data race — <variable> written in <writer> and read in <reader> without synchronization"
+    if map is package-level (module state, singleton):
+      flag HIGH "package-level map — concurrent handler access will panic without sync"
+
+  for each regex with the `g` flag or compiled with MustCompile at package level:
+    if regex is used in a loop via FindAllString/ReplaceAll:
+      verify no stateful methods (exec with lastIndex) are used
+      if regex.Regexp methods are called in concurrent context:
+        flag MEDIUM "compiled regex is safe for concurrent use, but verify no external state (e.g., lastIndex in JS interop)"
+
+  verification commands:
+    grep -rn "var.*map\[" <worktree> --include="*.go" | grep -v "_test.go"
+    grep -rn "sync\.Mutex\|sync\.RWMutex\|atomic\." <worktree> --include="*.go"
+
+input_edge_cases:
+  for each string parameter accepted from external sources in the diff
+  (request body, form values, event payloads, CLI args):
+    if string is used in user-facing output (email, response, log):
+      if no strings.TrimSpace before use:
+        flag MEDIUM "untrimmed input — leading/trailing whitespace produces malformed output"
+    if string is used in a comparison or map key:
+      if no normalization (TrimSpace, ToLower, etc.):
+        flag MEDIUM "unnormalized input used as key/comparison — whitespace or case variants will mismatch"
+    if string is used to construct a file path or URL:
+      if no path.Clean or url.Parse validation:
+        flag HIGH "unsanitized input in path/URL construction"
+
+  for each optional/pointer field in a struct unmarshaled from JSON:
+    trace all dereferences of that field:
+    if any dereference lacks a nil check:
+      flag HIGH "nil dereference — optional field <name> used without nil guard after unmarshal"
+
+  verification commands:
+    grep -nE "strings\.TrimSpace" <file>
+    grep -nE "json\.Unmarshal|json\.NewDecoder" <file>
+    grep -nE "\*\w+\.\w+" <file>  # pointer dereference patterns
+
+handler_flow_trace:
+  for each handler modified in the diff (HTTP, Lambda, EventBridge):
+    trace the full request lifecycle:
+      1. input validation (at handler boundary)
+      2. auth/authz check (JWT, tenant context)
+      3. business logic (DAL calls, state mutations)
+      4. side effects (events published, emails sent, audit logged)
+      5. response construction
+    for each step, verify:
+      - errors from prior step prevent subsequent steps from executing
+      - partial failures are handled (e.g., DAL succeeds but event publish fails)
+      - response status codes match actual outcomes (not always 200)
+    if handler publishes events AND writes to DB:
+      if not in same transaction or no compensation/retry:
+        flag MEDIUM "dual write — DB commit + event publish can partially fail"
+
+  verification commands:
+    grep -nE "func.*Handler\(|func.*handler\(" <file>
+    grep -nE "\.Publish\(|\.Send\(" <file>
+    grep -nE "\.Exec\(|\.Query\(" <file>
+```
+
 ## Pass 3: Security (top 1% strict)
 
 ```
@@ -285,6 +356,11 @@ dependency_audit:
 - Goroutine leaks (launched without completion signal)
 - Error chain breaks (wrapping with %v instead of %w)
 - Dead exported functions referenced only from tests
+- Data races on shared package-level maps (concurrent handler access)
+- Untrimmed string input producing malformed user-facing output
+- Nil dereference on optional struct fields after JSON unmarshal
+- Dual-write hazards (DB commit + event publish partial failure)
+- Handler flow gaps (partial failure leaves side effects uncommitted)
 
 ## Domain Expertise
 

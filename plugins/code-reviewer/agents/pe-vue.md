@@ -285,6 +285,90 @@ tdd_and_hygiene:
     grep -nE "onBeforeUnmount|onUnmounted" <file>
 ```
 
+## Pass 2b: Impact Propagation (trace flows, imagine breakage)
+
+After structural quality checks, trace the change through the system.
+Goal: catch what breaks when the user does X while Y is happening.
+
+```
+consumer_parity:
+  for each new/modified prop, emit, or slot on a component in the diff:
+    consumers = grep -rn "<ComponentName" <frontend_subdir> --include="*.vue"
+    for each consumer:
+      read the consumer's template bindings for this component
+      if consumer does NOT pass the new prop (and prop has no default):
+        flag HIGH "prop parity gap — <Consumer> does not pass :<new_prop> to <Component>"
+      if component has sibling consumers (e.g., CbInboxSplit, CbListSplit, CbKanbanBoard
+      all consume the same data contract from a parent):
+        verify ALL siblings receive the same props
+        if any sibling is missing: flag HIGH "sibling parity — <Sibling> missing :<prop>"
+
+  verification commands:
+    grep -rn "<ComponentName" <frontend_subdir>/components --include="*.vue"
+    grep -rn "<ComponentName" <frontend_subdir>/pages --include="*.vue"
+
+user_flow_trace:
+  for each user-facing behavior added/changed by the diff:
+    identify the entry point (click handler, route navigation, event listener)
+    trace the flow end-to-end:
+      1. what triggers it (dashboard click, URL navigation, prop change)
+      2. what state is set (ref updates, route push, sessionStorage)
+      3. what components consume that state (page, split view, drawer, panel)
+      4. what the user sees (highlight, drawer open, scroll, animation)
+    for each view/mode the feature applies to (e.g., inbox, list, kanban):
+      if the flow works in one view but not another:
+        flag HIGH "flow gap — <behavior> works in <viewA> but not <viewB>"
+
+watcher_lifecycle:
+  for each watch() or watchEffect() added in the diff:
+    if watcher depends on a prop that may be non-null at mount time:
+      if no { immediate: true } option:
+        flag MEDIUM "watcher misses mount-time value — add { immediate: true } or handle in onMounted"
+    if watcher uses { immediate: true }:
+      verify the callback body guards against initial null/undefined:
+        if no guard: flag HIGH "immediate watcher fires with null — add null guard"
+
+  for each prop forwarded through multiple component layers:
+    trace the chain: parent → child → grandchild
+    at each level, verify:
+      - prop is declared in the child's defineProps
+      - prop is bound in the parent's template
+      - conditional gating is correct (e.g., only forward highlightKind when
+        the detail panel shows the highlighted item, not any item)
+    if prop forwarded unconditionally where it should be gated:
+      flag HIGH "prop bleed — <prop> forwarded to <Component> regardless of selected item"
+
+  verification commands:
+    grep -nE "watch\(|watchEffect\(" <file>
+    grep -nE "immediate:\s*true" <file>
+
+design_system_atom_a11y:
+  for each component in diff that is a design system primitive
+  (atoms: buttons, chips, toggles, selects, inputs, badges, avatars, modals, pulses):
+    required regardless of component complexity:
+      - interactive elements: role, aria-label or aria-labelledby
+      - toggle/switch: aria-checked or aria-pressed
+      - selects: aria-expanded, role="listbox" or native <select>
+      - modals: focus trap, focus restoration on close, aria-modal
+      - icons-only buttons: aria-label (no visible text = no accessible name)
+      - color indicators: not color-alone (text/icon supplement)
+    missing any → flag HIGH "atom a11y — <Component> missing <attribute>"
+
+  verification commands:
+    grep -nE "aria-|role=" <file>
+    grep -nE "tabindex|focus\(" <file>
+
+test_binding_coverage:
+  for each prop/binding added in a page template (pages/*.vue) in the diff:
+    check if the page's test file (pages/*.test.ts) has assertions verifying
+    the binding reaches the child component:
+      grep -nE "<prop_name>|data-.*=.*<prop_name>" <test_file>
+      if no test verifies the page-level binding:
+        flag MEDIUM "test gap — page passes :<prop> to <Component> but no page-level test verifies the binding"
+    if component-level tests exist but page-level tests do not cover the integration:
+      flag MEDIUM "test gap — component tests verify <Component> in isolation but no page test covers the wiring"
+```
+
 ## Pass 3: Security (top 1% strict)
 
 ```
@@ -330,6 +414,11 @@ dependency_audit:
 - Incomplete WCAG widget patterns (menu, dialog, listbox, tabs, disclosure)
 - Hydration mismatches (Math.random in setup, Date.now in templates)
 - Memory leaks (intervals/subscriptions not cleaned on unmount)
+- Prop parity gaps — new prop added to one consumer but not sibling consumers
+- Watcher missing mount-time value (needs immediate: true)
+- Prop bleed — value forwarded unconditionally when it should be gated by context
+- Design system atom a11y gaps (aria-pressed, aria-checked, focus trap on primitives)
+- Page-level test gaps — component tests exist but page wiring untested
 
 ## Domain Expertise
 

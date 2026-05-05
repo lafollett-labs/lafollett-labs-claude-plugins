@@ -204,6 +204,75 @@ tdd_and_hygiene:
     ls <infra_subdir>/test/*.test.ts
 ```
 
+## Pass 2b: Impact Propagation (trace flows, imagine breakage)
+
+After structural quality checks, trace the change through deploy and runtime.
+Goal: catch what breaks on apply, on rollback, or when another resource depends on this.
+
+```
+iam_action_enumeration:
+  for each IAM policy in diff:
+    if Action uses a prefix wildcard (e.g., "s3:*", "sts:AssumeRole" with Resource "arn:aws:iam::*:role/cdk-*"):
+      enumerate the ACTUAL actions/resources needed:
+        read the consuming Lambda/function code to determine which API calls it makes
+        flag HIGH "IAM wildcard — enumerate exact actions: <list of actions from code>"
+      if Resource uses a name-prefix wildcard (e.g., "role/cdk-*"):
+        enumerate the actual role names from CDK config or code:
+        flag HIGH "IAM resource wildcard — enumerate exact role ARNs: <list>"
+
+  for each sts:AssumeRole grant in diff:
+    verify the trust policy on the assumed role restricts to the assuming principal
+    if trust policy uses "*" or overly broad principal:
+      flag CRITICAL "assumed role trust policy too broad — attacker could assume from any principal"
+
+  verification commands:
+    grep -rn "AssumeRole\|assumeRole" <worktree>/<infra_subdir> --include="*.ts"
+    grep -rn "actions:" <file>
+    grep -rn "resources:" <file>
+
+shell_exit_code_handling:
+  for each bash command in GitHub Actions workflows or shell scripts in diff:
+    if command output is parsed (grep, jq, awk) after a command that can fail:
+      if no explicit exit code check (|| exit, set -e, if [ $? ]):
+        flag HIGH "exit code not checked — pipeline continues on failure"
+    if command uses `set -e` globally:
+      verify no intentional-failure commands (diff, grep -q) that would abort the script
+      if present: flag MEDIUM "set -e with intentional non-zero exit — use || true or if/then"
+
+  for each `cdktf diff` or `cdk diff` in diff:
+    verify exit code semantics are documented:
+      cdk diff exits 0 (no changes) or 1 (has changes) — not an error
+      if script treats exit 1 as failure: flag HIGH "cdk diff exit 1 means changes exist, not error"
+
+  verification commands:
+    grep -nE "set -e|set -o errexit" <file>
+    grep -nE "\|\| exit|\|\| true|if \[" <file>
+    grep -nE "cdktf diff|cdk diff" <file>
+
+deploy_side_effects:
+  for each new resource or resource modification in diff:
+    trace what OTHER resources depend on this one:
+      grep -rn "<resource_id>\|<construct_id>" <worktree>/<infra_subdir> --include="*.ts"
+    if a dependent resource exists:
+      verify the change doesn't break the dependency (rename, type change, removal)
+      if it does: flag HIGH "breaking change — <dependent> references <resource> which is being modified"
+
+  for each resource with autoInstall, autoSetup, or zone-wide scope:
+    identify all hostnames/services affected:
+    if scope includes dev/preview/non-prod:
+      flag MEDIUM "zone-wide resource affects non-prod — <list of affected hostnames>"
+
+  for each Cloudflare resource that requires API permissions:
+    verify the CI API token has the required permission scope:
+      cross-reference resource type with CF API docs for required token permissions
+      if permission is known to be unavailable (free plan gap, not in token builder):
+        flag HIGH "resource requires <permission> — verify token has scope; known gaps: Web Analytics, Bot Management"
+
+  verification commands:
+    grep -rn "autoInstall\|auto_install\|zone_tag\|zoneId" <file>
+    grep -rn "<construct_id>" <worktree>/<infra_subdir> --include="*.ts"
+```
+
 ## Pass 3: Security (top 1% strict)
 
 ```
@@ -302,6 +371,10 @@ removal_policy:
 - Shared Lambda execution roles violating least-privilege
 - Stateful resources without RemovalPolicy (default DESTROY)
 - Unpinned GitHub Action versions (supply chain risk)
+- IAM prefix wildcards that should enumerate exact actions/role ARNs
+- Shell exit code mishandling (cdk diff exit 1 = changes, not error)
+- Zone-wide resources that unintentionally affect dev/preview hostnames
+- CF API permission gaps that will fail on deploy (Web Analytics, Bot Management)
 
 ## Domain Expertise
 
