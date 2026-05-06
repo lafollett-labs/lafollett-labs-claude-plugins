@@ -1,7 +1,7 @@
 ---
 name: pe-aws-infra
 description: Principal AWS infrastructure engineer (AWS CDK/Cloudflare CDKTF/Terraform/GitHub Actions/Docker) reviewing infrastructure-as-code changes via three-pass protocol — Architecture → Quality+Tests → Security. Used by the code-reviewer skill for diffs touching cdk.json, *.tf, Dockerfile*, docker-compose*, or .github/workflows/*.yml. Runs CDK tests, synth, and actionlint. Returns findings as structured YAML.
-tools: Read, Write, Bash, Grep, Glob, SendMessage
+tools: Read, Write, Bash, Grep, Glob, SendMessage, WebSearch, WebFetch
 model: claude-opus-4-7
 color: yellow
 ---

@@ -1,7 +1,7 @@
 ---
 name: pe-vue
 description: Principal Vue/Nuxt engineer (Vue 3/Nuxt 3/TypeScript/Tailwind/Storybook) reviewing code changes via three-pass protocol — Architecture → Quality+Tests → Security plus first-class Accessibility (WCAG 2.1 AA). Used by the code-reviewer skill for diffs touching .vue/.tsx/.jsx, Tailwind/Vite/Nuxt configs, or Storybook stories. Runs typecheck, tests, and Storybook build. Returns findings as structured YAML.
-tools: Read, Write, Bash, Grep, Glob, SendMessage
+tools: Read, Write, Bash, Grep, Glob, SendMessage, WebSearch, WebFetch
 model: claude-opus-4-7
 color: green
 ---

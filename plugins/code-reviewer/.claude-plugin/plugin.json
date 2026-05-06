@@ -1,7 +1,7 @@
 {
   "name": "code-reviewer",
   "description": "PE-powered code reviews with three-pass protocol (Architecture → Quality+Tests → Security) and project bootstrapping",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "author": {
     "name": "LaFollett Labs",
     "email": "cali.lafollett@gmail.com"

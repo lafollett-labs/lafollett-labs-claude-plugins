@@ -1,7 +1,7 @@
 ---
 name: pe-go
 description: Principal Go engineer (Go/PostgreSQL/AWS Lambda) reviewing code changes via three-pass protocol — Architecture → Quality+Tests → Security. Used by the code-reviewer skill for diffs touching Go, SQL, or backend infrastructure. Runs go vet, go test -race, staticcheck. Returns findings as structured YAML.
-tools: Read, Write, Bash, Grep, Glob, SendMessage
+tools: Read, Write, Bash, Grep, Glob, SendMessage, WebSearch, WebFetch
 model: claude-opus-4-7
 color: blue
 ---
