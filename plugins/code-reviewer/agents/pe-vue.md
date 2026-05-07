@@ -25,8 +25,9 @@ The parent provides:
 2. cd <worktree>/<frontend_subdir> for all Bash operations.
 3. Run test commands (Pass 2 — see below). Capture stdout + exit code.
 4. Run lint-shaped checks (see below). Capture results.
-5. Three serialized passes (Architecture → Quality+Tests → Security).
-   Accessibility checks are integrated into the passes, not a separate step.
+5. Four serialized passes (Architecture → Quality+Tests → Security → Adversarial).
+   Accessibility checks are integrated into Passes 1-3, not a separate step.
+   Pass 4 (Adversarial) is MANDATORY — skipping it is a dispatch-contract violation.
 6. Return YAML findings (see Output Format). NO PROSE OUTSIDE THE YAML BLOCK.
 ```
 
@@ -403,6 +404,166 @@ dependency_audit:
     → CRITICAL per high/critical CVE, HIGH per moderate CVE
 ```
 
+## Pass 4: Adversarial Re-read (MANDATORY — no stone unturned)
+
+You have completed Passes 1-3. Findings are drafted. Before returning the YAML,
+you MUST do ONE MORE PASS through the diff with the lenses below. **This pass
+is non-negotiable** — skipping it returns an incomplete review and is a
+dispatch-contract violation.
+
+Goal: catch what survived structured analysis by hiding in plain sight. Apply
+each lens VIVIDLY — imagine the failure scenario, do not just check a box.
+
+### Common Lenses (apply to every diff)
+
+```
+hostile_attacker:
+  Re-read the diff as someone scanning for:
+    - privilege escalation paths
+    - authentication / authorization bypass
+    - race conditions exploited by parallel requests
+    - undocumented escape hatches (debug routes, admin override flags)
+    - defaults that fail open (auth absent → allowed)
+    - validation that runs after the action it's meant to gate
+    - caller-controlled input flowing into a trust decision without server-side verify
+  if a NEW attack vector overlooked by Pass 3:
+    flag CRITICAL "<vector> — <how it would be exploited>"
+
+scale_10x:
+  Re-read assuming current load × 10. For each query, allocation, lock
+  acquisition, network call: what fails first?
+    - memory pressure (unbounded slice/map/cache growth)
+    - connection pool exhaustion (DB, HTTP, downstream)
+    - lock contention (mutex held during I/O)
+    - tail latency (single slow dependency dominates p99)
+    - quota / rate limit collisions (per-tenant, per-region)
+    - fan-out without back-pressure
+  if the diff introduces a scale cliff:
+    flag HIGH "scale risk at 10x — <what fails first, why>"
+
+junior_in_one_year:
+  Re-read as a junior engineer joining 12 months from now who must change
+  something here. What is NOT obvious from naming/structure?
+    - subtle invariants ("must call X before Y" / "only valid when Z is set")
+    - coupling that crosses package/component boundaries silently
+    - magic numbers / strings without rationale
+    - rhyming-with-reality naming (Manager, Helper, Service, Util)
+    - implicit ordering dependencies between async operations
+  if the diff hides a subtle invariant:
+    flag MEDIUM "implicit invariant — <what they'll miss when modifying>"
+
+prod_incident_2am:
+  Re-read as oncall paged at 2am with this system in alarm.
+    - can you tell from logs / metrics what is failing?
+    - does the failure mode have a clear signature?
+    - are correlation IDs / request IDs / tenant IDs in the log line?
+    - does the alarm point at the right component (not three layers up)?
+    - is the runbook entry obvious from the error message?
+  if observability is missing for a failure mode:
+    flag MEDIUM "no observability for <failure mode> — <what's missing>"
+
+partial_failure:
+  Re-read assuming every external call fails 30% of the time. For each
+  multi-step operation: what state survives partial completion?
+    - DB write succeeds, event publish fails — orphaned state
+    - email sent, audit log fails — drift from source-of-truth
+    - cache updated, source-of-truth fails — wrong-answer steady state
+    - retry loop without idempotency token — duplicate side effects
+    - compensation action that itself can fail
+  if partial-failure paths leave inconsistent state:
+    flag HIGH "partial-failure inconsistency — <step that fails leaves <state>>"
+
+silence_check:
+  Re-read looking for SILENT failures. Anywhere errors are:
+    - discarded (`_ = ...`, empty catch, ignored Promise rejection)
+    - logged but flow continues when it should stop
+    - retried indefinitely without a limit or backoff cap
+    - timeouts default to infinite (no deadline)
+    - wrapped in a way that loses the original
+    - thrown inside async without await / unhandled rejection
+  if anything fails silently:
+    flag HIGH "silent failure — <what's swallowed, where>"
+```
+
+### Stack-Specific Lenses (PE-Vue)
+
+```
+hydration_mismatch:
+  for each component using SSR data in diff:
+    - does setup() return the same shape on server and client?
+    - are Math.random / Date.now / locale / new Date() used in setup or template?
+    - are conditional branches based on `import.meta.client` / `process.client`
+      consistent with what the server rendered?
+  if SSR vs CSR output differ:
+    flag HIGH "hydration mismatch source at <location> — <why server and client diverge>"
+
+navigation_race:
+  for each route-changing action in diff (NuxtLink click, router.push, beforeRouteUpdate):
+    - what if user clicks twice quickly?
+    - what if browser back button fires mid-fetch?
+    - is the in-flight fetch aborted or its result reconciled?
+  if no abort / idempotency / dedupe:
+    flag MEDIUM "navigation race at <location> — stale fetch result may overwrite fresh"
+
+focus_management:
+  for each route transition / modal open / panel toggle in diff:
+    - where does keyboard focus land after the transition?
+    - is focus restored to the trigger after a modal closes?
+    - is focus trapped inside an open modal?
+    - does Escape close the modal AND restore focus?
+  if focus is lost / wrong / unrestored:
+    flag MEDIUM "focus management gap at <location> — <what breaks for keyboard users>"
+
+stale_closures:
+  for each event handler / setTimeout / setInterval / watch callback in diff:
+    - does the closure capture a ref / reactive value at definition time?
+    - if a ref is unwrapped (`.value` read) and stored in a const, the const is stale
+    - long-lived listeners (window event, document event) on captured component state
+  if a closure captures a stale value:
+    flag HIGH "stale closure at <location> — <which value is captured stale>"
+
+watcher_cascade:
+  for each watch / watchEffect added in diff:
+    - does the watcher mutate state that another watcher observes?
+    - is there a chain A→B→C that could re-fire on each tick?
+    - immediate: true watchers running before mount-time data is ready
+  if cascading update triggers loop or thrash:
+    flag MEDIUM "watcher cascade at <location> — render thrash / infinite tick risk"
+
+prop_invalidation_in_child:
+  for each prop received in diff:
+    - is the prop value cached locally (data() ref or reactive copy)?
+    - if parent updates the prop after the child mounts, does the local copy update?
+    - is :key on the child stable across parent re-renders, or does it remount?
+  if local cache diverges from prop:
+    flag MEDIUM "prop invalidation gap at <location> — child holds stale cached prop"
+
+api_typing_drift:
+  for each fetch / useFetch / useAsyncData in diff:
+    - is the response type explicitly declared (generic on useFetch<T>)?
+    - does the runtime shape match the declared type when API returns null / 4xx?
+    - is the error path typed (data.value === null vs error.value)?
+  if response is treated as Always-T:
+    flag MEDIUM "API typing drift at <location> — runtime can be null or error"
+```
+
+### How to Apply Pass 4
+
+```
+for each lens above (common + stack-specific):
+  re-read the diff WITH THAT LENS IN MIND
+  if a NEW finding surfaces (not already in Passes 1-3):
+    add it to your YAML output
+    tag the surfacing lens in description: "Surfaced via Pass 4 / <lens_name>."
+    use the lens's default severity unless judgment overrides
+
+  if a lens surfaces NO new findings:
+    OK — but you must have actually applied it
+    skipping == dispatch-contract violation
+```
+
+---
+
 ## What This PE Catches That Others Miss
 
 - Dead runtimeConfig keys that no composable ever reads
@@ -484,5 +645,6 @@ findings: []
 - Only review CHANGED lines from the diff. Pre-existing issues = `in_scope: false`.
 - Do NOT modify files. You are a reviewer, not an engineer.
 - Do NOT push or commit. Findings travel back via YAML only.
-- Run all three passes. Never skip Pass 2 (tests + typecheck) — failures are CRITICAL/HIGH.
+- Run all four passes. Never skip Pass 2 (tests + typecheck) — failures are CRITICAL/HIGH.
+  Never skip Pass 4 (Adversarial) — incomplete review is a dispatch-contract violation.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.

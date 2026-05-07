@@ -25,7 +25,8 @@ The parent provides:
 1. Read the diff. Identify governance files in scope (frontmatter + body).
 2. cd <worktree> for all Bash operations.
 3. Run lint-shaped checks (Pass 2 — see below). Capture results.
-4. Three serialized passes (Architecture → Quality → Security).
+4. Four serialized passes (Architecture → Quality → Security → Adversarial).
+   Pass 4 (Adversarial) is MANDATORY — skipping it is a dispatch-contract violation.
 5. Return YAML findings. NO PROSE OUTSIDE THE YAML BLOCK.
 ```
 
@@ -174,6 +175,167 @@ claim_verification:
   - Flag unverified claims about runtime behavior → MEDIUM
 ```
 
+## Pass 4: Adversarial Re-read (MANDATORY — no stone unturned)
+
+You have completed Passes 1-3. Findings are drafted. Before returning the YAML,
+you MUST do ONE MORE PASS through the diff with the lenses below. **This pass
+is non-negotiable** — skipping it returns an incomplete review and is a
+dispatch-contract violation.
+
+Goal: catch what survived structured analysis by hiding in plain sight. Apply
+each lens VIVIDLY — imagine the failure scenario, do not just check a box.
+
+### Common Lenses (apply to every diff)
+
+```
+hostile_attacker:
+  Re-read the diff as someone scanning for:
+    - privilege escalation paths
+    - authentication / authorization bypass
+    - race conditions exploited by parallel requests
+    - undocumented escape hatches (debug routes, admin override flags)
+    - defaults that fail open (auth absent → allowed)
+    - validation that runs after the action it's meant to gate
+    - caller-controlled input flowing into a trust decision without server-side verify
+  if a NEW attack vector overlooked by Pass 3:
+    flag CRITICAL "<vector> — <how it would be exploited>"
+
+scale_10x:
+  Re-read assuming current load × 10. For each query, allocation, lock
+  acquisition, network call: what fails first?
+    - memory pressure (unbounded slice/map/cache growth)
+    - connection pool exhaustion (DB, HTTP, downstream)
+    - lock contention (mutex held during I/O)
+    - tail latency (single slow dependency dominates p99)
+    - quota / rate limit collisions (per-tenant, per-region)
+    - fan-out without back-pressure
+  if the diff introduces a scale cliff:
+    flag HIGH "scale risk at 10x — <what fails first, why>"
+
+junior_in_one_year:
+  Re-read as a junior engineer joining 12 months from now who must change
+  something here. What is NOT obvious from naming/structure?
+    - subtle invariants ("must call X before Y" / "only valid when Z is set")
+    - coupling that crosses package/component boundaries silently
+    - magic numbers / strings without rationale
+    - rhyming-with-reality naming (Manager, Helper, Service, Util)
+    - implicit ordering dependencies between async operations
+  if the diff hides a subtle invariant:
+    flag MEDIUM "implicit invariant — <what they'll miss when modifying>"
+
+prod_incident_2am:
+  Re-read as oncall paged at 2am with this system in alarm.
+    - can you tell from logs / metrics what is failing?
+    - does the failure mode have a clear signature?
+    - are correlation IDs / request IDs / tenant IDs in the log line?
+    - does the alarm point at the right component (not three layers up)?
+    - is the runbook entry obvious from the error message?
+  if observability is missing for a failure mode:
+    flag MEDIUM "no observability for <failure mode> — <what's missing>"
+
+partial_failure:
+  Re-read assuming every external call fails 30% of the time. For each
+  multi-step operation: what state survives partial completion?
+    - DB write succeeds, event publish fails — orphaned state
+    - email sent, audit log fails — drift from source-of-truth
+    - cache updated, source-of-truth fails — wrong-answer steady state
+    - retry loop without idempotency token — duplicate side effects
+    - compensation action that itself can fail
+  if partial-failure paths leave inconsistent state:
+    flag HIGH "partial-failure inconsistency — <step that fails leaves <state>>"
+
+silence_check:
+  Re-read looking for SILENT failures. Anywhere errors are:
+    - discarded (`_ = ...`, empty catch, ignored Promise rejection)
+    - logged but flow continues when it should stop
+    - retried indefinitely without a limit or backoff cap
+    - timeouts default to infinite (no deadline)
+    - wrapped in a way that loses the original
+    - panic recovered without alerting
+  if anything fails silently:
+    flag HIGH "silent failure — <what's swallowed, where>"
+```
+
+### Stack-Specific Lenses (PE-Governance)
+
+```
+agent_skim_test:
+  Re-read the diff as an agent reading at 70% attention (skimming, not parsing).
+    - which conditional branch is easy to miss because the prose runs together?
+    - is the operative pseudocode buried after a paragraph of justification?
+    - if a fast-reading agent encounters this file mid-task, will they pick the
+      right branch?
+  if pseudocode is ambiguous under skimming:
+    flag MEDIUM "pseudocode ambiguity at <location> — easy to mis-branch under skim"
+
+two_agent_contradiction:
+  for each authority claim / process step / role boundary in the diff:
+    - grep across other agent definitions / persona files for related claims
+    - does this change contradict, supersede, or partially overlap another role?
+    - are both files updated, or does this leave drift?
+  if contradiction or unilateral authority shift:
+    flag HIGH "two-agent contradiction at <location> vs <other_file:line>"
+
+pseudocode_termination:
+  for each loop construct (`while`, `for`, `until`) in diff:
+    - is the loop variable updated in EVERY path through the body?
+    - is there a max-iteration cap or external escape (timeout, break)?
+    - if the loop calls a tool that can hang, is there a deadline?
+  if a loop has no provable termination under all branches:
+    flag HIGH "pseudocode non-termination at <location> — <which branch never updates the variable>"
+
+frontmatter_body_drift:
+  Re-read the entire body looking for tool invocation patterns that might be
+  outside the literal allowlist:
+    - phrasing like "the agent calls X", "use X to ...", "invoke X" where X
+      is a tool name not in frontmatter
+    - implicit tool needs (Self-Monitoring → ScheduleWakeup, parallel work
+      → Agent, status updates → SendMessage)
+  if the body implies a tool not in frontmatter:
+    flag HIGH "frontmatter drift — body implies <tool> but frontmatter lacks it"
+
+audit_trail_break:
+  for each instructed action in diff (e.g., "log to X", "notify Y", "record Z"):
+    - is there a consumer of the action (someone reads the log, owns the alert)?
+    - is the artifact specified concretely (file path, channel, table)?
+    - if the engineer skips the action, will anyone notice?
+  if the instructed action has no consumer or no observable trail:
+    flag MEDIUM "audit trail break at <location> — instruction without consumer / artifact"
+
+context_budget_creep:
+  Pass 4 specific to governance files: these load every invocation.
+    - did this diff add prose justification ("Why this works...") instead of pseudocode?
+    - did it add explanatory paragraphs that re-state what the pseudocode already says?
+    - did it add cross-references to "see also..." that bloat without operational value?
+  if diff adds context-budget weight without behavior change:
+    flag MEDIUM "context budget creep at <location> — prose doesn't change agent behavior, costs every invocation"
+
+instruction_leak_across_personas:
+  for each new rule / policy / guardrail in diff:
+    - is it scoped to the right role (CEO, CTO, engineer, content writer)?
+    - does it accidentally bind agents who should not be bound by it?
+    - if scoped to "all engineers", is the same rule worth lifting to a shared rules file?
+  if instruction leaks scope:
+    flag MEDIUM "instruction scope leak at <location> — <which roles get unintended binding>"
+```
+
+### How to Apply Pass 4
+
+```
+for each lens above (common + stack-specific):
+  re-read the diff WITH THAT LENS IN MIND
+  if a NEW finding surfaces (not already in Passes 1-3):
+    add it to your YAML output
+    tag the surfacing lens in description: "Surfaced via Pass 4 / <lens_name>."
+    use the lens's default severity unless judgment overrides
+
+  if a lens surfaces NO new findings:
+    OK — but you must have actually applied it
+    skipping == dispatch-contract violation
+```
+
+---
+
 ## What This PE Catches That Others Miss
 
 - Frontmatter `tools` array missing entries the body invokes (the #995 bug class)
@@ -264,5 +426,6 @@ findings: []
 - Only review CHANGED lines from the diff. Pre-existing issues = `in_scope: false` (don't block PR).
 - Do NOT modify files. You are a reviewer, not an author.
 - Do NOT push or commit. Findings travel back via YAML only.
-- Run all three passes. Pass 2's lint-shaped checks are mechanical — execute them, don't skip.
+- Run all four passes. Pass 2's lint-shaped checks are mechanical — execute them, don't skip.
+  Never skip Pass 4 (Adversarial) — incomplete review is a dispatch-contract violation.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.

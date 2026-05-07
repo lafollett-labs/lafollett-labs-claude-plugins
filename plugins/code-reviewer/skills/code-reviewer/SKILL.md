@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-aws-infra). Three-pass protocol, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/.
+description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-aws-infra, pe-governance). Four-pass protocol with mandatory adversarial re-read, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop until APPROVED with only INFO findings.
 ---
 
 # Expert Code Review
@@ -141,7 +141,7 @@ in_scope = true for everything provided
 
 ## Phase 3: Review Execution
 
-### Three-Pass Protocol (every review)
+### Four-Pass Protocol (every review)
 
 ```
 Pass 1 — Architecture: SOLID, patterns, coupling, cohesion, separation of
@@ -161,6 +161,14 @@ Pass 3 — Security: top 1% strict. OWASP Top 10, auth, secrets, injection,
                    IAM policy file, workflow YAML, role trust policy).
                    Doc-vs-artifact drift is a security-grade finding —
                    readers and operators trust the doc.
+
+Pass 4 — Adversarial Re-read (MANDATORY): hostile_attacker, scale_10x,
+                   junior_in_one_year, prod_incident_2am, partial_failure,
+                   silence_check + stack-specific lenses defined per PE.
+                   Goal: catch what survived structured analysis by hiding in
+                   plain sight. Skipping Pass 4 = incomplete review =
+                   dispatch-contract violation. See each PE's "Pass 4:
+                   Adversarial Re-read" section for the full lens framework.
 ```
 
 ### Dispatch
@@ -203,7 +211,7 @@ SOURCE BRANCH: {current branch}
 WORKTREE: {absolute path to repo root}
 {optional} PROJECT SUBDIR: {e.g., "crew/" for frontend in monorepo, "cdk/" for CDK subdir}
 
-Run your three-pass protocol. Return YAML findings.
+Run your four-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read). Return YAML findings.
 ```
 
 The PE returns ONLY a YAML block — see "YAML Finding Structure" below.
@@ -394,11 +402,99 @@ diffs or when no external reviews exist.
 ```
 if any CRITICAL with in_scope == true:    🚫 BLOCKED
 elif any HIGH with in_scope == true:      🚫 BLOCKED
-elif any MEDIUM with in_scope == true:    ⚠️  CHANGES REQUESTED
-else:                                      ✅ APPROVED
+elif any MEDIUM with in_scope == true:    🚫 BLOCKED
+elif any LOW with in_scope == true:       ⚠️  CHANGES REQUESTED
+else (only INFO remaining):                ✅ APPROVED
 ```
 
-If it's worth reporting, it's worth fixing. LOW and INFO are awareness items — everything above requires remediation before merge.
+If it's worth reporting, it's worth fixing. **Only INFO findings are awareness-only** — every other severity (CRITICAL, HIGH, MEDIUM, LOW) blocks ✅ APPROVED and requires remediation. The intent is to drive engineering quality high enough that downstream reviewers (Copilot, human) become a safety net, not a primary gate.
+
+Engineers iterate the local review loop multiple rounds — see "Engineer-Driven Multi-Round Loop" below — until the diff converges on ✅ APPROVED with only INFO findings remaining (or no findings at all).
+
+---
+
+## Engineer-Driven Multi-Round Loop
+
+The engineer who wrote the code drives the review loop locally — not the CEO,
+not a separate reviewer agent. The point: catch the bugs BEFORE the PR opens,
+so external review (Copilot, peer) becomes a safety net rather than a primary
+gate. External-review cycles cost time and (for paid bots) money — a tightly
+self-policed local loop pays for itself within a sprint.
+
+### Loop Mechanic
+
+```
+round = 1
+while verdict != "✅ APPROVED":
+  engineer runs /code-reviewer on current branch HEAD
+  → SKILL dispatches matching PE(s)
+  → PE(s) execute four-pass protocol (incl. mandatory Pass 4)
+  → SKILL consolidates findings, computes verdict
+  → SKILL writes (or appends) ./docs/code-reviews/{name}-code-review.md
+  → SKILL commits review doc to current branch
+
+  if verdict == "🚫 BLOCKED" or "⚠️ CHANGES REQUESTED":
+    engineer reads findings (CRITICAL → LOW, in-scope only)
+    engineer remediates EVERY in-scope finding (CRITICAL/HIGH/MEDIUM/LOW)
+    engineer commits remediation
+    round += 1
+    continue
+
+  if verdict == "✅ APPROVED":
+    # Only INFO findings remain (or none)
+    break
+
+# At ✅ APPROVED: only INFO findings remain. Engineer creates PR.
+```
+
+### Diminishing Returns
+
+Some rounds will surface NEW findings as Pass 4 explores the diff with fresh
+adversarial lenses on each invocation. This is intentional — different lenses
+catch different bug shapes. The loop converges when:
+
+```
+- All in-scope CRITICAL/HIGH/MEDIUM/LOW findings have been remediated, AND
+- Subsequent rounds surface no new findings above INFO severity, AND
+- Pass 2 (tests + lint + typecheck) passes cleanly
+```
+
+Typical convergence: 2-4 rounds. If round 5+ keeps finding new HIGH/MEDIUM
+issues, it indicates either (a) the diff is too large to review confidently —
+split into smaller PRs, or (b) the change touches a fragile area requiring
+PE escalation (architectural review, second-opinion PE).
+
+### Automation via /loop
+
+The engineer can self-pace using a /loop slash command (if available in their
+runtime):
+
+```
+/loop /code-reviewer
+```
+
+Each tick: re-run the review on current HEAD. If verdict transitions to
+✅ APPROVED, the loop signals completion. If blocked, engineer picks up the
+loop output, remediates, commits, and the next tick re-runs. This pattern
+removes the wait-state where engineer signals "ready" and waits for an
+external orchestrator to dispatch the review.
+
+### Engineer ≠ Reviewer Conflict
+
+Engineers reviewing their own code is a known anti-pattern in classical
+process. The Pass 4 adversarial lenses + multi-round convergence + automated
+PE dispatch mitigate this:
+
+- Pass 4's "junior_in_one_year" / "hostile_attacker" / "prod_incident_2am"
+  lenses force the engineer to read the diff from positions outside their
+  authoring context.
+- The PE sub-agent runs in its own session with its own model invocation —
+  it is not the same context as the engineer's authoring session.
+- The audit trail (review doc committed to the branch) is visible to PR
+  reviewers, who can spot-check whether the loop converged honestly.
+
+The result: most defects get caught before the PR opens. Downstream review
+(Copilot, peer) verifies, doesn't carry primary weight.
 
 ---
 

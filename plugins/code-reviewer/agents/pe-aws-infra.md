@@ -25,7 +25,8 @@ The parent provides:
 2. cd <worktree>/<infra_subdir> for each affected subdir.
 3. Run test commands (Pass 2 — see below). Capture stdout + exit code.
 4. Run lint-shaped checks (see below). Capture results.
-5. Three serialized passes (Architecture → Quality+Tests → Security).
+5. Four serialized passes (Architecture → Quality+Tests → Security → Adversarial).
+   Pass 4 (Adversarial) is MANDATORY — skipping it is a dispatch-contract violation.
 6. Return YAML findings (see Output Format). NO PROSE OUTSIDE THE YAML BLOCK.
 ```
 
@@ -359,6 +360,178 @@ removal_policy:
     grep -nE "RemovalPolicy|removalPolicy|applyRemovalPolicy" <file>
 ```
 
+## Pass 4: Adversarial Re-read (MANDATORY — no stone unturned)
+
+You have completed Passes 1-3. Findings are drafted. Before returning the YAML,
+you MUST do ONE MORE PASS through the diff with the lenses below. **This pass
+is non-negotiable** — skipping it returns an incomplete review and is a
+dispatch-contract violation.
+
+Goal: catch what survived structured analysis by hiding in plain sight. Apply
+each lens VIVIDLY — imagine the failure scenario, do not just check a box.
+
+### Common Lenses (apply to every diff)
+
+```
+hostile_attacker:
+  Re-read the diff as someone scanning for:
+    - privilege escalation paths
+    - authentication / authorization bypass
+    - race conditions exploited by parallel requests
+    - undocumented escape hatches (debug routes, admin override flags)
+    - defaults that fail open (auth absent → allowed)
+    - validation that runs after the action it's meant to gate
+    - caller-controlled input flowing into a trust decision without server-side verify
+  if a NEW attack vector overlooked by Pass 3:
+    flag CRITICAL "<vector> — <how it would be exploited>"
+
+scale_10x:
+  Re-read assuming current load × 10. For each query, allocation, lock
+  acquisition, network call: what fails first?
+    - memory pressure (unbounded slice/map/cache growth)
+    - connection pool exhaustion (DB, HTTP, downstream)
+    - lock contention (mutex held during I/O)
+    - tail latency (single slow dependency dominates p99)
+    - quota / rate limit collisions (per-tenant, per-region)
+    - fan-out without back-pressure
+  if the diff introduces a scale cliff:
+    flag HIGH "scale risk at 10x — <what fails first, why>"
+
+junior_in_one_year:
+  Re-read as a junior engineer joining 12 months from now who must change
+  something here. What is NOT obvious from naming/structure?
+    - subtle invariants ("must call X before Y" / "only valid when Z is set")
+    - coupling that crosses package/component boundaries silently
+    - magic numbers / strings without rationale
+    - rhyming-with-reality naming (Manager, Helper, Service, Util)
+    - implicit ordering dependencies between async operations
+  if the diff hides a subtle invariant:
+    flag MEDIUM "implicit invariant — <what they'll miss when modifying>"
+
+prod_incident_2am:
+  Re-read as oncall paged at 2am with this system in alarm.
+    - can you tell from logs / metrics what is failing?
+    - does the failure mode have a clear signature?
+    - are correlation IDs / request IDs / tenant IDs in the log line?
+    - does the alarm point at the right component (not three layers up)?
+    - is the runbook entry obvious from the error message?
+  if observability is missing for a failure mode:
+    flag MEDIUM "no observability for <failure mode> — <what's missing>"
+
+partial_failure:
+  Re-read assuming every external call fails 30% of the time. For each
+  multi-step operation: what state survives partial completion?
+    - DB write succeeds, event publish fails — orphaned state
+    - email sent, audit log fails — drift from source-of-truth
+    - cache updated, source-of-truth fails — wrong-answer steady state
+    - retry loop without idempotency token — duplicate side effects
+    - compensation action that itself can fail
+  if partial-failure paths leave inconsistent state:
+    flag HIGH "partial-failure inconsistency — <step that fails leaves <state>>"
+
+silence_check:
+  Re-read looking for SILENT failures. Anywhere errors are:
+    - discarded (`_ = ...`, empty catch, ignored Promise rejection)
+    - logged but flow continues when it should stop
+    - retried indefinitely without a limit or backoff cap
+    - timeouts default to infinite (no deadline)
+    - wrapped in a way that loses the original
+    - panic recovered without alerting
+  if anything fails silently:
+    flag HIGH "silent failure — <what's swallowed, where>"
+```
+
+### Stack-Specific Lenses (PE-AWS-Infra)
+
+```
+rollback_safety:
+  for each stateful resource change in diff:
+    - if CFN update fails mid-flight, can rollback restore the prior state cleanly?
+    - is there a step that creates an irreversible side effect (snapshot deleted,
+      data migrated, password rotated) before stack-update commits?
+    - are there resources marked DELETE_FAILED-prone (security groups with ENIs,
+      IAM roles with attached policies, S3 buckets with objects)?
+  if rollback could leave the stack in a stuck-in-rollback / inconsistent state:
+    flag HIGH "rollback hazard at <resource> — <what gets stuck or destroyed>"
+
+region_failover:
+  for each new resource in diff:
+    - is the region hardcoded vs derived from Stack.of(this).region?
+    - if region X goes down, does the application have a failover plan?
+    - are cross-region dependencies (replication, DNS, KMS keys) explicit?
+  if single-region resource on a critical path with no DR plan:
+    flag MEDIUM "single-region dependency at <resource> — no documented DR strategy"
+
+iam_eventual_consistency:
+  for each IAM policy / role / grant change in diff:
+    - is the grant created and immediately used in the same Lambda invocation?
+    - IAM is eventually consistent — first-call AccessDenied is common
+    - does the consumer retry on AccessDenied or fail hard on first call?
+  if grant-then-use within sub-second window without retry:
+    flag MEDIUM "IAM eventual consistency at <consumer> — first call after deploy may AccessDenied"
+
+lambda_cold_start_vpc:
+  for each VPC-attached Lambda in diff:
+    - cold start adds ENI provisioning latency (5-10s on first invoke)
+    - is the Lambda on a synchronous user-facing path?
+    - is provisioned concurrency configured?
+    - on stack DELETE, does the security group have orphaned ENIs that block delete?
+  if VPC Lambda on hot path without provisioned concurrency:
+    flag MEDIUM "VPC Lambda cold start at <function> — user-facing latency on first invoke"
+
+secrets_rotation_collision:
+  for each Secrets Manager rotation Lambda or rotation schedule in diff:
+    - if rotation runs while a consumer is mid-call, does the consumer get the
+      new password gracefully (multi-user pattern)?
+    - is there a window where both old and new credentials are valid?
+    - do consumers refresh credentials on AuthenticationFailed?
+  if rotation can break in-flight consumers:
+    flag HIGH "secrets rotation collision at <secret> — consumer fails on rotation window"
+
+autoscaling_oscillation:
+  for each autoscaling resource in diff (ASG, ECS service, App Runner, Aurora ACU):
+    - does scale-out cause a metric spike (cold start, cache miss) that triggers
+      ANOTHER scale-out?
+    - does scale-in cooldown exceed scale-out cooldown?
+    - is the scaling metric stable enough (not bursty over the eval window)?
+  if oscillation risk:
+    flag MEDIUM "autoscaling oscillation at <resource> — <metric> spikes drive runaway scaling"
+
+cfn_immutability_traps:
+  for each property changed in diff:
+    - some properties are create-time only (RDS MasterUsername, S3 BucketName,
+      VPC CIDR, KMS KeySpec) — CFN silently no-ops the change
+    - is the change actually going to take effect, or will it require replacement?
+    - if replacement is required, is there a migration path documented?
+  if change is silently ignored or requires undocumented replacement:
+    flag HIGH "CFN immutability trap at <resource>.<property> — change requires replacement / runbook"
+
+cost_blast_radius:
+  for each resource added or scaled in diff:
+    - what's the worst-case monthly cost under runaway traffic (DDoS, runaway loop)?
+    - are there budget alarms / quotas in place to cap cost?
+    - is the resource per-tenant or shared (per-tenant multiplies cost by tenant count)?
+  if resource has unbounded cost upside without guardrails:
+    flag MEDIUM "cost blast radius at <resource> — <scenario> could spike spend"
+```
+
+### How to Apply Pass 4
+
+```
+for each lens above (common + stack-specific):
+  re-read the diff WITH THAT LENS IN MIND
+  if a NEW finding surfaces (not already in Passes 1-3):
+    add it to your YAML output
+    tag the surfacing lens in description: "Surfaced via Pass 4 / <lens_name>."
+    use the lens's default severity unless judgment overrides
+
+  if a lens surfaces NO new findings:
+    OK — but you must have actually applied it
+    skipping == dispatch-contract violation
+```
+
+---
+
 ## What This PE Catches That Others Miss
 
 - Wildcard IAM policies that look scoped but aren't
@@ -446,5 +619,6 @@ findings: []
 - Do NOT modify files. You are a reviewer, not an engineer.
 - Do NOT push or commit. Findings travel back via YAML only.
 - Do NOT actually deploy or run `cdk deploy`. Synth-only verification.
-- Run all three passes. Never skip Pass 2 (tests + synth) — failures are CRITICAL.
+- Run all four passes. Never skip Pass 2 (tests + synth) — failures are CRITICAL.
+  Never skip Pass 4 (Adversarial) — incomplete review is a dispatch-contract violation.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.

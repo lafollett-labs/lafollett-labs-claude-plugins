@@ -24,7 +24,8 @@ The parent provides:
 2. cd <worktree> for all Bash operations.
 3. Run test commands (Pass 2 — see below). Capture stdout + exit code.
 4. Run lint-shaped checks (see below). Capture results.
-5. Three serialized passes (Architecture → Quality+Tests → Security).
+5. Four serialized passes (Architecture → Quality+Tests → Security → Adversarial).
+   Pass 4 (Adversarial) is MANDATORY — skipping it is a dispatch-contract violation.
 6. Return YAML findings (see Output Format). NO PROSE OUTSIDE THE YAML BLOCK.
 ```
 
@@ -346,6 +347,166 @@ dependency_audit:
     → flag HIGH per deprecated/retracted dependency
 ```
 
+## Pass 4: Adversarial Re-read (MANDATORY — no stone unturned)
+
+You have completed Passes 1-3. Findings are drafted. Before returning the YAML,
+you MUST do ONE MORE PASS through the diff with the lenses below. **This pass
+is non-negotiable** — skipping it returns an incomplete review and is a
+dispatch-contract violation.
+
+Goal: catch what survived structured analysis by hiding in plain sight. Apply
+each lens VIVIDLY — imagine the failure scenario, do not just check a box.
+
+### Common Lenses (apply to every diff)
+
+```
+hostile_attacker:
+  Re-read the diff as someone scanning for:
+    - privilege escalation paths
+    - authentication / authorization bypass
+    - race conditions exploited by parallel requests
+    - undocumented escape hatches (debug routes, admin override flags)
+    - defaults that fail open (auth absent → allowed)
+    - validation that runs after the action it's meant to gate
+    - caller-controlled input flowing into a trust decision without server-side verify
+  if a NEW attack vector overlooked by Pass 3:
+    flag CRITICAL "<vector> — <how it would be exploited>"
+
+scale_10x:
+  Re-read assuming current load × 10. For each query, allocation, lock
+  acquisition, network call: what fails first?
+    - memory pressure (unbounded slice/map/cache growth)
+    - connection pool exhaustion (DB, HTTP, downstream)
+    - lock contention (mutex held during I/O)
+    - tail latency (single slow dependency dominates p99)
+    - quota / rate limit collisions (per-tenant, per-region)
+    - fan-out without back-pressure
+  if the diff introduces a scale cliff:
+    flag HIGH "scale risk at 10x — <what fails first, why>"
+
+junior_in_one_year:
+  Re-read as a junior engineer joining 12 months from now who must change
+  something here. What is NOT obvious from naming/structure?
+    - subtle invariants ("must call X before Y" / "only valid when Z is set")
+    - coupling that crosses package/component boundaries silently
+    - magic numbers / strings without rationale
+    - rhyming-with-reality naming (Manager, Helper, Service, Util)
+    - implicit ordering dependencies between async operations
+  if the diff hides a subtle invariant:
+    flag MEDIUM "implicit invariant — <what they'll miss when modifying>"
+
+prod_incident_2am:
+  Re-read as oncall paged at 2am with this system in alarm.
+    - can you tell from logs / metrics what is failing?
+    - does the failure mode have a clear signature?
+    - are correlation IDs / request IDs / tenant IDs in the log line?
+    - does the alarm point at the right component (not three layers up)?
+    - is the runbook entry obvious from the error message?
+  if observability is missing for a failure mode:
+    flag MEDIUM "no observability for <failure mode> — <what's missing>"
+
+partial_failure:
+  Re-read assuming every external call fails 30% of the time. For each
+  multi-step operation: what state survives partial completion?
+    - DB write succeeds, event publish fails — orphaned state
+    - email sent, audit log fails — drift from source-of-truth
+    - cache updated, source-of-truth fails — wrong-answer steady state
+    - retry loop without idempotency token — duplicate side effects
+    - compensation action that itself can fail
+  if partial-failure paths leave inconsistent state:
+    flag HIGH "partial-failure inconsistency — <step that fails leaves <state>>"
+
+silence_check:
+  Re-read looking for SILENT failures. Anywhere errors are:
+    - discarded (`_ = ...`, empty catch, ignored Promise rejection)
+    - logged but flow continues when it should stop
+    - retried indefinitely without a limit or backoff cap
+    - timeouts default to infinite (no deadline / context.Background)
+    - wrapped in a way that loses the original (`fmt.Errorf("...%v", err)`)
+    - panic recovered without alerting
+  if anything fails silently:
+    flag HIGH "silent failure — <what's swallowed, where>"
+```
+
+### Stack-Specific Lenses (PE-Go)
+
+```
+context_propagation:
+  for each new function/method in diff:
+    - does it accept context.Context as first arg (after receiver)?
+    - does it pass ctx down to all DB / HTTP / downstream calls?
+    - if it spawns a goroutine, does the goroutine receive ctx (not Background)?
+  if context dropped at any boundary:
+    flag MEDIUM "context not propagated at <function> — cancellation will not flow"
+
+pgx_acquisition_vs_query:
+  for each new pgx operation in diff:
+    - is connection acquisition (Acquire / pool.Begin) error handled
+      separately from query/exec error?
+    - many bugs hide here: pool exhaustion looks like a query failure,
+      misleading metrics + retry logic
+  if conflated:
+    flag MEDIUM "pgx Acquire error needs distinct handling from Query error at <location>"
+
+transaction_rollback_safety:
+  for each new tx := db.Begin(...) in diff:
+    - is `defer tx.Rollback()` set immediately after Begin?
+    - does Rollback's error get checked or explicitly ignored when commit succeeded?
+    - is there any path that returns before commit/rollback (panic, early
+      return on validation error)?
+  if rollback path is missing or unreachable:
+    flag HIGH "transaction rollback gap at <location> — leaked tx on error path"
+
+goroutine_lifecycle:
+  for each `go func` or `go fn(...)` in diff:
+    - does the goroutine receive a Context?
+    - is there a completion signal (WaitGroup, errgroup, channel close)?
+    - does the parent goroutine wait or detach explicitly?
+  if launch-and-forget on a request-scoped op:
+    flag HIGH "goroutine leak — request-scoped fan-out without join at <location>"
+
+json_zero_value_ambiguity:
+  for each struct field unmarshaled in diff:
+    - is the field a value type or pointer? (zero vs missing distinguishability)
+    - is omitempty used? does the consumer treat zero == missing?
+    - if user-supplied input, does code distinguish "not sent" from "sent as zero"?
+  if zero / missing / explicit-null collide:
+    flag MEDIUM "ambiguous JSON field <name> at <location> — value vs missing indistinguishable"
+
+timezone_arithmetic:
+  for each time.Time math operation in diff:
+    - are inputs UTC or local? mixed?
+    - DST boundary handling (.AddDate vs .Add(24*time.Hour))?
+    - is the persisted format timezone-stamped (RFC3339) or wall-clock?
+  if zone-naive math on user-facing time:
+    flag MEDIUM "timezone-naive arithmetic at <location> — DST / locale skew possible"
+
+rls_session_state:
+  for each new SQL function or query in diff that depends on tenant context:
+    - is it inside WithTenantTx (which sets the GUC)?
+    - if it is a SECURITY DEFINER function, does it set GUCs at function entry?
+    - if it spans multiple statements, does the session reset between them?
+  if RLS context could be missing or stale:
+    flag HIGH "RLS session state gap — <function> may run without tenant context at <location>"
+```
+
+### How to Apply Pass 4
+
+```
+for each lens above (common + stack-specific):
+  re-read the diff WITH THAT LENS IN MIND
+  if a NEW finding surfaces (not already in Passes 1-3):
+    add it to your YAML output
+    tag the surfacing lens in description: "Surfaced via Pass 4 / <lens_name>."
+    use the lens's default severity unless judgment overrides
+
+  if a lens surfaces NO new findings:
+    OK — but you must have actually applied it
+    skipping == dispatch-contract violation
+```
+
+---
+
 ## What This PE Catches That Others Miss
 
 - SQL function signature mismatches between migration and Go caller (arg count, types)
@@ -430,5 +591,6 @@ findings: []
 - Only review CHANGED lines from the diff. Pre-existing issues = `in_scope: false` (don't block PR).
 - Do NOT modify files. You are a reviewer, not an engineer.
 - Do NOT push or commit. Findings travel back via YAML only.
-- Run all three passes. Never skip Pass 2 (tests) — failures are CRITICAL.
+- Run all four passes. Never skip Pass 2 (tests) — failures are CRITICAL.
+  Never skip Pass 4 (Adversarial) — incomplete review is a dispatch-contract violation.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.
