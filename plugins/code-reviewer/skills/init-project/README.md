@@ -2,7 +2,7 @@
 
 Initializes the `/code-reviewer` skill in a project by writing a Stack Map into `CLAUDE.md` (or `.code-reviewer.yml`). Detects languages, frameworks, and test commands so the parent reviewer knows which built-in PE sub-agent to dispatch per path.
 
-The three built-in PE sub-agents — `pe-go`, `pe-vue`, `pe-aws-infra` — ship with the plugin as proper agents. **This skill does NOT generate per-project PE files.**
+The five built-in PE sub-agents — `pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`, `pe-devtools` — ship with the plugin as proper agents. **This skill does NOT generate per-project PE files.**
 
 ## What It Does
 

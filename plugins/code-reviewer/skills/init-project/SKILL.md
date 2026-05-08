@@ -1,6 +1,6 @@
 ---
 name: init-project
-description: Scan the project and write a Stack Map to CLAUDE.md for /code-reviewer. Detects languages, frameworks, test commands. PEs (pe-go, pe-vue, pe-aws-infra) ship with the plugin.
+description: Scan the project and write a Stack Map to CLAUDE.md for /code-reviewer. Detects languages, frameworks, test commands. PEs (pe-go, pe-vue, pe-aws-infra, pe-governance, pe-devtools) ship with the plugin.
 ---
 
 # Initialize Project for Code Review
@@ -8,12 +8,13 @@ description: Scan the project and write a Stack Map to CLAUDE.md for /code-revie
 Bootstraps the `/code-reviewer` skill into any project by scanning the repo
 and writing a Stack Map into the project's `CLAUDE.md` (or `.code-reviewer.yml`).
 
-The four built-in PE sub-agents — `code-reviewer:pe-go`,
+The five built-in PE sub-agents — `code-reviewer:pe-go`,
 `code-reviewer:pe-vue`, `code-reviewer:pe-aws-infra`,
-`code-reviewer:pe-governance` — ship with the plugin as proper agents.
-This skill does NOT regenerate them. For stacks not covered by a built-in
-PE (Rust, Python, Java, C#, etc.), the code-reviewer skill falls back to
-a generic three-pass review using the Stack Map's test commands.
+`code-reviewer:pe-governance`, `code-reviewer:pe-devtools` — ship with
+the plugin as proper agents. This skill does NOT regenerate them. For
+stacks not covered by a built-in PE (Rust, Python, Java, C#, etc.), the
+code-reviewer skill falls back to a generic three-pass review using the
+Stack Map's test commands.
 
 ---
 
@@ -23,7 +24,7 @@ Scan the repository for language markers, build files, and framework configs.
 
 ### Language Detection
 
-The "Built-in PE" column maps a detected stack to one of the three plugin-shipped agents (`pe-go`, `pe-vue`, `pe-aws-infra`). "Generic" means no built-in agent matches — code-reviewer falls back to a generic three-pass review for that stack.
+The "Built-in PE" column maps a detected stack to one of the five plugin-shipped agents (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`, `pe-devtools`). "Generic" means no built-in agent matches — code-reviewer falls back to a generic three-pass review for that stack.
 
 | Marker | Stack | Built-in PE |
 | --- | --- | --- |
@@ -42,6 +43,7 @@ The "Built-in PE" column maps a detected stack to one of the three plugin-shippe
 | `*.java`, `pom.xml`, `build.gradle` | Java | Generic |
 | `*.cs`, `*.csproj`, `*.sln` | C# / .NET | Generic |
 | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `.claude/rules/*.md`, `docs/rules/*.md` | Agent governance markdown | `pe-governance` |
+| `scripts/dev/**/*.sh`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` | Local dev tooling (single-operator threat model) | `pe-devtools` |
 
 ### Framework Detection
 
