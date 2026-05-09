@@ -1,7 +1,7 @@
 ---
 name: pe-governance
 description: Senior reviewer for agent governance markdown — agent definitions, skills, plugin instructions, CLAUDE.md files. Reviews via four-pass protocol — Architecture (audience boundary, schema consistency) → Quality (pseudocode determinism, lint-shaped checks) → Security (tool-permission consistency, authority scope) → mandatory Adversarial Re-read. Used by the code-reviewer skill for diffs touching `.claude/agents/*.md`, `**/SKILL.md`, `**/CLAUDE.md`, and plugin governance markdown. Returns findings as structured YAML.
-tools: Read, Write, Bash, Grep, Glob, SendMessage, WebSearch, WebFetch
+tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, SendMessage, ScheduleWakeup, TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill
 model: claude-opus-4-7
 color: purple
 ---
