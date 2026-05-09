@@ -121,57 +121,38 @@ Each agent has its own model (`claude-opus-4-7`), tools, and self-contained four
 
 ## Phase 2: Scope Discipline
 
-### Diff-based reviews (Branch / Staged / PR)
-
 ```
-in_scope = issue is in lines added/modified by the diff
-            OR in functions/types/components containing changes
+diff-based reviews (Branch / Staged / PR):
+  in_scope = issue is in lines added/modified OR in functions/types/components
+             containing changes; pre-existing issues are in_scope=false (awareness)
 
-# Report ALL severities (CRITICAL → INFO) for awareness.
-# Verdict is based on highest severity that has in_scope = true.
-# Pre-existing issues (in_scope = false) → awareness, do NOT block PR.
+file / folder / ad-hoc reviews:
+  in_scope = true for everything provided
 ```
 
-### File / Folder / Ad-hoc reviews
-
-```
-in_scope = true for everything provided
-# Use judgment on severity — focus on security and architecture; don't nitpick
-# style on existing code unless explicitly asked.
-```
+PEs apply this rule when assigning `in_scope` to each finding. Calling agent uses `in_scope=true` findings for verdict computation per § Verdict Logic.
 
 ---
 
 ## Phase 3: Review Execution
 
-### Four-Pass Protocol (every review)
+### Four-Pass Protocol
+
+Each PE runs its own four-pass protocol — definitions live in PE files. The calling agent only invokes PEs and consolidates their YAML output. When NO matching PE exists (generic fallback case), the calling agent runs a three-pass equivalent itself:
 
 ```
-Pass 1 — Architecture: SOLID, patterns, coupling, cohesion, separation of
-                       concerns, package/component boundaries, migration safety.
+generic fallback (calling agent runs directly when approach == "generic"):
+  Pass 1 — Architecture:    SOLID, patterns, coupling, boundaries, migration safety
+  Pass 2 — Quality + Tests: run Stack Map test commands; failures CRITICAL,
+                            warnings HIGH
+  Pass 3 — Security:        OWASP Top 10, auth, secrets, injection, supply chain
+                            ("would this survive a pentest?", not "probably fine")
+                            cross-file claim verification: doc-vs-artifact drift
+                            on IAM/RBAC/auth claims is a security-grade finding
 
-Pass 2 — Quality + Tests: code quality + RUN THE TEST SUITE. Test failures
-                          are CRITICAL. Lint/vet/typecheck warnings are HIGH.
-
-Pass 3 — Security: top 1% strict. OWASP Top 10, auth, secrets, injection,
-                   supply chain. "Would this survive a pentest?", not "is this
-                   probably fine?". Assume an attacker is reading the diff.
-
-                   Cross-file claim verification: when the diff includes
-                   documentation that describes runtime security posture
-                   (IAM/RBAC/permissions/auth claims), verify the doc's
-                   claim against the actual runtime artifact (CDK stack,
-                   IAM policy file, workflow YAML, role trust policy).
-                   Doc-vs-artifact drift is a security-grade finding —
-                   readers and operators trust the doc.
-
-Pass 4 — Adversarial Re-read (MANDATORY): hostile_attacker, scale_10x,
-                   junior_in_one_year, prod_incident_2am, partial_failure,
-                   silence_check + stack-specific lenses defined per PE.
-                   Goal: catch what survived structured analysis by hiding in
-                   plain sight. Skipping Pass 4 = incomplete review =
-                   dispatch-contract violation. See each PE's "Pass 4:
-                   Adversarial Re-read" section for the full lens framework.
+PE dispatch (approach == single_pe or multi_pe):
+  PE runs four passes including mandatory Pass 4 (Adversarial Re-read).
+  Skipping Pass 4 is a dispatch-contract violation.
 ```
 
 ### Dispatch
@@ -218,22 +199,6 @@ Run your four-pass protocol (Architecture → Quality+Tests → Security → MAN
 ```
 
 The PE returns ONLY a YAML block — see "YAML Finding Structure" below.
-
-### Common Adversarial Lenses (Pass 4)
-
-Every production-grade PE (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`) loads `${CLAUDE_PLUGIN_ROOT}/skills/code-reviewer/assets/adversarial-lenses.md` at Pass 4 entry. That file contains:
-
-```
-- Calibration Anchor (severity discipline, round-over-round discipline,
-                      closed-set convergence, Phase 5 validation bar)
-- Six common lenses: hostile_attacker, scale_10x, junior_in_one_year,
-                     prod_incident_2am, partial_failure, silence_check
-- How to Apply Pass 4 protocol
-```
-
-`pe-devtools` does NOT load this asset; it runs a calibrated `operator_normal_use` lens set instead (single-operator local threat model — see pe-devtools.md).
-
-The asset is the canonical source of truth. Edit there, all 4 production PEs pick up the change at next dispatch.
 
 ---
 
@@ -294,7 +259,7 @@ Never publish a CRITICAL/HIGH without a second look.
 reviewed_sha = git rev-parse HEAD     # capture BEFORE writing
 
 if file does NOT exist:
-  write full report using ${CLAUDE_PLUGIN_ROOT}/skills/code-reviewer/assets/summary-report-template.md
+  write full report using assets/summary-report-template.md (relative to this skill's directory)
   populate:
     Reviewer       (`git config user.name`)
     Review Round   (1)
@@ -322,7 +287,7 @@ elif file exists (previous review):
     update top-level Verdict to reflect latest round
 ```
 
-See `${CLAUDE_PLUGIN_ROOT}/skills/code-reviewer/assets/summary-report-template.md` for exact format.
+See `assets/summary-report-template.md` for exact format.
 
 ### Step 3: Commit
 
@@ -437,117 +402,19 @@ Engineers iterate the local review loop until the diff converges on `✅ APPROVE
 
 ## Engineer-Driven Multi-Round Loop
 
-The engineer who wrote the code drives the review loop locally — not the CEO,
-not a separate reviewer agent. The point: catch the bugs BEFORE the PR opens,
-so external review (Copilot, peer) becomes a safety net rather than a primary
-gate. External-review cycles cost time and (for paid bots) money — a tightly
-self-policed local loop pays for itself within a sprint.
-
-### Loop Mechanic (HARD CAP: 3 rounds)
-
 ```
 ROUND_CAP = 3
 
-round = 1
-while verdict != "✅ APPROVED":
-  if round > ROUND_CAP:
-    HALT to operator with summary:
-      "Round cap (3) reached. Unresolved findings:
-        CRITICAL: <count>, HIGH: <count>, MEDIUM: <count>
-       Operator decision required: proceed (one more round, cap += 1) | abort | escalate-to-human"
-    wait for operator directive — do NOT auto-continue
-    break
+each /code-reviewer invocation = one round
+operator drives the loop by re-invoking after remediating
 
-  engineer runs /code-reviewer on current branch HEAD
-  → SKILL dispatches matching PE(s)
-  → PE(s) execute four-pass protocol (incl. mandatory Pass 4)
-  → SKILL consolidates findings, computes verdict
-  → SKILL writes (or appends) ./docs/code-reviews/{name}-code-review.md
-  → SKILL commits review doc to current branch
-
-  if verdict == "🚫 BLOCKED" or "⚠️ CHANGES REQUESTED":
-    engineer reads in-scope CRITICAL / HIGH / MEDIUM findings (LOW + INFO are awareness-only)
-    engineer remediates every in-scope CRITICAL / HIGH / MEDIUM
-    engineer commits remediation
-    round += 1
-    continue
-
-  if verdict == "✅ APPROVED":
-    # Only LOW + INFO findings remain (or none)
-    break
+if round > ROUND_CAP:
+  HALT to operator with finding counts and ask:
+    "proceed (one more round, cap += 1) | abort | escalate"
+  do NOT auto-continue
 ```
 
-### Round-to-Round Continuity
-
-The committed review doc IS the continuity mechanism. Round N writes/appends
-to `./docs/code-reviews/{name}-code-review.md` on the branch; Round N+1's PE
-reads that file at review start before running its four passes.
-
-```
-on round_start (N > 1):
-  read ./docs/code-reviews/{name}-code-review.md
-  for each prior_finding in latest round's section:
-    if prior_finding's pattern still present in current diff:
-      re-flag as STILL_PRESENT (severity unchanged unless context shifts)
-    else:
-      mark RESOLVED — do NOT re-raise
-  run Passes 1-4 on current diff
-  for each new finding from Pass 4 adversarial pass:
-    flag as NEW
-```
-
-PEs that re-flag closed-set findings on a remediated diff are over-firing —
-the convergence-spiral failure mode. The Convergence Calibration section in
-each PE definition (notably pe-devtools) governs this.
-
-### Diminishing Returns
-
-Some rounds will surface NEW findings as Pass 4 explores the diff with fresh
-adversarial lenses on each invocation. This is intentional — different lenses
-catch different bug shapes. The loop converges when:
-
-```
-- All in-scope CRITICAL / HIGH / MEDIUM findings have been remediated, AND
-- Subsequent rounds surface no new findings above MEDIUM severity, AND
-- Pass 2 (tests + lint + typecheck) passes cleanly
-```
-
-Typical convergence: 2-3 rounds. The hard cap is 3 — round 4+ requires
-operator authorization. If round cap is repeatedly hit on similar diffs,
-the diff is either too large (split into smaller PRs) or the area is
-fragile (escalate for second-opinion review).
-
-### Automation via /loop
-
-The engineer can self-pace using a /loop slash command (if available in their
-runtime):
-
-```
-/loop /code-reviewer
-```
-
-Each tick: re-run the review on current HEAD. If verdict transitions to
-✅ APPROVED, the loop signals completion. If blocked, engineer picks up the
-loop output, remediates, commits, and the next tick re-runs. This pattern
-removes the wait-state where engineer signals "ready" and waits for an
-external orchestrator to dispatch the review.
-
-### Engineer ≠ Reviewer Conflict
-
-Engineers reviewing their own code is a known anti-pattern in classical
-process. The Pass 4 adversarial lenses + multi-round convergence + automated
-PE dispatch mitigate this:
-
-- Pass 4's "junior_in_one_year" / "hostile_attacker" / "prod_incident_2am"
-  lenses force the engineer to read the diff from positions outside their
-  authoring context.
-- The PE sub-agent runs in its own session with its own model invocation —
-  it is not the same context as the engineer's authoring session.
-- The audit trail (review doc committed to the branch) is visible to PR
-  reviewers, who can spot-check whether the loop converged honestly.
-
-The result: most defects get caught before the PR opens. Downstream review
-(Copilot, peer) verifies, doesn't carry primary weight.
+Round-to-round continuity is enforced inside each PE (PEs read the prior committed review doc on round 2+ before running their passes). See README.md for methodology rationale, convergence expectations, automation patterns, and the engineer-as-reviewer conflict mitigation.
 
 ---
 

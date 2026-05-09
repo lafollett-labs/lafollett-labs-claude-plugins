@@ -9,14 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `LICENSE` — MIT
-- `CONTRIBUTING.md` — public-repo contribution flow + authoring style guide
+- `CONTRIBUTING.md` — public-repo contribution flow + authoring style guide + sub-agent self-containment convention
 - `CHANGELOG.md` — this file
 - `license: MIT` and `repository` fields added to all five plugin manifests (`code-reviewer`, `context-handoff`, `issue-manager`, `session-analyzer`, `ux-designer`) and the marketplace metadata
-- `code-reviewer`: `skills/code-reviewer/assets/adversarial-lenses.md` — single canonical home for the six common Pass 4 lenses, the calibration anchor, and the apply protocol. Loaded at Pass 4 entry by each production PE sub-agent (PEs are self-contained execution units; SKILL.md is for the calling agent's orchestration).
 
 ### Changed
-- `code-reviewer`: PE agents (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`) load the canonical Common Lenses + Calibration Anchor from `${CLAUDE_PLUGIN_ROOT}/skills/code-reviewer/assets/adversarial-lenses.md` at Pass 4 entry. Path uses Claude Code's `${CLAUDE_PLUGIN_ROOT}` variable (substituted at agent-load time to the plugin's absolute install path) — relative paths from sub-agents do not resolve reliably and force the agent to grep the file system. `pe-devtools` retains its calibrated single-operator lens set inline (different threat model).
-- `code-reviewer`: SKILL.md asset references (`summary-report-template.md`, `adversarial-lenses.md`) updated to use `${CLAUDE_PLUGIN_ROOT}` consistently
+- `code-reviewer`: PE agents (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`) inline the Pass 4 Common Lenses + Calibration Anchor + Apply Protocol directly in their agent files. Sub-agents are self-contained execution units — neither relative paths nor `${CLAUDE_PLUGIN_ROOT}` substitution work reliably for asset loading from sub-agent context. Inlining is leaner per-invocation than asset-loading (zero asset-load tool call overhead, no path resolution failure modes). Cross-PE sync convention documented in `CONTRIBUTING.md`. `pe-devtools` keeps its calibrated single-operator lens set (different threat model).
+- `code-reviewer`: SKILL.md slimmed — `§ Common Adversarial Lenses` section removed; the four-pass protocol summary's Pass 4 line trimmed to bare essentials. Pass 4 is purely PE-domain; the calling agent that loads SKILL.md never executes it directly.
+- `code-reviewer`: SKILL.md `§ Engineer-Driven Multi-Round Loop` reduced from ~115 lines (loop-mechanic prose, diminishing-returns, automation, engineer-as-reviewer-conflict justification) to ~10 lines. Methodology rationale moved to the skill's README.md. The calling agent doesn't loop — operator drives by re-invoking — so the methodology was README-shaped from the start.
+- `code-reviewer`: SKILL.md `§ Phase 2 Scope Discipline` slimmed; `§ Four-Pass Protocol` reframed to scope Pass 1/2/3 prose explicitly to the generic-fallback case (when calling agent runs the review directly without a matching PE).
+- `code-reviewer`: round-to-round continuity logic moved from SKILL.md to each production PE's Workflow section (PEs read prior review doc; that's PE-execution, not calling-agent territory).
 - `code-reviewer`: Pass 4 Adversarial Re-read recalibrated against over-firing — added Calibration Anchor to `SKILL.md § Common Adversarial Lenses`, clarified that NEW Pass 4 findings must clear the Phase 5 Finding Validation bar, and that closed-set themes from prior rounds should not re-fire under fresh adversarial lenses
 - `code-reviewer`: `SKILL.md § Round-to-Round Continuity` rewritten — round-to-round context comes from the committed review doc on the branch (`./docs/code-reviews/{name}-code-review.md`), not from a session-resume wrapper script
 - `code-reviewer`: project-agnostic scrub — example file paths and Stack Map entries no longer reference any single project's repository layout

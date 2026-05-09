@@ -73,6 +73,64 @@ The parent skill picks which PE(s) to dispatch from the project's Stack Map (`CL
 
 Review reports are written to `./docs/code-reviews/`. See SKILL.md Phase 6 for naming conventions.
 
+## Methodology — Engineer-Driven Multi-Round Loop
+
+The engineer who wrote the code drives the review loop locally — not a separate reviewer agent. The point: catch the bugs BEFORE the PR opens, so external review (Copilot, peer) becomes a safety net rather than a primary gate. External-review cycles cost time and (for paid bots) money — a tightly self-policed local loop pays for itself within a sprint.
+
+### Loop mechanic
+
+```
+ROUND_CAP = 3
+each /code-reviewer invocation = one round
+
+while verdict != "✅ APPROVED":
+  engineer runs /code-reviewer on current branch HEAD
+  if verdict == "🚫 BLOCKED" / "⚠️ CHANGES REQUESTED":
+    remediate in-scope CRITICAL / HIGH / MEDIUM (LOW + INFO are awareness)
+    commit remediation
+    re-invoke /code-reviewer
+  if round > ROUND_CAP:
+    skill HALTS to operator — proceed | abort | escalate
+```
+
+### Round-to-round continuity
+
+The committed review doc IS the continuity mechanism. Round N writes/appends to `./docs/code-reviews/{name}-code-review.md` on the branch; Round N+1's PE reads that file at review start before running its four passes:
+
+- prior finding still present in current diff → re-flag as `STILL_PRESENT` (severity unchanged unless context shifts)
+- prior finding's pattern no longer in code → mark `RESOLVED`, do NOT re-raise
+- new finding from Pass 4 → flag as `NEW`
+
+PEs that re-flag closed-set findings on a remediated diff are over-firing — the convergence-spiral failure mode. The Pass 4 Calibration Anchor in each PE definition governs this.
+
+### Diminishing returns
+
+Pass 4 with fresh adversarial lenses can surface NEW findings on every round; that's intentional but should diminish as the diff stabilizes. The loop has converged when:
+
+- all in-scope CRITICAL / HIGH / MEDIUM findings are remediated, AND
+- subsequent rounds surface no new findings above MEDIUM, AND
+- Pass 2 (tests + lint + typecheck) is clean
+
+Typical convergence: 2–3 rounds. Round-4+ requires operator authorization. If the cap is repeatedly hit on similar diffs, the diff is too large (split into smaller PRs) or the area is fragile (escalate for second-opinion review).
+
+### Automation via `/loop`
+
+```
+/loop /code-reviewer
+```
+
+Each tick re-runs the review on current HEAD. If verdict transitions to ✅ APPROVED, the loop signals completion. If blocked, engineer picks up the loop output, remediates, commits, and the next tick re-runs.
+
+### Engineer-as-reviewer conflict mitigation
+
+Engineers reviewing their own code is a known anti-pattern in classical process. Three things mitigate it:
+
+- **Pass 4 adversarial lenses** (`junior_in_one_year`, `hostile_attacker`, `prod_incident_2am`) force reading the diff from positions outside the authoring context
+- **PE sub-agent isolation** — each PE runs in its own session with its own model invocation, separate from the engineer's authoring context
+- **Audit trail** — the review doc committed to the branch is visible to PR reviewers, who can spot-check whether the loop converged honestly
+
+Most defects get caught before the PR opens. Downstream review verifies; it doesn't carry primary weight.
+
 ## Usage Examples
 
 ### Branch Review

@@ -26,6 +26,25 @@ Plugin agents and skills are markdown files loaded into model context on every i
 
 These plugins are intended to work for any project that installs them. When adding examples, use generic placeholders (e.g., `frontend/`, `infra/`) rather than names tied to a specific repository. Conventional Go layout (`pkg/`, `cmd/`, `lambdas/`) and CDK layout (`cdk/lib/`) are fine.
 
+## Sub-Agent Self-Containment
+
+Sub-agents (e.g., the PE reviewers in `code-reviewer/agents/*.md`) load their full agent definition file into context at dispatch time. They do NOT automatically inherit `SKILL.md` content, plugin paths, or `${CLAUDE_PLUGIN_ROOT}` substitution in arbitrary markdown body prose. Treat each sub-agent file as a self-contained unit:
+
+- Keep all instructions a sub-agent needs to execute its task INLINE in its agent file
+- Do NOT reference plugin assets via relative paths from sub-agent prose — the path resolution is unreliable from sub-agent context
+- If multiple sub-agents share content (e.g., the four production PEs share the Pass 4 Common Adversarial Lenses + Calibration Anchor + Apply Protocol), inline the shared block in each agent file and document the sync convention below
+
+### Sync convention for shared blocks
+
+The four production PE files (`pe-go.md`, `pe-vue.md`, `pe-aws-infra.md`, `pe-governance.md`) carry an identical Pass 4 framing:
+- Calibration Anchor
+- Six common lenses (`hostile_attacker`, `scale_10x`, `junior_in_one_year`, `prod_incident_2am`, `partial_failure`, `silence_check`)
+- How to Apply Pass 4 protocol
+
+Stack-flavored examples for `silence_check` (and any stack-specific lenses) differ per file. The shared blocks must stay in sync. When editing any of those blocks, edit ALL FOUR files together.
+
+`pe-devtools.md` runs a different lens set (single-operator local threat model) and is NOT part of this sync.
+
 ## Reporting Issues
 
 Open a GitHub Issue with:
