@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `LICENSE` — MIT
 - `CONTRIBUTING.md` — public-repo contribution flow + authoring style guide
 - `CHANGELOG.md` — this file
+- `license: MIT` and `repository` fields added to all five plugin manifests (`code-reviewer`, `context-handoff`, `issue-manager`, `session-analyzer`, `ux-designer`) and the marketplace metadata
 - `code-reviewer`: `skills/code-reviewer/assets/adversarial-lenses.md` — single canonical home for the six common Pass 4 lenses, the calibration anchor, and the apply protocol. Loaded at Pass 4 entry by each production PE sub-agent (PEs are self-contained execution units; SKILL.md is for the calling agent's orchestration).
 
 ### Changed

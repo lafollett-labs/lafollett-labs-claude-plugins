@@ -1,11 +1,13 @@
 {
   "name": "ux-designer",
   "description": "UX design harness — structured discovery, prototype generation, visual iteration via Playwright, Storybook support, parallel variations via worktrees",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "author": {
     "name": "LaFollett Labs LLC",
     "email": "cali.lafollett@gmail.com"
   },
+  "license": "MIT",
+  "repository": "https://github.com/clafollett/lafollettlabs-claude-plugins",
   "keywords": [
     "design",
     "ux",

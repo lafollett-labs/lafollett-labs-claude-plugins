@@ -1,11 +1,13 @@
 {
   "name": "context-handoff",
   "description": "Session state handoff, resume, and context usage monitoring — save working context to JSON, resume in fresh sessions, and get automatic warnings as context fills up",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "author": {
     "name": "LaFollett Labs LLC",
     "email": "cali.lafollett@gmail.com"
   },
+  "license": "MIT",
+  "repository": "https://github.com/clafollett/lafollettlabs-claude-plugins",
   "keywords": [
     "context",
     "handoff",

@@ -1,11 +1,13 @@
 {
   "name": "issue-manager",
   "description": "GitHub Issue management with intent-over-implementation templates — Epics, Stories, Tasks, Bugs with quality gates and CLI automation",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": {
     "name": "LaFollett Labs LLC",
     "email": "cali.lafollett@gmail.com"
   },
+  "license": "MIT",
+  "repository": "https://github.com/clafollett/lafollettlabs-claude-plugins",
   "keywords": [
     "github",
     "issues",
