@@ -372,7 +372,7 @@ each lens VIVIDLY — imagine the failure scenario, do not just check a box.
 
 ### Common Lenses
 
-At Pass 4 entry, Read `skills/code-reviewer/assets/adversarial-lenses.md` (relative to this plugin's root). That asset defines:
+At Pass 4 entry, Read `${CLAUDE_PLUGIN_ROOT}/skills/code-reviewer/assets/adversarial-lenses.md`. The `${CLAUDE_PLUGIN_ROOT}` variable is substituted by Claude Code at agent-load time to this plugin's absolute install path. That asset defines:
 - Calibration Anchor (severity discipline + round-over-round convergence rules)
 - Six common lenses (`hostile_attacker`, `scale_10x`, `junior_in_one_year`, `prod_incident_2am`, `partial_failure`, `silence_check`)
 - How to Apply Pass 4 protocol

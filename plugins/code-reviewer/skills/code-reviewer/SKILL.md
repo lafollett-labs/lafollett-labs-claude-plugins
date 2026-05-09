@@ -221,7 +221,7 @@ The PE returns ONLY a YAML block — see "YAML Finding Structure" below.
 
 ### Common Adversarial Lenses (Pass 4)
 
-Every production-grade PE (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`) loads `assets/adversarial-lenses.md` at Pass 4 entry. That file contains:
+Every production-grade PE (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`) loads `${CLAUDE_PLUGIN_ROOT}/skills/code-reviewer/assets/adversarial-lenses.md` at Pass 4 entry. That file contains:
 
 ```
 - Calibration Anchor (severity discipline, round-over-round discipline,
@@ -294,7 +294,7 @@ Never publish a CRITICAL/HIGH without a second look.
 reviewed_sha = git rev-parse HEAD     # capture BEFORE writing
 
 if file does NOT exist:
-  write full report using assets/summary-report-template.md
+  write full report using ${CLAUDE_PLUGIN_ROOT}/skills/code-reviewer/assets/summary-report-template.md
   populate:
     Reviewer       (`git config user.name`)
     Review Round   (1)
@@ -322,7 +322,7 @@ elif file exists (previous review):
     update top-level Verdict to reflect latest round
 ```
 
-See `assets/summary-report-template.md` for exact format.
+See `${CLAUDE_PLUGIN_ROOT}/skills/code-reviewer/assets/summary-report-template.md` for exact format.
 
 ### Step 3: Commit
 
