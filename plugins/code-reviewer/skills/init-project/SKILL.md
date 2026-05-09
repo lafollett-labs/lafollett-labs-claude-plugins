@@ -133,7 +133,7 @@ Generate a Stack Map table and prompt the user to add it to their `CLAUDE.md`:
 | Path | Stack | Built-in PE | Test Command |
 | --- | --- | --- | --- |
 | lambdas/**, pkg/** | Go | `pe-go` | `go vet ./... && go test ./... -count=1 -race` |
-| crew/** | Vue/Nuxt | `pe-vue` | `cd crew && npm run typecheck && npm test` |
+| frontend/** | Vue/Nuxt | `pe-vue` | `cd frontend && npm run typecheck && npm test` |
 | cdk/** | CDK TypeScript | `pe-aws-infra` | `cd cdk && npm test && npx cdk synth --all` |
 | api/** | Python | Generic | `cd api && pytest` |
 | .claude/agents/**, **/SKILL.md, plugins/**/agents/*.md, **/CLAUDE.md, .claude/rules/*.md, docs/rules/*.md | Agent governance markdown | `pe-governance` | n/a (lint-shaped checks built into PE) |
@@ -157,9 +157,9 @@ Print a summary of what was detected and where things went:
 
 Stacks detected:
   - Go (pe-go):             lambdas/, pkg/
-  - Vue/Nuxt (pe-vue):      crew/
+  - Vue/Nuxt (pe-vue):      frontend/
   - CDK TypeScript (pe-aws-infra):    cdk/
-  - CDKTF TypeScript (pe-aws-infra):  cloudflare/
+  - CDKTF TypeScript (pe-aws-infra):  cdktf/
   - GitHub Actions (pe-aws-infra):    .github/workflows/
 
 Stack Map written to: CLAUDE.md (or .code-reviewer.yml if preferred)

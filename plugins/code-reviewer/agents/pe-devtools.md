@@ -424,8 +424,8 @@ for each finding:
   else:                                                  in_scope = false  # pre-existing — awareness only
 
 # Use FULL file paths from repo root in `location`:
-#   ✅ scripts/headless-review.sh:42
-#   ❌ headless-review.sh:42
+#   ✅ scripts/dev/format-staged.sh:42
+#   ❌ format-staged.sh:42
 ```
 
 ## Severity Definitions (calibrated for single-operator local)
@@ -451,19 +451,19 @@ findings:
     severity: MEDIUM
     in_scope: true
     title: "Header documents exit code 2 but script never exits with 2"
-    location: "scripts/bg-launch.sh:28"
+    location: "scripts/dev/<example-script>.sh:28"
     description: |
-      Script header documents exit code 2 ("stem already in flight") but
-      the body never reaches an `exit 2` path under normal operator use.
-      The only `exit 2` is in the lock-existence check that's gated by
-      a stale-lock cleanup that always succeeds, so exit 2 is unreachable.
-      Operator using the documented exit code in their wrapper will be
-      surprised when it never fires.
+      Script header documents exit code 2 ("operation already in flight")
+      but the body never reaches an `exit 2` path under normal operator use.
+      The only `exit 2` is gated by a precondition check that always
+      succeeds, so the documented exit code is unreachable. Operator using
+      the documented exit code in their wrapper will be surprised when it
+      never fires.
     recommendation: |
       Either:
       (a) Remove exit code 2 from the header (simpler, matches reality)
-      (b) Make the stale-lock check fall through to "stem in flight"
-          when the prior PID is alive (closer to documented behavior)
+      (b) Make the precondition check actually fall through to "in flight"
+          when the prior invocation is alive (closer to documented behavior)
 ```
 
 If you find no issues at any severity, return:

@@ -212,12 +212,28 @@ SCOPE: {Branch Diff | Staged Diff | PR Review}
 TARGET BRANCH: {main | etc.}
 SOURCE BRANCH: {current branch}
 WORKTREE: {absolute path to repo root}
-{optional} PROJECT SUBDIR: {e.g., "crew/" for frontend in monorepo, "cdk/" for CDK subdir}
+{optional} PROJECT SUBDIR: {e.g., "frontend/" for Vue/Nuxt subdir in a monorepo, "cdk/" for CDK subdir}
 
 Run your four-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read). Return YAML findings.
 ```
 
 The PE returns ONLY a YAML block — see "YAML Finding Structure" below.
+
+### Common Adversarial Lenses (Pass 4)
+
+Every production-grade PE (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`) loads `assets/adversarial-lenses.md` at Pass 4 entry. That file contains:
+
+```
+- Calibration Anchor (severity discipline, round-over-round discipline,
+                      closed-set convergence, Phase 5 validation bar)
+- Six common lenses: hostile_attacker, scale_10x, junior_in_one_year,
+                     prod_incident_2am, partial_failure, silence_check
+- How to Apply Pass 4 protocol
+```
+
+`pe-devtools` does NOT load this asset; it runs a calibrated `operator_normal_use` lens set instead (single-operator local threat model — see pe-devtools.md).
+
+The asset is the canonical source of truth. Edit there, all 4 production PEs pick up the change at next dispatch.
 
 ---
 
@@ -463,20 +479,26 @@ while verdict != "✅ APPROVED":
 
 ### Round-to-Round Continuity
 
-`scripts/headless-review.sh` resumes the same `claude -p` session UUID across
-rounds (see `--resume <uuid>` in the wrapper). Round N+1 starts with round N's
-findings in context — the PE knows which findings were raised previously and
-should:
+The committed review doc IS the continuity mechanism. Round N writes/appends
+to `./docs/code-reviews/{name}-code-review.md` on the branch; Round N+1's PE
+reads that file at review start before running its four passes.
 
 ```
-prior_finding still applies to current diff? → re-flag as STILL_PRESENT
-prior_finding's pattern no longer in code?    → mark RESOLVED (do not re-raise)
-new_finding from round N+1 adversarial pass?  → flag as NEW
+on round_start (N > 1):
+  read ./docs/code-reviews/{name}-code-review.md
+  for each prior_finding in latest round's section:
+    if prior_finding's pattern still present in current diff:
+      re-flag as STILL_PRESENT (severity unchanged unless context shifts)
+    else:
+      mark RESOLVED — do NOT re-raise
+  run Passes 1-4 on current diff
+  for each new finding from Pass 4 adversarial pass:
+    flag as NEW
 ```
 
-PEs that re-flag closed-set findings on a remediated diff are over-firing.
-This is the convergence-spiral failure mode. The Convergence Calibration
-section in each PE definition (notably pe-devtools) governs this.
+PEs that re-flag closed-set findings on a remediated diff are over-firing —
+the convergence-spiral failure mode. The Convergence Calibration section in
+each PE definition (notably pe-devtools) governs this.
 
 ### Diminishing Returns
 

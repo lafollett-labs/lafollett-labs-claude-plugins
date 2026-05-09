@@ -14,17 +14,18 @@ Claude Code plugin marketplace for [LaFollett Labs LLC](https://lafollettlabs.co
 
 **code-reviewer** — PE-powered code reviews
 
-- **`/code-reviewer`** — Three-pass review protocol: Architecture → Quality+Tests → Security
+- **`/code-reviewer`** — Four-pass protocol: Architecture → Quality+Tests → Security → mandatory Adversarial Re-read
 - **`/init-project`** — Auto-detect stacks and write a Stack Map into `CLAUDE.md`
-- Three built-in PE sub-agents shipped as proper agents (`claude-opus-4-7` model):
-  - `pe-backend` — Go / PostgreSQL / AWS Lambda
-  - `pe-frontend` — Vue 3 / Nuxt 3 / TypeScript / Tailwind / Storybook
-  - `pe-devops` — AWS CDK / Cloudflare CDKTF / Terraform / Docker / GitHub Actions
-- Right-sized reviews (primary agent < 200 lines, PE sub-agents for larger)
+- Five built-in PE sub-agents shipped as proper agents (`claude-opus-4-7` model):
+  - `pe-go` — Go / PostgreSQL / AWS Lambda
+  - `pe-vue` — Vue 3 / Nuxt 3 / TypeScript / Tailwind / Storybook
+  - `pe-aws-infra` — AWS CDK / Cloudflare CDKTF / Terraform / Docker / GitHub Actions
+  - `pe-governance` — Agent definitions, skills, plugin instructions, CLAUDE.md
+  - `pe-devtools` — Local dev tooling (single-operator threat model — calibrated against over-hardening)
 - Generic three-pass fallback for stacks without a built-in PE (Rust, Python, Java, C#, etc.)
-- Scope discipline (In Scope vs Out of Scope findings)
-- Strict verdicts: MEDIUM and above block merge
-- Multi-round review support with appended findings
+- Scope discipline (in_scope vs pre-existing findings)
+- Verdict logic: CRITICAL/HIGH/MEDIUM block merge; LOW + INFO are awareness-only
+- Engineer-driven multi-round loop with hard 3-round cap
 - Consolidated reports at `./docs/code-reviews/`
 
 ### context-handoff
@@ -118,9 +119,11 @@ plugins/
   code-reviewer/                # Plugin: PE-powered code reviews
     .claude-plugin/plugin.json
     agents/
-      pe-backend.md             # Go/PostgreSQL/Lambda reviewer (claude-opus-4-7)
-      pe-frontend.md            # Vue/Nuxt/TS reviewer (claude-opus-4-7)
-      pe-devops.md              # CDK/CDKTF/IaC reviewer (claude-opus-4-7)
+      pe-go.md                  # Go/PostgreSQL/Lambda reviewer (claude-opus-4-7)
+      pe-vue.md                 # Vue/Nuxt/TS reviewer (claude-opus-4-7)
+      pe-aws-infra.md           # CDK/CDKTF/IaC reviewer (claude-opus-4-7)
+      pe-governance.md          # Agent governance markdown reviewer (claude-opus-4-7)
+      pe-devtools.md            # Local dev tooling reviewer (claude-opus-4-7)
     skills/
       code-reviewer/            # Review engine — orchestrates dispatch + consolidates findings
         SKILL.md
@@ -159,10 +162,7 @@ plugins/
 
 ## Contributing
 
-1. Edit plugin files in this repo (source of truth)
-2. Bump `version` in the plugin's `.claude-plugin/plugin.json`
-3. Commit and push
-4. Consumers pull updates via `/plugins update`
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution flow, branch naming, commit format, and authoring style guide.
 
 ### Adding a New Plugin
 
@@ -170,7 +170,8 @@ plugins/
 2. Add commands, skills, agents, or hooks under the plugin directory
 3. Add an entry to `.claude-plugin/marketplace.json`
 4. Update this README with the plugin description
+5. Add a `## [Unreleased]` entry to [CHANGELOG.md](./CHANGELOG.md)
 
 ## License
 
-MIT — LaFollett Labs LLC
+[MIT](./LICENSE) — © 2026 LaFollett Labs LLC

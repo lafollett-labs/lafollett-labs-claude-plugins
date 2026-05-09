@@ -5,52 +5,33 @@ Marketplace-installable via `/plugins`.
 
 ## Structure
 
+See [README.md](./README.md) for the full plugin list and repository tree.
+
 ```
 .claude-plugin/
-  marketplace.json          # Marketplace registry — lists all plugins
+  marketplace.json          # Marketplace registry
 plugins/
-  context-handoff/          # /handoff-context + /resume-context + context monitoring
-    .claude-plugin/plugin.json
-    commands/
-      handoff-context.md
-      resume-context.md
-    hooks/
-      hooks.json              # Stop hook — context usage monitor
-    scripts/
-      context-monitor.sh      # Token tracking + threshold warnings
-  issue-manager/            # /issue-manager — GitHub Issue management
-    .claude-plugin/plugin.json
-    skills/
-      issue-manager/
-        SKILL.md
-        references/
-        scripts/
-  session-analyzer/         # /session-analyzer — JSONL session analysis
-    .claude-plugin/plugin.json
-    skills/
-      session-analyzer/
-        SKILL.md
-        scripts/
-```
-
-## Installation
-
-Add the marketplace, then install individual plugins:
-```
-/plugins marketplace add https://github.com/clafollett/lafollettlabs-claude-plugins
-/plugins install context-handoff
-/plugins install issue-manager
+  code-reviewer/            # PE-powered four-pass code reviews
+  context-handoff/          # /handoff-context + /resume-context
+  issue-manager/            # GitHub Issue management
+  session-analyzer/         # JSONL session analysis
+  ux-designer/              # UX design harness
 ```
 
 ## Contributing
 
-This repo is the source of truth. Each plugin is independently versioned.
-Edit here, commit, push. Consumers pull updates via `/plugins update`.
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Each plugin is independently versioned; this repo is the source of truth.
 
 ### Version bumping (required on every edit)
 
-**Every change to a plugin's content MUST include a patch version bump** in the `.claude-plugin/marketplace.json` and that plugin's `.<plugin-name>/plugin.json`. Without a version bump, downstream consumers running `/plugins update` may not pick up the change — the marketplace uses the version field to detect updates.
+Every change to a plugin's content MUST include a patch version bump in `.claude-plugin/marketplace.json` and that plugin's `.claude-plugin/plugin.json`. Without a bump, `/plugins update` may not pick up the change.
 
-- Bug fix or text change → bump patch (e.g., `1.0.0` → `1.0.1`)
-- New feature or command → bump minor (e.g., `1.0.1` → `1.1.0`)
-- Breaking change → bump major (e.g., `1.1.0` → `2.0.0`)
+```
+bug fix / text change      → patch  (1.0.0 → 1.0.1)
+new feature or command     → minor  (1.0.1 → 1.1.0)
+breaking change            → major  (1.1.0 → 2.0.0)
+```
+
+## License
+
+[MIT](./LICENSE) — © 2026 LaFollett Labs LLC

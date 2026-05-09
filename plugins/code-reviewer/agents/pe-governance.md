@@ -185,76 +185,19 @@ dispatch-contract violation.
 Goal: catch what survived structured analysis by hiding in plain sight. Apply
 each lens VIVIDLY — imagine the failure scenario, do not just check a box.
 
-### Common Lenses (apply to every diff)
+### Common Lenses
 
-```
-hostile_attacker:
-  Re-read the diff as someone scanning for:
-    - privilege escalation paths
-    - authentication / authorization bypass
-    - race conditions exploited by parallel requests
-    - undocumented escape hatches (debug routes, admin override flags)
-    - defaults that fail open (auth absent → allowed)
-    - validation that runs after the action it's meant to gate
-    - caller-controlled input flowing into a trust decision without server-side verify
-  if a NEW attack vector overlooked by Pass 3:
-    flag CRITICAL "<vector> — <how it would be exploited>"
+At Pass 4 entry, Read `skills/code-reviewer/assets/adversarial-lenses.md` (relative to this plugin's root). That asset defines:
+- Calibration Anchor (severity discipline + round-over-round convergence rules)
+- Six common lenses (`hostile_attacker`, `scale_10x`, `junior_in_one_year`, `prod_incident_2am`, `partial_failure`, `silence_check`)
+- How to Apply Pass 4 protocol
 
-scale_10x:
-  Re-read assuming current load × 10. For each query, allocation, lock
-  acquisition, network call: what fails first?
-    - memory pressure (unbounded slice/map/cache growth)
-    - connection pool exhaustion (DB, HTTP, downstream)
-    - lock contention (mutex held during I/O)
-    - tail latency (single slow dependency dominates p99)
-    - quota / rate limit collisions (per-tenant, per-region)
-    - fan-out without back-pressure
-  if the diff introduces a scale cliff:
-    flag HIGH "scale risk at 10x — <what fails first, why>"
+Apply the calibration anchor BEFORE running the lenses. Then run common + stack-specific.
 
-junior_in_one_year:
-  Re-read as a junior engineer joining 12 months from now who must change
-  something here. What is NOT obvious from naming/structure?
-    - subtle invariants ("must call X before Y" / "only valid when Z is set")
-    - coupling that crosses package/component boundaries silently
-    - magic numbers / strings without rationale
-    - rhyming-with-reality naming (Manager, Helper, Service, Util)
-    - implicit ordering dependencies between async operations
-  if the diff hides a subtle invariant:
-    flag MEDIUM "implicit invariant — <what they'll miss when modifying>"
-
-prod_incident_2am:
-  Re-read as oncall paged at 2am with this system in alarm.
-    - can you tell from logs / metrics what is failing?
-    - does the failure mode have a clear signature?
-    - are correlation IDs / request IDs / tenant IDs in the log line?
-    - does the alarm point at the right component (not three layers up)?
-    - is the runbook entry obvious from the error message?
-  if observability is missing for a failure mode:
-    flag MEDIUM "no observability for <failure mode> — <what's missing>"
-
-partial_failure:
-  Re-read assuming every external call fails 30% of the time. For each
-  multi-step operation: what state survives partial completion?
-    - DB write succeeds, event publish fails — orphaned state
-    - email sent, audit log fails — drift from source-of-truth
-    - cache updated, source-of-truth fails — wrong-answer steady state
-    - retry loop without idempotency token — duplicate side effects
-    - compensation action that itself can fail
-  if partial-failure paths leave inconsistent state:
-    flag HIGH "partial-failure inconsistency — <step that fails leaves <state>>"
-
-silence_check:
-  Re-read looking for SILENT failures. Anywhere errors are:
-    - discarded (`_ = ...`, empty catch, ignored Promise rejection)
-    - logged but flow continues when it should stop
-    - retried indefinitely without a limit or backoff cap
-    - timeouts default to infinite (no deadline)
-    - wrapped in a way that loses the original
-    - panic recovered without alerting
-  if anything fails silently:
-    flag HIGH "silent failure — <what's swallowed, where>"
-```
+Governance-specific examples for `silence_check`:
+- pseudocode block whose `else` branch produces no observable outcome
+- decision tree where one path silently does nothing instead of escalating
+- agent file claiming a tool is required but listing an alternative without consequence
 
 ### Stack-Specific Lenses (PE-Governance)
 
@@ -319,20 +262,7 @@ instruction_leak_across_personas:
     flag MEDIUM "instruction scope leak at <location> — <which roles get unintended binding>"
 ```
 
-### How to Apply Pass 4
-
-```
-for each lens above (common + stack-specific):
-  re-read the diff WITH THAT LENS IN MIND
-  if a NEW finding surfaces (not already in Passes 1-3):
-    add it to your YAML output
-    tag the surfacing lens in description: "Surfaced via Pass 4 / <lens_name>."
-    use the lens's default severity unless judgment overrides
-
-  if a lens surfaces NO new findings:
-    OK — but you must have actually applied it
-    skipping == dispatch-contract violation
-```
+Application protocol is in the asset loaded above (`adversarial-lenses.md` § How to Apply Pass 4).
 
 ---
 
