@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-aws-infra, pe-governance, pe-devtools). Four-pass protocol with mandatory adversarial re-read, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop until APPROVED with only INFO findings. pe-devtools calibrated for single-operator local threat model.
+description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-aws-infra, pe-governance, pe-devtools). Four-pass protocol with mandatory adversarial re-read, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop with hard 3-round cap until APPROVED (LOW + INFO are awareness-only and do NOT block). pe-devtools calibrated for single-operator local threat model.
 ---
 
 # Expert Code Review
@@ -392,11 +392,15 @@ diffs or when no external reviews exist.
 
 | Level | Criteria | Action |
 | --- | --- | --- |
-| 🔴 CRITICAL | Security vulnerabilities, data loss, breaking changes, test failures | Must fix — blocks merge |
-| 🟠 HIGH | Bugs, vet/typecheck warnings, significant design issues | Must fix — blocks merge |
-| 🟡 MEDIUM | Code quality, maintainability | Required — changes requested |
-| 🟢 LOW | Style, minor improvements | Optional |
-| ℹ️ INFO | Observations | Awareness |
+| 🔴 CRITICAL | Security vulnerabilities, data loss, breaking changes, test failures | MUST FIX — blocks merge |
+| 🟠 HIGH | Bugs, vet/typecheck warnings, significant design issues | MUST FIX — blocks merge |
+| 🟡 MEDIUM | Code quality concerns, maintainability risks that affect product behavior | Should fix — changes requested |
+| 🟢 LOW | Style, minor improvements, nice-to-haves | Awareness — does NOT block |
+| ℹ️ INFO | Non-blocking observations, alternatives, future considerations | Awareness — does NOT block |
+
+**Calibration anchor:** `MUST FIX` is reserved for actual defects, security issues, or regressions. `INFO` is the default verdict for non-blocking observations a reasonable senior engineer would consider taste-level, future-proofing, or minor preference. Working code that passes its tests and meets its acceptance criteria SHOULD reach `APPROVED` by round 2 of a typical PR.
+
+If you find yourself elevating a style preference or theoretical edge case to `MEDIUM`, you are over-firing. Downgrade to `LOW` or `INFO`.
 
 ---
 
@@ -405,14 +409,13 @@ diffs or when no external reviews exist.
 ```
 if any CRITICAL with in_scope == true:    🚫 BLOCKED
 elif any HIGH with in_scope == true:      🚫 BLOCKED
-elif any MEDIUM with in_scope == true:    🚫 BLOCKED
-elif any LOW with in_scope == true:       ⚠️  CHANGES REQUESTED
-else (only INFO remaining):                ✅ APPROVED
+elif any MEDIUM with in_scope == true:    ⚠️  CHANGES REQUESTED
+else (only LOW + INFO remaining):          ✅ APPROVED
 ```
 
-If it's worth reporting, it's worth fixing. **Only INFO findings are awareness-only** — every other severity (CRITICAL, HIGH, MEDIUM, LOW) blocks ✅ APPROVED and requires remediation. The intent is to drive engineering quality high enough that downstream reviewers (Copilot, human) become a safety net, not a primary gate.
+`LOW` and `INFO` findings are awareness-only and do NOT block `✅ APPROVED`. Listing them is a service to the engineer; gating on them produces convergence spirals on minor preferences.
 
-Engineers iterate the local review loop multiple rounds — see "Engineer-Driven Multi-Round Loop" below — until the diff converges on ✅ APPROVED with only INFO findings remaining (or no findings at all).
+Engineers iterate the local review loop until the diff converges on `✅ APPROVED` with only `LOW`/`INFO` findings remaining (or no findings at all). See "Engineer-Driven Multi-Round Loop" below.
 
 ---
 
@@ -424,11 +427,21 @@ so external review (Copilot, peer) becomes a safety net rather than a primary
 gate. External-review cycles cost time and (for paid bots) money — a tightly
 self-policed local loop pays for itself within a sprint.
 
-### Loop Mechanic
+### Loop Mechanic (HARD CAP: 3 rounds)
 
 ```
+ROUND_CAP = 3
+
 round = 1
 while verdict != "✅ APPROVED":
+  if round > ROUND_CAP:
+    HALT to operator with summary:
+      "Round cap (3) reached. Unresolved findings:
+        CRITICAL: <count>, HIGH: <count>, MEDIUM: <count>
+       Operator decision required: proceed (one more round, cap += 1) | abort | escalate-to-human"
+    wait for operator directive — do NOT auto-continue
+    break
+
   engineer runs /code-reviewer on current branch HEAD
   → SKILL dispatches matching PE(s)
   → PE(s) execute four-pass protocol (incl. mandatory Pass 4)
@@ -437,18 +450,33 @@ while verdict != "✅ APPROVED":
   → SKILL commits review doc to current branch
 
   if verdict == "🚫 BLOCKED" or "⚠️ CHANGES REQUESTED":
-    engineer reads findings (CRITICAL → LOW, in-scope only)
-    engineer remediates EVERY in-scope finding (CRITICAL/HIGH/MEDIUM/LOW)
+    engineer reads in-scope CRITICAL / HIGH / MEDIUM findings (LOW + INFO are awareness-only)
+    engineer remediates every in-scope CRITICAL / HIGH / MEDIUM
     engineer commits remediation
     round += 1
     continue
 
   if verdict == "✅ APPROVED":
-    # Only INFO findings remain (or none)
+    # Only LOW + INFO findings remain (or none)
     break
-
-# At ✅ APPROVED: only INFO findings remain. Engineer creates PR.
 ```
+
+### Round-to-Round Continuity
+
+`scripts/headless-review.sh` resumes the same `claude -p` session UUID across
+rounds (see `--resume <uuid>` in the wrapper). Round N+1 starts with round N's
+findings in context — the PE knows which findings were raised previously and
+should:
+
+```
+prior_finding still applies to current diff? → re-flag as STILL_PRESENT
+prior_finding's pattern no longer in code?    → mark RESOLVED (do not re-raise)
+new_finding from round N+1 adversarial pass?  → flag as NEW
+```
+
+PEs that re-flag closed-set findings on a remediated diff are over-firing.
+This is the convergence-spiral failure mode. The Convergence Calibration
+section in each PE definition (notably pe-devtools) governs this.
 
 ### Diminishing Returns
 
@@ -457,15 +485,15 @@ adversarial lenses on each invocation. This is intentional — different lenses
 catch different bug shapes. The loop converges when:
 
 ```
-- All in-scope CRITICAL/HIGH/MEDIUM/LOW findings have been remediated, AND
-- Subsequent rounds surface no new findings above INFO severity, AND
+- All in-scope CRITICAL / HIGH / MEDIUM findings have been remediated, AND
+- Subsequent rounds surface no new findings above MEDIUM severity, AND
 - Pass 2 (tests + lint + typecheck) passes cleanly
 ```
 
-Typical convergence: 2-4 rounds. If round 5+ keeps finding new HIGH/MEDIUM
-issues, it indicates either (a) the diff is too large to review confidently —
-split into smaller PRs, or (b) the change touches a fragile area requiring
-PE escalation (architectural review, second-opinion PE).
+Typical convergence: 2-3 rounds. The hard cap is 3 — round 4+ requires
+operator authorization. If round cap is repeatedly hit on similar diffs,
+the diff is either too large (split into smaller PRs) or the area is
+fragile (escalate for second-opinion review).
 
 ### Automation via /loop
 
