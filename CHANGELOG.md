@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `code-reviewer` (v2.7.1, marketplace 1.17.1): SKILL.md `§ Dispatch Input` now specifies an explicit DELIVERY CONTRACT split by invocation mode. Previously, "Return YAML findings" was ambiguous — when calling agents dispatched PEs with `team_name` set (background teammate mode), PEs would render YAML in their session and idle without calling the SendMessage tool, leaving the calling agent with no findings. Now: foreground dispatch returns YAML as tool-result; background-team dispatch delivers YAML via SendMessage to the team lead. Calling-agent contract clarified to treat team-mode dispatches as async with SendMessage delivery, not synchronous tool result.
+
 ### Added
 - `LICENSE` — MIT
 - `CONTRIBUTING.md` — public-repo contribution flow + authoring style guide + sub-agent self-containment convention

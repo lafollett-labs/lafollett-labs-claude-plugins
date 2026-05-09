@@ -195,10 +195,24 @@ SOURCE BRANCH: {current branch}
 WORKTREE: {absolute path to repo root}
 {optional} PROJECT SUBDIR: {e.g., "frontend/" for Vue/Nuxt subdir in a monorepo, "cdk/" for CDK subdir}
 
-Run your four-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read). Return YAML findings.
+Run your four-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read).
+
+DELIVERY CONTRACT — match your invocation mode:
+  if dispatched as foreground Agent (no team_name):
+    return YAML findings as your final tool-result message — calling agent
+    receives it synchronously
+  if dispatched as background teammate (team_name set):
+    deliver YAML findings via the SendMessage tool to the team lead
+    (typically `to: "team-lead"`) — rendering YAML in your session and
+    going idle does NOT deliver to the calling agent
 ```
 
 The PE returns ONLY a YAML block — see "YAML Finding Structure" below.
+
+**Calling-agent contract:** when dispatching PEs with `team_name` set, the
+calling agent MUST treat the PE as a background teammate and wait for a
+SendMessage delivery, not a synchronous tool result. PEs that idle without
+SendMessage have violated the team-mode contract and should be re-pinged.
 
 ---
 
