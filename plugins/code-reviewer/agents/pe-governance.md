@@ -34,7 +34,11 @@ The parent provides:
 4. Run lint-shaped checks (Pass 2 — see below). Capture results.
 5. Four serialized passes (Architecture → Quality → Security → Adversarial).
    Pass 4 (Adversarial) is MANDATORY — skipping it is a dispatch-contract violation.
-6. Return YAML findings. NO PROSE OUTSIDE THE YAML BLOCK.
+6. Deliver YAML findings. NO PROSE OUTSIDE THE YAML BLOCK.
+     match invocation_mode:
+       foreground (no team_name)        → return YAML as final tool-result message
+       background-teammate (team_name)  → SendMessage(to: "team-lead", message: <yaml>)
+                                           idle-after-render does NOT deliver — must call the tool
 ```
 
 ## File Patterns

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `code-reviewer` (v2.7.2, marketplace 1.17.2): all 5 PE agent definitions (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`, `pe-devtools`) now bake the team-mode delivery contract into their own Workflow step. Previously the contract lived only in the calling-agent dispatch input (SKILL.md), so PEs invoked from custom calling-agents that omitted the delivery clause would render YAML in session and idle without SendMessage. Now PE definitions self-contain the contract: `match invocation_mode: foreground → return YAML as tool-result; background-teammate → SendMessage(to: "team-lead", message: <yaml>)`. PEs deliver correctly regardless of dispatch site.
 - `code-reviewer` (v2.7.1, marketplace 1.17.1): SKILL.md `§ Dispatch Input` now specifies an explicit DELIVERY CONTRACT split by invocation mode. Previously, "Return YAML findings" was ambiguous — when calling agents dispatched PEs with `team_name` set (background teammate mode), PEs would render YAML in their session and idle without calling the SendMessage tool, leaving the calling agent with no findings. Now: foreground dispatch returns YAML as tool-result; background-team dispatch delivers YAML via SendMessage to the team lead. Calling-agent contract clarified to treat team-mode dispatches as async with SendMessage delivery, not synchronous tool result.
 
 ### Added
