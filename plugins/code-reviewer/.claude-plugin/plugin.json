@@ -1,7 +1,7 @@
 {
   "name": "code-reviewer",
   "description": "PE-powered code reviews with four-pass protocol (Architecture → Quality+Tests → Security → mandatory Adversarial Re-read) and project bootstrapping",
-  "version": "2.7.3",
+  "version": "2.7.4",
   "author": {
     "name": "LaFollett Labs",
     "email": "cali.lafollett@gmail.com"
