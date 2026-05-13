@@ -96,7 +96,7 @@ The plugin ships five built-in PE sub-agents:
 | `code-reviewer:pe-governance` | Agent definitions, skills, plugin instructions, CLAUDE.md | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `.claude/rules/*.md`, `docs/rules/*.md` |
 | `code-reviewer:pe-devtools` | Local dev tooling (single-operator threat model) — bash scripts, hooks, code-review wrappers | `scripts/dev/**`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` |
 
-Each agent has its own model (`claude-opus-4-7`), tools, and self-contained four-pass protocol — they do NOT need a reference file at runtime.
+Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five-pass protocol (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial) — they do NOT need a reference file at runtime.
 
 `pe-governance` reviews documents whose audience is the model (agent governance markdown). It does NOT review documents whose audience is humans (ADRs at `docs/architecture/*.md`, runbooks at `docs/runbooks/*.md`, review docs at `docs/code-reviews/*.md`, READMEs). Those fall to generic three-pass review.
 
@@ -136,9 +136,9 @@ PEs apply this rule when assigning `in_scope` to each finding. Calling agent use
 
 ## Phase 3: Review Execution
 
-### Four-Pass Protocol
+### Five-Pass Protocol
 
-Each PE runs its own four-pass protocol — definitions live in PE files. The calling agent only invokes PEs and consolidates their YAML output. When NO matching PE exists (generic fallback case), the calling agent runs a three-pass equivalent itself:
+Each PE runs its own five-pass protocol — definitions live in PE files. The calling agent only invokes PEs and consolidates their YAML output. When NO matching PE exists (generic fallback case), the calling agent runs a three-pass equivalent itself:
 
 ```
 generic fallback (calling agent runs directly when approach == "generic"):
@@ -151,8 +151,12 @@ generic fallback (calling agent runs directly when approach == "generic"):
                             on IAM/RBAC/auth claims is a security-grade finding
 
 PE dispatch (approach == single_pe or multi_pe):
-  PE runs four passes including mandatory Pass 4 (Adversarial Re-read).
-  Skipping Pass 4 is a dispatch-contract violation.
+  PE runs five passes:
+    Pass 1-3 — structured domain checks (read FULL files, not just diff hunks)
+    Pass 4   — Adversarial Re-read (mandatory)
+    Pass 5   — Self-Adversarial (mandatory — PE reviews its own findings for
+               false positives, unverified assumptions, and cross-file blind spots)
+  Skipping Pass 4 or 5 is a dispatch-contract violation.
 ```
 
 ### Dispatch
@@ -181,19 +185,24 @@ match approach:
 
 ### Dispatch Input
 
-Each PE subagent expects the following inputs in its prompt. The agent's system prompt carries the three-pass protocol, test commands, checklist, and YAML output contract — the dispatch only provides inputs:
+PEs have Bash access — they pull their own diffs. Do NOT pre-fetch or paste
+diff content into the prompt. The calling agent provides metadata only:
 
 ```
 You are reviewing changes for {ISSUE_ID}.
 
-DIFF (filtered to your domain):
-{paste git diff output for files matching this PE's patterns}
+DIFF COMMAND (run this yourself — do NOT ask the caller to paste it):
+  git diff {target}...{source} -- {file patterns for your domain}
+
+KEY FILES CHANGED:
+  {bullet list of changed files relevant to this PE's domain, from --stat output}
 
 SCOPE: {Branch Diff | Staged Diff | PR Review}
 TARGET BRANCH: {main | etc.}
 SOURCE BRANCH: {current branch}
 WORKTREE: {absolute path to repo root}
 {optional} PROJECT SUBDIR: {e.g., "frontend/" for Vue/Nuxt subdir in a monorepo, "cdk/" for CDK subdir}
+{optional} PRIOR REVIEW: {path to prior review doc if round 2+}
 
 Run your four-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read).
 
@@ -216,7 +225,7 @@ SendMessage have violated the team-mode contract and should be re-pinged.
 
 ---
 
-## Phase 4: De-duplication
+## Phase 4: De-duplication + Cross-PE Verification
 
 When consolidating sub-agent findings:
 
@@ -224,6 +233,18 @@ When consolidating sub-agent findings:
 1. Merge duplicates:        same issue from multiple PEs = ONE finding
 2. Tag domains:             merged finding gets `domains: [Security, Architecture]`
 3. Keep highest severity:   if PEs disagree, use the higher severity
+
+cross_pe_verification (when multiple PEs dispatched):
+  Compare findings across PE domains for consistency:
+    if PE-Go says "handler validates JWT" but PE-AWS-Infra says "no authorizer":
+      flag the discrepancy — one PE may have missed something
+    if PE-Go says "handler reads BEDROCK_MODEL_ID" but PE-AWS-Infra's stack
+      doesn't set that env var:
+      flag HIGH "env var mismatch between handler and CDK stack"
+    if PE-AWS-Infra grants IAM actions the handler doesn't use:
+      flag MEDIUM "over-permissioned IAM — handler doesn't call <action>"
+    if handler makes AWS API calls PE-AWS-Infra didn't grant:
+      flag HIGH "missing IAM grant — handler calls <api> but CDK doesn't grant it"
 ```
 
 ---
