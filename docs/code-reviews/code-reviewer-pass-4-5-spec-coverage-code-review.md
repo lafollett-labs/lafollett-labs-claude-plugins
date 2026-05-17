@@ -1,6 +1,6 @@
 # Code Review: code-reviewer-pass-4-5-spec-coverage
 
-**Verdict:** ⚠️ CHANGES REQUESTED
+**Verdict:** ✅ APPROVED (Round 2)
 
 | | |
 | - | - |
@@ -278,8 +278,57 @@ None.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `36f3fe9a2d3d5286efc29a4dcf4569f47f467e27`
-**Status:** ⚠️ CHANGES REQUESTED — address the 4 MEDIUMs (or explicitly accept option-A/option-B choices for MED-004), then re-run `/code-reviewer` for round 2. Any commit after this SHA invalidates this round and requires re-review.
+**Locked to SHA:** `ae927fb1ea46be1d04d8e9985fa5c1321748170c`
+**Status:** ✅ Mergeable IF `git rev-parse HEAD == ae927fb1ea46be1d04d8e9985fa5c1321748170c`. Any commit after this SHA invalidates this round and requires re-review (`/code-reviewer` again before merge).
+
+---
+
+## Review Round 2
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | @clafollett |
+| **Reviewed SHA** | `ae927fb1ea46be1d04d8e9985fa5c1321748170c` |
+| **Date** | 2026-05-17 |
+
+### Summary
+
+All 4 MEDIUMs from Round 1 are genuinely discharged. PE Workflow blocks now reference the Spec Coverage section in their numbered steps (MED-001), SKILL.md Phase 4.5 has explicit `${CLAUDE_PLUGIN_ROOT}` resolve pseudocode with realpath fallback (MED-002), the story_file_path None failure gate emits `SPEC-STORY-FILE-UNRESOLVED` at calling-agent level and returns before Dispatch Input Enrichment (MED-003), and the 5 PE Spec Coverage blocks slim from 15-line duplicates to 3-line asset-Read stubs with the `discharges_ac` annotation rule moved into the asset as single source of truth (MED-004, Option B). pe-governance found no new in-scope defects in the Round 2 changes.
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| -------- | -------- | ------------ |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 0 | 0 |
+| ℹ️ INFO | 0 | 0 |
+
+### Round 1 Remediation Verification
+
+| Finding | Status | Evidence |
+| ------- | ------ | -------- |
+| MED-001 — Workflow step skim-test | ✅ Discharged | All 5 PEs now have a numbered step before "Deliver YAML" referencing § Spec Coverage |
+| MED-002 — `${CLAUDE_PLUGIN_ROOT}` substitution | ✅ Discharged | `SKILL.md:330-338` explicit `plugin_root = bash: echo "$CLAUDE_PLUGIN_ROOT"` + realpath fallback; PEs receive absolute paths |
+| MED-003 — Silent-failure gate | ✅ Discharged | `SKILL.md:303-322` initializes `story_file_path = None`, threads None through all three resolution paths, gates with explicit `return` before Dispatch Input Enrichment, emits `SPEC-STORY-FILE-UNRESOLVED` finding |
+| MED-004 — Sync drift / 5 identical blocks | ✅ Discharged (Option B) | Each PE's Spec Coverage section slimmed to 3-line asset-Read stub; `discharges_ac` annotation rule moved to asset § "Optional Annotation on Stack Findings". Net: −47 lines across PE files, single source of truth in the asset |
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+None.
+
+#### Should Fix
+
+None.
+
+#### Consider
+
+- **INFO-001 from Round 1** (still applicable): For a future release, consider a `SPEC_COVERAGE_OWNER` dispatch field so only ONE designated PE runs Spec Coverage instead of all dispatched PEs running it in parallel (Phase 4 dedupes the duplicates correctly, but it's wasted bash work). Non-blocking — flagged for awareness during a future refactor.
 
 ---
 
