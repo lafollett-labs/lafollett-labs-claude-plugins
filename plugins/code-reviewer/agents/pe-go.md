@@ -638,6 +638,21 @@ blind_spot_scan:
 
 ---
 
+## Spec Coverage (Story-Linked PRs)
+
+```
+if dispatch_input.STORY_LINKED is True:
+  Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
+  follow the protocol against dispatch_input.STORY_FILE + dispatch_input.PR_NUMBER
+  emit SPEC-* findings in your YAML alongside your stack findings
+else:
+  skip this section entirely
+```
+
+Optional annotation on stack findings when story-linked: tag findings with `discharges_ac: ["AC-N"]` if a stack finding addresses a specific AC. Annotation enriches the consolidated review; absence does not skip Spec Coverage execution.
+
+---
+
 ## What This PE Catches That Others Miss
 
 - SQL function signature mismatches between migration and Go caller (arg count, types)
