@@ -212,6 +212,17 @@ verify_deferral(followup_issue, ac):
         the AC in this PR.
 ```
 
+## Optional Annotation on Stack Findings
+
+While running your stack-specific passes (1-5) on the same PR, you MAY tag any stack finding with `discharges_ac: ["AC-N"]` if that finding addresses a specific acceptance criterion from the story file. Example:
+
+- Stack finding `HIGH-001` flags a goroutine leak at `pkg/runtime/agent_loop.go:142`
+- AC-7 in the linked story is "Tool-use loop hop ceiling prevents infinite loops; termination surfaces structured error"
+- The fix recommendation describes adding a `MaxToolHops` ceiling
+- Tag the finding: `discharges_ac: ["AC-7"]`
+
+Multiple ACs per finding allowed. Annotation enriches the consolidated review but is OPTIONAL — Spec Coverage runs independently. Annotation is for stack findings; SPEC-* findings (from this protocol) do not carry `discharges_ac`.
+
 ## YAML Output Shape
 
 Append these findings to your normal stack-PE YAML under the same `findings:` key. Distinguish them with the `id:` prefix (`SPEC-*`) and tag `expert: PE-{Stack}-SpecCoverage` if your stack PE emits both kinds. Example:

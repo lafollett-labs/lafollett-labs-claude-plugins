@@ -279,6 +279,8 @@ if not story_linked:
 #   2. local epic file via docs/epics/*/.github-state.json mapping
 #   3. GH issue body directly
 
+story_file_path = None
+
 if user passed STORY_FILE explicitly:
   story_file_path = <user value>
 else:
@@ -291,22 +293,60 @@ else:
 
   if story_file_path is None:
     # Fallback — fetch GH issue body to a temp file
-    bash: gh issue view <issue_id> --json body --jq '.body' > /tmp/spec-coverage-<issue_id>.md
-    story_file_path = /tmp/spec-coverage-<issue_id>.md
+    body = bash: gh issue view <issue_id> --json body --jq '.body'
+    if body is empty or command failed (rate limit, network down):
+      story_file_path = None  # keep None — fall through to gate
+    else:
+      bash: write body to /tmp/spec-coverage-<issue_id>.md
+      story_file_path = /tmp/spec-coverage-<issue_id>.md
+
+# FAILURE GATE — must run before Dispatch Input Enrichment
+if story_file_path is None:
+  # All three resolution paths failed. Do NOT enrich dispatch — dispatching
+  # with STORY_LINKED: true + missing STORY_FILE would silently mis-fire.
+  add to calling agent's own finding list:
+    expert: "Spec Coverage"
+    id: "SPEC-STORY-FILE-UNRESOLVED"
+    severity: MEDIUM
+    in_scope: true
+    title: "Story link detected but story file unresolvable"
+    description: |
+      PR closes story-labeled issue #<issue_id> but neither caller-provided
+      STORY_FILE, local docs/epics/*/.github-state.json mapping, nor
+      `gh issue view <issue_id>` body-fetch fallback yielded a story file.
+      Spec Coverage pass SKIPPED.
+    recommendation: |
+      Pass STORY_FILE explicitly via the skill invocation, OR add the issue
+      to a local docs/epics/*/.github-state.json mapping, OR verify
+      `gh issue view <issue_id>` works (auth + network).
+  return  # do not proceed to Dispatch Input Enrichment
 ```
 
 ### Dispatch Input Enrichment
 
-Append these fields to each PE's dispatch input when story_linked:
+Resolve the absolute path to the protocol asset BEFORE dispatching — PEs must receive literal absolute paths, not `${CLAUDE_PLUGIN_ROOT}` placeholders:
+
+```
+plugin_root = bash: echo "$CLAUDE_PLUGIN_ROOT"
+spec_coverage_protocol_path = plugin_root + "/skills/code-reviewer/assets/spec-coverage-protocol.md"
+
+if plugin_root is empty:
+  # Edge case: skill invoked outside plugin context. Fall back to absolute
+  # path resolution via skill's own location (the file containing THIS
+  # pseudocode is at <plugin_root>/skills/code-reviewer/SKILL.md):
+  spec_coverage_protocol_path = bash: realpath "$(dirname "${BASH_SOURCE:-$0}")/assets/spec-coverage-protocol.md"
+```
+
+Append these fields to each PE's dispatch input:
 
 ```
 STORY_LINKED: true
-STORY_FILE: <absolute path resolved above>
-SPEC_COVERAGE_PROTOCOL: ${CLAUDE_PLUGIN_ROOT}/skills/code-reviewer/assets/spec-coverage-protocol.md
-PR_NUMBER: <number, for `gh pr view <N> --json body` if PE needs PR description>
+STORY_FILE: <absolute path resolved in § Story File Resolution>
+SPEC_COVERAGE_PROTOCOL: <spec_coverage_protocol_path — absolute, no ${...} placeholders>
+PR_NUMBER: <PR number, for `gh pr view <N>` calls inside the protocol>
 ```
 
-`${CLAUDE_PLUGIN_ROOT}` is resolved by the calling agent before substitution — pass the absolute path literally so PEs don't need to resolve plugin paths from their (depth-1) context.
+The calling agent owns plugin-path resolution because it (the skill orchestrator) has reliable access to `$CLAUDE_PLUGIN_ROOT`. PEs at depth-1 do not — passing them a literal `${CLAUDE_PLUGIN_ROOT}/...` string would cause `Read()` to fail on the unresolved placeholder.
 
 ### PE Output for Spec Coverage Findings
 

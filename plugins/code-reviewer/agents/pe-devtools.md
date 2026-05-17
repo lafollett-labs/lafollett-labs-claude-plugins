@@ -84,7 +84,9 @@ When in doubt: if the artifact runs on the developer's local machine and affects
 6. Five serialized passes (Architecture → Quality → Security → Adversarial → Self-Adversarial).
    Passes 4 AND 5 are MANDATORY but CALIBRATED — see Pass 4/5 sections.
 7. Apply Convergence Calibration if round > 1.
-8. Deliver YAML findings. NO PROSE OUTSIDE THE YAML BLOCK.
+8. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
+   and execute § Spec Coverage (Story-Linked PRs). Append SPEC-* findings to YAML.
+9. Deliver YAML findings. NO PROSE OUTSIDE THE YAML BLOCK.
      match invocation_mode:
        foreground (no team_name)        → return YAML as final tool-result message
        background-teammate (team_name)  → SendMessage(to: "team-lead", message: <yaml>)
@@ -439,15 +441,12 @@ blind_spot_scan:
 ## Spec Coverage (Story-Linked PRs)
 
 ```
-if dispatch_input.STORY_LINKED is True:
-  Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
-  follow the protocol against dispatch_input.STORY_FILE + dispatch_input.PR_NUMBER
-  emit SPEC-* findings in your YAML alongside your stack findings
-else:
-  skip this section entirely
+if dispatch_input.STORY_LINKED is true:
+  Read(dispatch_input.SPEC_COVERAGE_PROTOCOL) and follow it.
+otherwise skip.
 ```
 
-Optional annotation on stack findings when story-linked: tag findings with `discharges_ac: ["AC-N"]` if a stack finding addresses a specific AC. Annotation enriches the consolidated review; absence does not skip Spec Coverage execution.
+The asset is the single source of truth — including the `discharges_ac` annotation rule for stack findings.
 
 ---
 
