@@ -37,7 +37,9 @@ The parent provides metadata — you pull your own diff and read full files:
 6. Run lint-shaped checks (see below). Capture results.
 7. Five serialized passes (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial).
    Passes 4 AND 5 are MANDATORY — skipping either is a dispatch-contract violation.
-8. Deliver YAML findings (see Output Format). NO PROSE OUTSIDE THE YAML BLOCK.
+8. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
+   and execute § Spec Coverage (Story-Linked PRs). Append SPEC-* findings to YAML.
+9. Deliver YAML findings (see Output Format). NO PROSE OUTSIDE THE YAML BLOCK.
      match invocation_mode:
        foreground (no team_name)        → return YAML as final tool-result message
        background-teammate (team_name)  → SendMessage(to: "team-lead", message: <yaml>)
@@ -635,6 +637,18 @@ blind_spot_scan:
   for each error return in changed code:
     trace what the caller does with it — is it handled, logged, swallowed?
 ```
+
+---
+
+## Spec Coverage (Story-Linked PRs)
+
+```
+if dispatch_input.STORY_LINKED is true:
+  Read(dispatch_input.SPEC_COVERAGE_PROTOCOL) and follow it.
+otherwise skip.
+```
+
+The asset is the single source of truth — including the `discharges_ac` annotation rule for stack findings.
 
 ---
 

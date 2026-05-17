@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-aws-infra, pe-governance, pe-devtools). Four-pass protocol with mandatory adversarial re-read, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop with hard 3-round cap until APPROVED (LOW + INFO are awareness-only and do NOT block). pe-devtools calibrated for single-operator local threat model.
+description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-aws-infra, pe-governance, pe-devtools). Four-pass protocol with mandatory adversarial re-read, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop with hard 3-round cap until APPROVED (LOW + INFO are awareness-only and do NOT block). pe-devtools calibrated for single-operator local threat model. Story-linked PRs additionally run Phase 4.5 Spec Coverage, asserting every story acceptance criterion is genuinely discharged or explicitly deferred.
 ---
 
 # Expert Code Review
@@ -203,6 +203,7 @@ SOURCE BRANCH: {current branch}
 WORKTREE: {absolute path to repo root}
 {optional} PROJECT SUBDIR: {e.g., "frontend/" for Vue/Nuxt subdir in a monorepo, "cdk/" for CDK subdir}
 {optional} PRIOR REVIEW: {path to prior review doc if round 2+}
+{optional} STORY_FILE: {absolute path to local story/epic markdown when PR is story-linked — PE may tag findings with discharges_ac: [AC-N] to enrich Phase 4.5 Spec Coverage}
 
 Run your four-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read).
 
@@ -246,6 +247,112 @@ cross_pe_verification (when multiple PEs dispatched):
     if handler makes AWS API calls PE-AWS-Infra didn't grant:
       flag HIGH "missing IAM grant — handler calls <api> but CDK doesn't grant it"
 ```
+
+---
+
+## Phase 4.5: Spec Coverage Trigger (Story-Linked PRs)
+
+**Calling-agent responsibility only.** When the PR (or branch's primary linked issue) carries a `story` or `epic` label, the calling agent enriches PE dispatch inputs with the absolute path to the Spec Coverage protocol asset. PEs load the protocol themselves and run it as a story-linked-only pass (the protocol's pseudocode lives in `assets/spec-coverage-protocol.md` so reviewer agents — who do NOT see SKILL.md — actually have access to it).
+
+### Trigger
+
+```
+issue_id = extract_issue_id(pr.title, pr.body, current_branch_name)
+  # "Closes #NNN", "fix(#NNN)", "feat(#NNN)", or branch prefix <type>/<NNN>-<...>
+
+if issue_id is None:
+  story_linked = false
+else:
+  labels = bash: gh issue view <issue_id> --json labels --jq '.labels[].name'
+  story_linked = ("story" in labels) or ("epic" in labels)
+
+if not story_linked:
+  # Non-story PR (chore, bugfix, task) — Phase 4.5 does not apply
+  return
+```
+
+### Story File Resolution
+
+```
+# Priority order:
+#   1. caller-provided STORY_FILE path
+#   2. local epic file via docs/epics/*/.github-state.json mapping
+#   3. GH issue body directly
+
+story_file_path = None
+
+if user passed STORY_FILE explicitly:
+  story_file_path = <user value>
+else:
+  # Search local epics
+  state_files = bash: find docs/epics -maxdepth 3 -name .github-state.json
+  for state_file in state_files:
+    if jq -r '.issues | to_entries[] | select(.value == <issue_id>) | .key' returns a filename:
+      story_file_path = <state_file_dir>/<filename>
+      break
+
+  if story_file_path is None:
+    # Fallback — fetch GH issue body to a temp file
+    body = bash: gh issue view <issue_id> --json body --jq '.body'
+    if body is empty or command failed (rate limit, network down):
+      story_file_path = None  # keep None — fall through to gate
+    else:
+      bash: write body to /tmp/spec-coverage-<issue_id>.md
+      story_file_path = /tmp/spec-coverage-<issue_id>.md
+
+# FAILURE GATE — must run before Dispatch Input Enrichment
+if story_file_path is None:
+  # All three resolution paths failed. Do NOT enrich dispatch — dispatching
+  # with STORY_LINKED: true + missing STORY_FILE would silently mis-fire.
+  add to calling agent's own finding list:
+    expert: "Spec Coverage"
+    id: "SPEC-STORY-FILE-UNRESOLVED"
+    severity: MEDIUM
+    in_scope: true
+    title: "Story link detected but story file unresolvable"
+    description: |
+      PR closes story-labeled issue #<issue_id> but neither caller-provided
+      STORY_FILE, local docs/epics/*/.github-state.json mapping, nor
+      `gh issue view <issue_id>` body-fetch fallback yielded a story file.
+      Spec Coverage pass SKIPPED.
+    recommendation: |
+      Pass STORY_FILE explicitly via the skill invocation, OR add the issue
+      to a local docs/epics/*/.github-state.json mapping, OR verify
+      `gh issue view <issue_id>` works (auth + network).
+  return  # do not proceed to Dispatch Input Enrichment
+```
+
+### Dispatch Input Enrichment
+
+Resolve the absolute path to the protocol asset BEFORE dispatching — PEs must receive literal absolute paths, not `${CLAUDE_PLUGIN_ROOT}` placeholders:
+
+```
+plugin_root = bash: echo "$CLAUDE_PLUGIN_ROOT"
+spec_coverage_protocol_path = plugin_root + "/skills/code-reviewer/assets/spec-coverage-protocol.md"
+
+if plugin_root is empty:
+  # Edge case: skill invoked outside plugin context. Fall back to absolute
+  # path resolution via skill's own location (the file containing THIS
+  # pseudocode is at <plugin_root>/skills/code-reviewer/SKILL.md):
+  spec_coverage_protocol_path = bash: realpath "$(dirname "${BASH_SOURCE:-$0}")/assets/spec-coverage-protocol.md"
+```
+
+Append these fields to each PE's dispatch input:
+
+```
+STORY_LINKED: true
+STORY_FILE: <absolute path resolved in § Story File Resolution>
+SPEC_COVERAGE_PROTOCOL: <spec_coverage_protocol_path — absolute, no ${...} placeholders>
+PR_NUMBER: <PR number, for `gh pr view <N>` calls inside the protocol>
+```
+
+The calling agent owns plugin-path resolution because it (the skill orchestrator) has reliable access to `$CLAUDE_PLUGIN_ROOT`. PEs at depth-1 do not — passing them a literal `${CLAUDE_PLUGIN_ROOT}/...` string would cause `Read()` to fail on the unresolved placeholder.
+
+### PE Output for Spec Coverage Findings
+
+PEs that detect AC-coverage failures emit findings with `expert: "PE-Spec-Coverage"` (sub-domain of their stack expertise) and append them to their YAML alongside stack findings. Phase 4 De-duplication consolidates these across PEs as it does any other finding category. Spec-Coverage findings carry the same severity discipline (BLOCKING for SPEC-MISSING / SPEC-EVIDENCE-MISSING / SPEC-DEFER-INVALID; CHANGES_REQUESTED for SPEC-WEAK-EVIDENCE / SPEC-FORMAT-MALFORMED).
+
+The asset at `assets/spec-coverage-protocol.md` is the authoritative protocol — its parsing rules, evidence verification logic, finding shapes, and severity table govern PE execution.
 
 ---
 
