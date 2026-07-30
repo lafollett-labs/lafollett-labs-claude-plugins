@@ -6,11 +6,12 @@ set -euo pipefail
 
 command -v jq &>/dev/null || exit 0
 
-# --- Hook input ---
+# --- Hook input (one jq pass — process startup dominates cost on Windows) ---
+# Capture via $() so the trailing CR/LF is stripped (native Windows jq emits CRLF,
+# and `read` would otherwise leave a stray \r in the last field); then split on tab.
 INPUT=$(cat)
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null) || true
-TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null) || true
-AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null) || true
+FIELDS=$(printf '%s' "$INPUT" | jq -r '[.session_id // "", .transcript_path // "", .agent_id // ""] | @tsv' 2>/dev/null) || true
+IFS=$'\t' read -r SESSION_ID TRANSCRIPT AGENT_ID <<< "$FIELDS" || true
 [[ -z "$SESSION_ID" || -z "$TRANSCRIPT" || ! -f "$TRANSCRIPT" ]] && exit 0
 
 # Skip subagent stops — they have their own context windows
@@ -24,12 +25,20 @@ STATE_DIR="${CLAUDE_PLUGIN_DATA:-/tmp/context-handoff}"
 STATE_FILE="$STATE_DIR/monitor-$SESSION_ID.json"
 mkdir -p "$STATE_DIR"
 
-# --- Token usage from latest main-agent assistant message ---
+# --- Latest main-agent assistant message: token TOTAL + model in ONE jq pass ---
 # Filter out isSidechain entries (subagents/teams have separate context windows).
 # tail -500 is instant (seek-based) regardless of file size; covers long subagent chains.
-USAGE=$(tail -500 "$TRANSCRIPT" | \
-  jq -c 'select(.type == "assistant" and .message.usage and (.isSidechain | not)) | .message.usage' 2>/dev/null | \
-  tail -1)
+# jq sums the usage fields itself and emits "<total>\t<model>" so we spawn ONE jq, not
+# one-per-field. On Windows jq's process startup dwarfs the parse, so spawn COUNT — not
+# parse work — is what blew past the old 5s timeout on ~15% of Stop events.
+USAGE_LINE=$(tail -500 "$TRANSCRIPT" | jq -r '
+    select(.type == "assistant" and .message.usage and (.isSidechain | not))
+    | [ (.message.usage
+          | (.input_tokens // 0) + (.output_tokens // 0)
+            + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)),
+        (.message.model // "") ]
+    | @tsv' 2>/dev/null | tail -1) || true
+IFS=$'\t' read -r TOTAL JSONL_MODEL <<< "$USAGE_LINE" || true
 
 # --- Auto-detect context window size ---
 # Priority: env var > settings.json model suffix [1m] > model family > default 1M
@@ -40,9 +49,7 @@ else
   if [[ "$SETTINGS_MODEL" == *"[1m]"* ]]; then
     CTX_WINDOW=1000000
   else
-    JSONL_MODEL=$(tail -500 "$TRANSCRIPT" | \
-      jq -r 'select(.type == "assistant" and .message.model and (.isSidechain | not)) | .message.model' 2>/dev/null | \
-      tail -1)
+    # JSONL_MODEL already extracted from the transcript in the pass above
     case "$JSONL_MODEL" in
       claude-opus-*|claude-sonnet-*) CTX_WINDOW=1000000 ;;
       claude-haiku-*)                CTX_WINDOW=200000 ;;
@@ -61,21 +68,16 @@ else
   HARD_HANDOFF=90
 fi
 
-[[ -z "$USAGE" || "$USAGE" == "null" ]] && exit 0
-
-TOTAL=$(echo "$USAGE" | jq '
-  (.input_tokens // 0) +
-  (.output_tokens // 0) +
-  (.cache_read_input_tokens // 0) +
-  (.cache_creation_input_tokens // 0)
-')
 [[ -z "$TOTAL" || "$TOTAL" == "null" || "$TOTAL" -eq 0 ]] && exit 0
 
 PCT=$((TOTAL * 100 / CTX_WINDOW))
 
-# --- Load previous state ---
+# --- Load previous state (parse our own tiny file in-shell, no jq spawn) ---
 LAST=0
-[[ -f "$STATE_FILE" ]] && LAST=$(jq -r '.last // 0' "$STATE_FILE" 2>/dev/null || echo 0)
+if [[ -f "$STATE_FILE" ]]; then
+  _state=$(<"$STATE_FILE")
+  [[ "$_state" =~ \"last\":([0-9]+) ]] && LAST=${BASH_REMATCH[1]}
+fi
 
 # Reset if context shrunk significantly (compaction)
 [[ $PCT -lt $((LAST - 5)) ]] && LAST=0
