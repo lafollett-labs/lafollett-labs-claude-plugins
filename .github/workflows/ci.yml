@@ -1,0 +1,80 @@
+name: CI
+
+# No `paths` filter, deliberately. Scoping at the trigger means a PR that
+# touches nothing matched runs no jobs at all — and a required check that never
+# reports blocks the merge forever.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: manifests • skills
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Every manifest is valid JSON
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r f; do
+            if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f"; then
+              echo "  ok    $f"
+            else
+              echo "::error file=$f::invalid JSON"; fail=1
+            fi
+          done < <(find .claude-plugin plugins -name '*.json' -path '*.claude-plugin*' | sort)
+          exit $fail
+
+      - name: Marketplace entries resolve, and names match their directory
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, sys
+          fail = []
+          mk = json.load(open('.claude-plugin/marketplace.json'))
+          declared = {p['name']: p for p in mk['plugins']}
+
+          for entry in mk['plugins']:
+              src = pathlib.Path(entry['source'])
+              if not src.is_dir():
+                  fail.append(f"marketplace source does not exist: {entry['name']} -> {src}")
+                  continue
+              man = src / '.claude-plugin' / 'plugin.json'
+              if not man.is_file():
+                  fail.append(f"no plugin.json for {entry['name']} at {man}")
+                  continue
+              got = json.load(open(man)).get('name')
+              if got != entry['name']:
+                  fail.append(f"name mismatch: marketplace says {entry['name']}, {man} says {got}")
+
+          for d in sorted(pathlib.Path('plugins').iterdir()):
+              if d.is_dir() and d.name not in declared:
+                  fail.append(f"plugins/{d.name} exists but is not listed in marketplace.json")
+
+          for f in fail:
+              print(f"::error::{f}")
+          print(f"checked {len(mk['plugins'])} plugins")
+          sys.exit(1 if fail else 0)
+          PY
+
+      - name: No skill hardcodes the marketplace identifier as a lookup key
+        # Regression guard. Resolving a script via `<plugin>@<marketplace>` orphans
+        # the lookup on any marketplace rename, silently. Match on the plugin name.
+        run: |
+          set -euo pipefail
+          if hits=$(grep -rn "@lafollett[a-z-]*-claude-plugins" plugins --include='*.md' --include='*.js' --include='*.py' \
+                    | grep -v '^\s*#' ); then
+            echo "$hits" | while IFS= read -r h; do echo "::error::hardcoded marketplace key: $h"; done
+            exit 1
+          fi
+          echo "no hardcoded marketplace keys"
