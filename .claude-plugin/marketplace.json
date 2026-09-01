@@ -15,35 +15,35 @@
       "description": "PE-powered code reviews with five-pass protocol (Architecture → Quality+Tests → Security → Adversarial Re-read → Self-Adversarial) and project bootstrapping via init-project",
       "source": "./plugins/code-reviewer",
       "category": "developer-tools",
-      "homepage": "https://github.com/clafollett/lafollettlabs-claude-plugins"
+      "homepage": "https://github.com/lafollett-labs/lafollettlabs-claude-plugins"
     },
     {
       "name": "context-handoff",
       "description": "Session state handoff, resume, and context usage monitoring — save working context to JSON, resume in fresh sessions, and get automatic warnings as context fills up",
       "source": "./plugins/context-handoff",
       "category": "developer-tools",
-      "homepage": "https://github.com/clafollett/lafollettlabs-claude-plugins"
+      "homepage": "https://github.com/lafollett-labs/lafollettlabs-claude-plugins"
     },
     {
       "name": "issue-manager",
       "description": "GitHub Issue management with intent-over-implementation templates — Epics, Stories, Tasks, Bugs with quality gates and CLI automation",
       "source": "./plugins/issue-manager",
       "category": "developer-tools",
-      "homepage": "https://github.com/clafollett/lafollettlabs-claude-plugins"
+      "homepage": "https://github.com/lafollett-labs/lafollettlabs-claude-plugins"
     },
     {
       "name": "session-analyzer",
       "description": "Analyze and extract conversations from Claude Code session JSONL files — transcripts, token stats, tool usage, and session discovery",
       "source": "./plugins/session-analyzer",
       "category": "developer-tools",
-      "homepage": "https://github.com/clafollett/lafollettlabs-claude-plugins"
+      "homepage": "https://github.com/lafollett-labs/lafollettlabs-claude-plugins"
     },
     {
       "name": "ux-designer",
       "description": "UX design harness — structured discovery, prototype generation, visual iteration via Playwright, Storybook support, parallel variations via worktrees",
       "source": "./plugins/ux-designer",
       "category": "developer-tools",
-      "homepage": "https://github.com/clafollett/lafollettlabs-claude-plugins"
+      "homepage": "https://github.com/lafollett-labs/lafollettlabs-claude-plugins"
     }
   ]
 }
