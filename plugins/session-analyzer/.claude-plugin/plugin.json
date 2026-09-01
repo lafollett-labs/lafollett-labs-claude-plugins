@@ -1,7 +1,7 @@
 {
   "name": "session-analyzer",
   "description": "Analyze and extract conversations from Claude Code session JSONL files — transcripts, token stats, tool usage, and session discovery",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": {
     "name": "LaFollett Labs LLC",
     "email": "cali.lafollett@gmail.com"

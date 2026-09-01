@@ -33,37 +33,46 @@ Every issue defines **outcomes and behaviors**, not implementation steps. The im
 
 The CLI script is at `scripts/gh-issues.js` relative to this SKILL.md file. When invoking it, use the absolute path to the installed plugin location.
 
-The plugin cache at `~/.claude/plugins/cache/` keeps **multiple versions** side-by-side. The canonical active version is recorded in `~/.claude/plugins/installed_plugins.json` under the `installPath` field. Use it to resolve the correct script:
+The plugin cache at `~/.claude/plugins/cache/` keeps **multiple versions** side-by-side. `~/.claude/plugins/installed_plugins.json` records each install under the `installPath` field. Use it to resolve the script:
 
 ```bash
-# Resolve via installed_plugins.json (canonical — always points to the active version).
-# Matched on the PLUGIN name, not `plugin@marketplace`: the marketplace identifier
-# is not a stable key, and hardcoding it orphans this lookup on any rename.
+# First installed_plugins.json entry for this plugin whose script exists on disk,
+# preferring this marketplace when the registry holds more than one.
 GH_ISSUES=$(python3 -c "
 import json, pathlib, sys
 reg = pathlib.Path.home() / '.claude/plugins/installed_plugins.json'
 rel = 'skills/issue-manager/scripts/gh-issues.js'
+market = 'lafollett-labs-claude-plugins'
 try:
     plugins = json.loads(reg.read_text()).get('plugins', {})
-except (OSError, ValueError):
+    if not isinstance(plugins, dict):
+        plugins = {}
+except Exception:
     plugins = {}
+found = []
 for key, entries in plugins.items():
-    if key.split('@')[0] != 'issue-manager':
+    name, _, mkt = key.partition('@')
+    if name != 'issue-manager':
         continue
     for entry in entries or []:
-        script = pathlib.Path(entry.get('installPath', '')) / rel
-        if script.is_file():
-            print(script)
-            sys.exit(0)
+        if not isinstance(entry, dict):
+            continue
+        install = entry.get('installPath')
+        if not install:
+            continue
+        script = pathlib.Path(install) / rel
+        if script.is_absolute() and script.is_file():
+            found.append((mkt != market, str(script)))
+if found:
+    print(sorted(found)[0][1])
+    sys.exit(0)
 sys.exit(1)
-")
+" || true)
 
 # Fallback for manual install (no version ambiguity)
-[ -z "$GH_ISSUES" ] && GH_ISSUES=$(find ~/.claude/skills -path "*/issue-manager/scripts/gh-issues.js" -print -quit 2>/dev/null)
+# `|| true` is load-bearing: find exits 1 with no ~/.claude/skills, killing `set -e` callers.
+[ -z "$GH_ISSUES" ] && GH_ISSUES=$(find ~/.claude/skills -path "*/issue-manager/scripts/gh-issues.js" -print -quit 2>/dev/null || true)
 
-# Resolution failed — fail loudly rather than passing an empty path downstream.
-# `if`, not `[ -z ] &&`: a trailing test that is false returns 1, which reports
-# failure on the success path.
 if [ -z "$GH_ISSUES" ]; then
   echo "issue-manager: cannot resolve gh-issues.js — checked installed_plugins.json and ~/.claude/skills" >&2
   exit 1
