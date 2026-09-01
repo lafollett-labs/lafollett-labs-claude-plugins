@@ -36,16 +36,38 @@ The CLI script is at `scripts/gh-issues.js` relative to this SKILL.md file. When
 The plugin cache at `~/.claude/plugins/cache/` keeps **multiple versions** side-by-side. The canonical active version is recorded in `~/.claude/plugins/installed_plugins.json` under the `installPath` field. Use it to resolve the correct script:
 
 ```bash
-# Resolve via installed_plugins.json (canonical — always points to the active version)
+# Resolve via installed_plugins.json (canonical — always points to the active version).
+# Matched on the PLUGIN name, not `plugin@marketplace`: the marketplace identifier
+# is not a stable key, and hardcoding it orphans this lookup on any rename.
 GH_ISSUES=$(python3 -c "
-import json, pathlib
-data = json.loads((pathlib.Path.home() / '.claude/plugins/installed_plugins.json').read_text())
-entry = data.get('plugins', {}).get('issue-manager@lafollettlabs-claude-plugins', [{}])[0]
-print(pathlib.Path(entry['installPath']) / 'skills/issue-manager/scripts/gh-issues.js')
-" 2>/dev/null)
+import json, pathlib, sys
+reg = pathlib.Path.home() / '.claude/plugins/installed_plugins.json'
+rel = 'skills/issue-manager/scripts/gh-issues.js'
+try:
+    plugins = json.loads(reg.read_text()).get('plugins', {})
+except (OSError, ValueError):
+    plugins = {}
+for key, entries in plugins.items():
+    if key.split('@')[0] != 'issue-manager':
+        continue
+    for entry in entries or []:
+        script = pathlib.Path(entry.get('installPath', '')) / rel
+        if script.is_file():
+            print(script)
+            sys.exit(0)
+sys.exit(1)
+")
 
 # Fallback for manual install (no version ambiguity)
 [ -z "$GH_ISSUES" ] && GH_ISSUES=$(find ~/.claude/skills -path "*/issue-manager/scripts/gh-issues.js" -print -quit 2>/dev/null)
+
+# Resolution failed — fail loudly rather than passing an empty path downstream.
+# `if`, not `[ -z ] &&`: a trailing test that is false returns 1, which reports
+# failure on the success path.
+if [ -z "$GH_ISSUES" ]; then
+  echo "issue-manager: cannot resolve gh-issues.js — checked installed_plugins.json and ~/.claude/skills" >&2
+  exit 1
+fi
 ```
 
 All file operations (epic folders, docs) are created in the **current working directory's project root** (detected via `git rev-parse --show-toplevel`), NOT in the plugin's install directory.

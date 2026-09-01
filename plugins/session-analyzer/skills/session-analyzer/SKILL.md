@@ -30,16 +30,38 @@ The CLI script is at `scripts/session-analyzer.py` relative to this SKILL.md fil
 The plugin cache at `~/.claude/plugins/cache/` keeps **multiple versions** side-by-side. The canonical active version is recorded in `~/.claude/plugins/installed_plugins.json` under the `installPath` field. Use it to resolve the correct script:
 
 ```bash
-# Resolve via installed_plugins.json (canonical — always points to the active version)
+# Resolve via installed_plugins.json (canonical — always points to the active version).
+# Matched on the PLUGIN name, not `plugin@marketplace`: the marketplace identifier
+# is not a stable key, and hardcoding it orphans this lookup on any rename.
 SA=$(python3 -c "
-import json, pathlib
-data = json.loads((pathlib.Path.home() / '.claude/plugins/installed_plugins.json').read_text())
-entry = data.get('plugins', {}).get('session-analyzer@lafollettlabs-claude-plugins', [{}])[0]
-print(pathlib.Path(entry['installPath']) / 'skills/session-analyzer/scripts/session-analyzer.py')
-" 2>/dev/null)
+import json, pathlib, sys
+reg = pathlib.Path.home() / '.claude/plugins/installed_plugins.json'
+rel = 'skills/session-analyzer/scripts/session-analyzer.py'
+try:
+    plugins = json.loads(reg.read_text()).get('plugins', {})
+except (OSError, ValueError):
+    plugins = {}
+for key, entries in plugins.items():
+    if key.split('@')[0] != 'session-analyzer':
+        continue
+    for entry in entries or []:
+        script = pathlib.Path(entry.get('installPath', '')) / rel
+        if script.is_file():
+            print(script)
+            sys.exit(0)
+sys.exit(1)
+")
 
 # Fallback for manual install (no version ambiguity)
 [ -z "$SA" ] && SA=$(find ~/.claude/skills -path "*/session-analyzer/scripts/session-analyzer.py" -print -quit 2>/dev/null)
+
+# Resolution failed — fail loudly rather than passing an empty path downstream.
+# `if`, not `[ -z ] &&`: a trailing test that is false returns 1, which reports
+# failure on the success path.
+if [ -z "$SA" ]; then
+  echo "session-analyzer: cannot resolve session-analyzer.py — checked installed_plugins.json and ~/.claude/skills" >&2
+  exit 1
+fi
 ```
 
 ## Argument Hints — User Intent to Flags
