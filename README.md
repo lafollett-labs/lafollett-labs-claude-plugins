@@ -77,7 +77,7 @@ Design harness for Claude Code — replicates and improves upon Claude Design's 
 In Claude Code, open the plugin manager and add this marketplace:
 
 ```
-/plugins marketplace add https://github.com/clafollett/lafollettlabs-claude-plugins
+/plugins marketplace add https://github.com/lafollett-labs/lafollettlabs-claude-plugins
 ```
 
 ### Install Plugins
