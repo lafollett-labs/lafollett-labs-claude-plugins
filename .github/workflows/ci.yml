@@ -1,0 +1,140 @@
+name: CI
+
+# No `paths` filter, deliberately. Scoping at the trigger means a PR that
+# matches nothing runs no jobs, and a required check that never reports blocks
+# the merge forever.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: manifests • skills
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Every manifest is valid JSON
+        # The floor assertion is load-bearing. `< <(find ...)` does not surface
+        # find's exit code, so if these directories ever move, the loop body runs
+        # zero times and the step reports green having validated nothing.
+        run: |
+          set -euo pipefail
+          fail=0; n=0
+          while IFS= read -r f; do
+            n=$((n + 1))
+            if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f"; then
+              echo "  ok    $f"
+            else
+              echo "::error file=$f::invalid JSON"; fail=1
+            fi
+          done < <(find .claude-plugin plugins -name '*.json' | sort)
+          # Assert the invariant directly. A count floor is not enough: moving
+          # .claude-plugin/ away still leaves one manifest per plugin, which clears
+          # any count derived from the plugin directories.
+          if [ ! -f .claude-plugin/marketplace.json ]; then
+            echo "::error::.claude-plugin/marketplace.json is missing — did the layout move?"
+            fail=1
+          fi
+          expected=$(( 1 + $(find plugins -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l) ))
+          if [ "$n" -lt "$expected" ]; then
+            echo "::error::expected at least $expected manifests, found $n — did the layout move?"
+            fail=1
+          fi
+          echo "validated $n manifests"
+          exit $fail
+
+      - name: Marketplace and plugin manifests agree
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, sys
+          fail = []
+          mk = json.load(open('.claude-plugin/marketplace.json'))
+          entries = mk['plugins']
+
+          names = [p['name'] for p in entries]
+          dupes = sorted({n for n in names if names.count(n) > 1})
+          if dupes:
+              fail.append(('.claude-plugin/marketplace.json', f"duplicate plugin names: {dupes}"))
+
+          sources = set()
+          for entry in entries:
+              src = pathlib.Path(entry['source'])
+              sources.add(src.resolve())
+              if not src.is_dir():
+                  fail.append(('.claude-plugin/marketplace.json',
+                               f"source does not exist: {entry['name']} -> {src}"))
+                  continue
+              man = src / '.claude-plugin' / 'plugin.json'
+              if not man.is_file():
+                  fail.append((str(src), f"no plugin.json for {entry['name']}"))
+                  continue
+              got = json.load(open(man)).get('name')
+              if got != entry['name']:
+                  fail.append((str(man),
+                               f"name mismatch: marketplace says {entry['name']}, manifest says {got}"))
+
+          # Reverse: compare on the SOURCE PATH, not the directory basename, so the
+          # error cannot claim a listed directory is unlisted.
+          for d in sorted(pathlib.Path('plugins').iterdir()):
+              if d.is_dir() and d.resolve() not in sources:
+                  fail.append((str(d), "no marketplace.json entry sources this directory"))
+
+          for path, msg in fail:
+              print(f"::error file={path}::{msg}")
+          print(f"checked {len(entries)} plugins")
+          sys.exit(1 if fail else 0)
+          PY
+
+      - name: No skill hardcodes the marketplace identifier as a lookup key
+        # Regression guard. Resolving a script via `<plugin>@<marketplace>` orphans
+        # the lookup on any marketplace rename, silently. Match on the plugin name.
+        run: |
+          set -euo pipefail
+
+          # Follow renames: catch the historical name family AND whatever the
+          # manifest currently declares, so this does not go blind after the next one.
+          current=$(python3 -c "import json; print(json.load(open('.claude-plugin/marketplace.json'))['name'])")
+          case "$current" in
+            *[!A-Za-z0-9._-]*) echo "::error::marketplace name is not a plain slug: $current"; exit 1 ;;
+          esac
+
+          # Assert the scan target exists rather than inferring it from grep's exit
+          # code, which differs between GNU (2) and BSD (1) on a missing directory.
+          if [ ! -d plugins ]; then
+            echo "::error::plugins/ not found — the guard did not run"
+            exit 1
+          fi
+
+          # Capture grep's OWN status too. Piping into `grep -v` masks a hard error
+          # (exit 2) as a no-match (exit 1), which reads as clean.
+          rc=0
+          raw=$(grep -rnE "@(lafollett[a-z-]*-claude-plugins|${current})" plugins \
+                  --include='*.md' --include='*.js' --include='*.py' \
+                  --include='*.sh' --include='*.json' --include='*.yml') || rc=$?
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::grep failed with exit $rc — the guard did not run"
+            exit 1
+          fi
+
+          # Strip `file:line:` before anchoring, or the comment exemption is a no-op:
+          # every grep -n line starts with a path, never with whitespace-then-#.
+          hits=$(printf '%s' "$raw" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
+
+          if [ -n "$hits" ]; then
+            echo "$hits" | while IFS= read -r h; do
+              echo "::error file=${h%%:*}::hardcoded marketplace key: $h"
+            done
+            exit 1
+          fi
+          echo "no hardcoded marketplace keys"
