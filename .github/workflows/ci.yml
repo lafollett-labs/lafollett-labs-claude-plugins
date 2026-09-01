@@ -53,7 +53,7 @@ jobs:
           echo "validated $n manifests"
           exit $fail
 
-      - name: Marketplace entries resolve, and names match their directory
+      - name: Marketplace and plugin manifests agree
         run: |
           set -euo pipefail
           python3 - <<'PY'
