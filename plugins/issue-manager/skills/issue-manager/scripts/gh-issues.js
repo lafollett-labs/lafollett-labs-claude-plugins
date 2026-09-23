@@ -559,29 +559,32 @@ function ensureLabel(label) {
     }
 }
 
-// JS has no `\Z`; `(?![\s\S])` is end-of-input.
-const STORY_BREAKDOWN_SECTION = /## Story Breakdown\n[\s\S]*?(?=\n## |\n\*\*Priority|(?![\s\S]))/;
+// Heading line may carry a suffix, trailing space or \r. JS has no `\Z`;
+// `(?![\s\S])` is end-of-input.
+const STORY_BREAKDOWN_SECTION = /^## Story Breakdown\b[^\n]*[\s\S]*?(?=\r?\n## |\r?\n\*\*Priority|(?![\s\S]))/m;
 // Placeholder lines from cmdInit and references/epic-template.md.
-const BREAKDOWN_PLACEHOLDER = /^- \[ \] (?:Story \d+|#NNN\b.*)\n?/gm;
+const BREAKDOWN_PLACEHOLDER = /^- \[ \] (?:Story \d+|#NNN\b.*)\r?\n?/gm;
 
 // Appends children the Story Breakdown does not reference yet. Existing lines,
 // checkbox states and subheadings are kept as written.
 function mergeStoryBreakdown(content, children) {
+    const eol = content.includes('\r\n') ? '\r\n' : '\n';
     const section = content.match(STORY_BREAKDOWN_SECTION);
     const listed = section ? section[0] : '';
     const missing = children
         .filter(({ num }) => !new RegExp(`#${num}(?!\\d)`).test(listed))
-        .map(({ num, title }) => `- [ ] #${num} — ${title}`);
+        .map(({ num, title }) => `- [ ] #${num} — ${title}`)
+        .join(eol);
 
-    if (missing.length === 0) return content;
+    if (!missing) return content;
 
     if (!section) {
-        return `${content.replace(/\s*$/, '')}\n\n## Story Breakdown\n\n${missing.join('\n')}\n`;
+        return `${content.replace(/\s*$/, '')}${eol}${eol}## Story Breakdown${eol}${eol}${missing}${eol}`;
     }
 
-    const [, head] = listed.replace(BREAKDOWN_PLACEHOLDER, '').match(/^([\s\S]*?)(\s*)$/);
-    const sep = head === '## Story Breakdown' ? '\n\n' : '\n';
-    const rebuilt = `${head}${sep}${missing.join('\n')}\n`;
+    const head = listed.replace(BREAKDOWN_PLACEHOLDER, '').replace(/\s*$/, '');
+    const sep = head.includes('\n') ? eol : eol + eol;
+    const rebuilt = `${head}${sep}${missing}${eol}`;
     return content.slice(0, section.index) + rebuilt + content.slice(section.index + listed.length);
 }
 
@@ -591,7 +594,7 @@ function updateEpicChecklist(docsPath, state) {
 
     const [filename, epicNumber] = epicFile;
     const filePath = path.join(docsPath, filename);
-    let content = fs.readFileSync(filePath, 'utf-8');
+    const content = fs.readFileSync(filePath, 'utf-8');
 
     const childEntries = Object.entries(state.issues)
         .filter(([f]) => !f.startsWith('00-Epic-'))
@@ -609,17 +612,18 @@ function updateEpicChecklist(docsPath, state) {
         console.log(`⏭ Epic #${epicNumber} story breakdown already lists every child`);
         return;
     }
-    content = merged;
-
-    fs.writeFileSync(filePath, content);
-
+    // Push before writing: a failed push leaves the file unmerged, so the next
+    // `create` retries instead of finding nothing missing.
     try {
-        const body = content.replace(/^#[^\n]*\n/, '').trim();
+        const body = merged.replace(/^#[^\n]*\n/, '').trim();
         gh(['issue', 'edit', String(epicNumber), '--body', body]);
-        console.log(`✓ Updated Epic #${epicNumber} story breakdown checklist`);
     } catch (err) {
         console.error(`⚠ Could not update Epic checklist on GitHub: ${err.message}`);
+        console.error('  Local file left unchanged; re-run create to retry.');
+        return;
     }
+    fs.writeFileSync(filePath, merged);
+    console.log(`✓ Updated Epic #${epicNumber} story breakdown checklist`);
 }
 
 // =============================================================================

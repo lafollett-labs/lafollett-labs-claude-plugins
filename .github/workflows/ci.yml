@@ -97,7 +97,18 @@ jobs:
           PY
 
       - name: issue-manager CLI tests
-        run: node --test plugins/issue-manager/skills/issue-manager/scripts/gh-issues.test.js
+        # Run in-process, not --test: under --test an empty file counts as one passing test.
+        run: |
+          set -euo pipefail
+          rc=0
+          out=$(node --test-reporter=tap plugins/issue-manager/skills/issue-manager/scripts/gh-issues.test.js) || rc=$?
+          printf '%s\n' "$out"
+          [ "$rc" -eq 0 ] || exit "$rc"
+          pass=$(printf '%s\n' "$out" | awk '/^# pass /{print $3}')
+          if [ "${pass:-0}" -lt 1 ]; then
+            echo "::error::issue-manager CLI tests ran zero tests"
+            exit 1
+          fi
 
       - name: No skill hardcodes the marketplace identifier as a lookup key
         # Regression guard. Resolving a script via `<plugin>@<marketplace>` orphans

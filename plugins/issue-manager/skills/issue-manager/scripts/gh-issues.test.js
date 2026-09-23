@@ -64,3 +64,24 @@ test('a literal Z no longer ends the section early', () => {
     const epic = '## Story Breakdown\n\n- [ ] #10 — Zebra rollout\n- [ ] #11 — B\n';
     assert.equal(mergeStoryBreakdown(epic, kids(10, 11)), epic);
 });
+
+test('heading variants are found, not duplicated', () => {
+    for (const heading of ['## Story Breakdown (by phase)', '## Story Breakdown ']) {
+        const epic = `${heading}\n\n- [x] #10 — A\n\n## Dependencies\n`;
+        assert.equal(mergeStoryBreakdown(epic, kids(10, 11)), `${heading}\n\n- [x] #10 — A\n- [ ] #11 — Child 11\n\n## Dependencies\n`);
+    }
+});
+
+test('CRLF epics stay CRLF and are not duplicated', () => {
+    const epic = '## Story Breakdown\r\n\r\n- [ ] Story 1\r\n- [x] #10 — A\r\n\r\n## Dependencies\r\n';
+    assert.equal(mergeStoryBreakdown(epic, kids(10, 11)), '## Story Breakdown\r\n\r\n- [x] #10 — A\r\n- [ ] #11 — Child 11\r\n\r\n## Dependencies\r\n');
+});
+
+test('an empty section directly above the next heading does not swallow it', () => {
+    const epic = '## Story Breakdown\n## Dependencies\n\n- None\n';
+    assert.equal(mergeStoryBreakdown(epic, kids(10)), '## Story Breakdown\n\n- [ ] #10 — Child 10\n\n## Dependencies\n\n- None\n');
+});
+
+test('a heading at end of file without a newline is found', () => {
+    assert.equal(mergeStoryBreakdown('## Story Breakdown', kids(10)), '## Story Breakdown\n\n- [ ] #10 — Child 10\n');
+});
