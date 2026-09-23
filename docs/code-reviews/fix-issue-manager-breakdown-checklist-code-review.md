@@ -1,6 +1,6 @@
 # Code Review: fix-issue-manager-breakdown-checklist
 
-**Verdict:** ⚠️ CHANGES REQUESTED
+**Verdict:** ✅ APPROVED at round 2 (`d3658f8`); round 3 covers `bece738`
 
 | | |
 | - | - |
@@ -102,6 +102,28 @@ step that points to Create step 7.
 
 - [ ] MEDIUM-001: match heading variants
 - [ ] LOW-001 – LOW-004 (cheap, taken in the same remediation)
+
+---
+
+## Review Round 2
+
+**Reviewed SHA:** `d3658f8` · **Verdict:** ✅ APPROVED (LOW/INFO only)
+
+Round 1 is fully resolved:
+
+- **MEDIUM-001.** The heading now matches as `^## Story Breakdown\b[^\n]*`, and the lookaheads accept `\r?\n`. CRLF input stays CRLF. Four tests were added, for a suffixed heading, CRLF, an empty section directly above the next heading, and a heading at end of file. The suite is 12/12.
+  - The final code was replayed against all 12 Corebizy epics. None had a duplicate heading or a dropped `[x]` (0 bad).
+- **LOW-001.** CI now runs the test file in-process, with a pass-count floor, and captures `rc` so that failing output is still printed.
+  - Under `node --test`, an empty file is reported as one passing test on Node 20, 22 and 26. The recommended floor would not have tripped there, which is why the file runs in-process.
+  - PE-AWS-Infra verified 10 cases on Node 20 through 26: real, empty, skip-only, failing, async throw, load throw, missing file and three others. Every case exits correctly. `actionlint` and `shellcheck` both pass.
+- **LOW-002 to LOW-004.** Step 7 is now pseudocode that ends with a literal, unconditional `update --file 00-Epic-<Title>.md`. The loop deletes unnumbered duplicates. The CLI pushes before it writes the file.
+- **INFO-002.** `### Phase …` is defined inline, and Import step 6 points to Create step 7. The template example was not taken.
+
+| Severity | Finding | Disposition |
+| - | - | - |
+| 🟢 LOW | After a failed push, step 7's loop runs empty and `update` re-pushes the unmerged epic (PE-Governance) | Fixed in `bece738`: one `create` retry, then stop and report |
+| ℹ️ INFO | CI floor is `>=1`, not the expected count (PE-AWS-Infra) | Accepted: an exact count would couple every test addition to CI |
+| ℹ️ INFO | Test header still said `node --test` (PE-AWS-Infra) | Fixed in `bece738` |
 
 ---
 
