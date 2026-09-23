@@ -1,4 +1,4 @@
-// Run: node --test plugins/issue-manager/skills/issue-manager/scripts/gh-issues.test.js
+// Run: node plugins/issue-manager/skills/issue-manager/scripts/gh-issues.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { mergeStoryBreakdown } = require('./gh-issues.js');
