@@ -91,6 +91,17 @@ All file operations (epic folders, docs) are created in the **current working di
 4. Add Story/Task/Bug files: `01-Story-Title.md`, `02-Task-Title.md`, etc.
 5. `node "$GH_ISSUES" create --docs-path docs/epics/<slug>`
 6. Script creates GitHub Issues, links children to Epic, saves state
+7. Reconcile the Epic's `## Story Breakdown`. `create` appends each new child as `- [ ] #N — <title>` at the end of the section:
+   ```
+   if create printed "Could not update Epic checklist":
+     node "$GH_ISSUES" create --docs-path docs/epics/<slug>   # retries merge + push
+     if it prints it again: stop and report the gh error
+   for each appended #N line:
+     if the breakdown has phase subheadings (### Phase …):
+       move the line under its phase
+     delete any unnumbered hand-written line for the same child
+   node "$GH_ISSUES" update --docs-path docs/epics/<slug> --file 00-Epic-<Title>.md
+   ```
 
 ### Import Existing Epic for Rework
 
@@ -99,6 +110,7 @@ All file operations (epic folders, docs) are created in the **current working di
 3. Edit the local markdown files (rework to intent-over-implementation)
 4. `node "$GH_ISSUES" update --docs-path docs/epics/582-<slug>`
 5. Pushes edits to existing GitHub Issues by mapped ID (no duplicates)
+6. New child files: run `create`, then Create step 7
 
 ### Check Sync Status
 
