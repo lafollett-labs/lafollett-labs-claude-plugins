@@ -91,6 +91,7 @@ All file operations (epic folders, docs) are created in the **current working di
 4. Add Story/Task/Bug files: `01-Story-Title.md`, `02-Task-Title.md`, etc.
 5. `node "$GH_ISSUES" create --docs-path docs/epics/<slug>`
 6. Script creates GitHub Issues, links children to Epic, saves state
+7. New children are appended to the end of the Epic's `## Story Breakdown`; move each under its phase heading if the breakdown has phases, then `update`
 
 ### Import Existing Epic for Rework
 

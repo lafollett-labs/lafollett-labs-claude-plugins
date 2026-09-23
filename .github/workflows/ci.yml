@@ -96,6 +96,9 @@ jobs:
           sys.exit(1 if fail else 0)
           PY
 
+      - name: issue-manager CLI tests
+        run: node --test plugins/issue-manager/skills/issue-manager/scripts/gh-issues.test.js
+
       - name: No skill hardcodes the marketplace identifier as a lookup key
         # Regression guard. Resolving a script via `<plugin>@<marketplace>` orphans
         # the lookup on any marketplace rename, silently. Match on the plugin name.

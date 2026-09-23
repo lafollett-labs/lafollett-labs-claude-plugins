@@ -559,6 +559,32 @@ function ensureLabel(label) {
     }
 }
 
+// JS has no `\Z`; `(?![\s\S])` is end-of-input.
+const STORY_BREAKDOWN_SECTION = /## Story Breakdown\n[\s\S]*?(?=\n## |\n\*\*Priority|(?![\s\S]))/;
+// Placeholder lines from cmdInit and references/epic-template.md.
+const BREAKDOWN_PLACEHOLDER = /^- \[ \] (?:Story \d+|#NNN\b.*)\n?/gm;
+
+// Appends children the Story Breakdown does not reference yet. Existing lines,
+// checkbox states and subheadings are kept as written.
+function mergeStoryBreakdown(content, children) {
+    const section = content.match(STORY_BREAKDOWN_SECTION);
+    const listed = section ? section[0] : '';
+    const missing = children
+        .filter(({ num }) => !new RegExp(`#${num}(?!\\d)`).test(listed))
+        .map(({ num, title }) => `- [ ] #${num} — ${title}`);
+
+    if (missing.length === 0) return content;
+
+    if (!section) {
+        return `${content.replace(/\s*$/, '')}\n\n## Story Breakdown\n\n${missing.join('\n')}\n`;
+    }
+
+    const [, head] = listed.replace(BREAKDOWN_PLACEHOLDER, '').match(/^([\s\S]*?)(\s*)$/);
+    const sep = head === '## Story Breakdown' ? '\n\n' : '\n';
+    const rebuilt = `${head}${sep}${missing.join('\n')}\n`;
+    return content.slice(0, section.index) + rebuilt + content.slice(section.index + listed.length);
+}
+
 function updateEpicChecklist(docsPath, state) {
     const epicFile = Object.entries(state.issues).find(([f]) => f.startsWith('00-Epic-'));
     if (!epicFile) return;
@@ -573,20 +599,17 @@ function updateEpicChecklist(docsPath, state) {
 
     if (childEntries.length === 0) return;
 
-    const checklist = childEntries
-        .map(([f, num]) => {
-            const parsed = f.match(ISSUE_TYPE_PATTERN);
-            const title = parsed ? parsed[3].replace(/-/g, ' ') : f;
-            return `- [ ] #${num} — ${title}`;
-        })
-        .join('\n');
+    const children = childEntries.map(([f, num]) => {
+        const parsed = f.match(ISSUE_TYPE_PATTERN);
+        return { num, title: parsed ? parsed[3].replace(/-/g, ' ') : f };
+    });
 
-    const storyBreakdownRegex = /## Story Breakdown\n[\s\S]*?(?=\n## |\n\*\*Priority|\Z)/;
-    if (storyBreakdownRegex.test(content)) {
-        content = content.replace(storyBreakdownRegex, `## Story Breakdown\n\n${checklist}\n`);
-    } else {
-        content += `\n## Story Breakdown\n\n${checklist}\n`;
+    const merged = mergeStoryBreakdown(content, children);
+    if (merged === content) {
+        console.log(`⏭ Epic #${epicNumber} story breakdown already lists every child`);
+        return;
     }
+    content = merged;
 
     fs.writeFileSync(filePath, content);
 
@@ -648,6 +671,11 @@ Usage:
 // =============================================================================
 // Main
 // =============================================================================
+
+if (require.main !== module) {
+    module.exports = { mergeStoryBreakdown };
+    return;
+}
 
 const { command, args } = parseArgs();
 
