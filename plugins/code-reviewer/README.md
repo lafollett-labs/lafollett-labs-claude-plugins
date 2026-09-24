@@ -14,7 +14,7 @@ Needs `gh` on PATH for PR reviews. Nothing else.
 
 | Skill | |
 | - | - |
-| `/code-reviewer:init-project` | scan the repo, write a Stack Map into `CLAUDE.md` — run once per repo |
+| `/code-reviewer:init-project` | scan the repo, write a Stack Map into `AGENTS.md` or `CLAUDE.md` — run once per repo |
 | `/code-reviewer:code-reviewer` | run the review |
 
 ## Usage

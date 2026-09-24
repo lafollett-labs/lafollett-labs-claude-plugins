@@ -1,12 +1,12 @@
 ---
 name: init-project
-description: Scan the project and write a Stack Map to CLAUDE.md for /code-reviewer. Detects languages, frameworks, test commands. PEs (pe-go, pe-vue, pe-aws-infra, pe-governance, pe-devtools) ship with the plugin.
+description: Scan the project and write a Stack Map to AGENTS.md or CLAUDE.md for /code-reviewer. Detects languages, frameworks, test commands. PEs (pe-go, pe-vue, pe-aws-infra, pe-governance, pe-devtools) ship with the plugin.
 ---
 
 # Initialize Project for Code Review
 
 Bootstraps the `/code-reviewer` skill into any project by scanning the repo
-and writing a Stack Map into the project's `CLAUDE.md` (or `.code-reviewer.yml`).
+and writing a Stack Map into the project's `AGENTS.md` or `CLAUDE.md` (or `.code-reviewer.yml`).
 
 The five built-in PE sub-agents — `code-reviewer:pe-go`,
 `code-reviewer:pe-vue`, `code-reviewer:pe-aws-infra`,
@@ -109,15 +109,26 @@ For each detected stack, identify the test commands:
 
 ---
 
-## Phase 4: Check for Existing CLAUDE.md
+## Phase 4: Resolve the Instruction File
 
-Read the project's `CLAUDE.md` (if it exists) for:
+```
+# repo-root AGENTS.md and CLAUDE.md
+claude_imports_only = CLAUDE.md exists and every non-blank line of it is `@AGENTS.md` or `@./AGENTS.md`
+
+if CLAUDE.md holds a `## Stack Map`:
+  target = CLAUDE.md          # offer to update the existing map; never write a second one
+elif AGENTS.md holds a `## Stack Map`:
+  target = AGENTS.md          # offer to update the existing map; never write a second one
+elif AGENTS.md exists and (CLAUDE.md does not exist or claude_imports_only):
+  target = AGENTS.md
+else:
+  target = CLAUDE.md          # created if absent
+```
+
+Read every instruction file that exists for:
 - Existing project structure documentation
 - Team structure or review chain information
 - Coding standards or conventions
-- Any Stack Map already defined
-
-If a Stack Map already exists, offer to update it rather than overwriting.
 
 ---
 
@@ -125,7 +136,7 @@ If a Stack Map already exists, offer to update it rather than overwriting.
 
 ### 5a: Stack Map
 
-Generate a Stack Map table and prompt the user to add it to their `CLAUDE.md`:
+Generate a Stack Map table and prompt the user to add it to `target`:
 
 ```markdown
 ## Stack Map
@@ -162,7 +173,7 @@ Stacks detected:
   - CDKTF TypeScript (pe-aws-infra):  cdktf/
   - GitHub Actions (pe-aws-infra):    .github/workflows/
 
-Stack Map written to: CLAUDE.md (or .code-reviewer.yml if preferred)
+Stack Map written to: {target} (or .code-reviewer.yml if preferred)
 
 Built-in PE sub-agents that will be dispatched:
   - code-reviewer:pe-go           (ships with plugin)
