@@ -89,11 +89,11 @@ Diff size is informational only. Domain expertise is the constant — every revi
 The plugin ships five built-in PE sub-agents:
 
 | Subagent | Domain | File patterns |
-| --- | --- | --- |
+| - | - | - |
 | `code-reviewer:pe-go` | Go / PostgreSQL / AWS Lambda | `*.go`, `go.mod`, `go.sum`, `*.sql` |
 | `code-reviewer:pe-vue` | Vue 3 / Nuxt 3 / TS / Tailwind / Storybook | `*.vue`, `*.tsx`, `*.jsx`, `tailwind.config.*`, `nuxt.config.*`, `vite.config.*`, `*.stories.*` |
 | `code-reviewer:pe-aws-infra` | AWS CDK / Cloudflare CDKTF / Terraform / Docker / GH Actions | `cdk.json`, `*.tf`, `*.tfvars`, `Dockerfile*`, `docker-compose*`, `.github/workflows/*.yml` |
-| `code-reviewer:pe-governance` | Agent definitions, skills, plugin instructions, CLAUDE.md | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `.claude/rules/*.md`, `docs/rules/*.md` |
+| `code-reviewer:pe-governance` | Agent definitions, skills, plugin instructions, CLAUDE.md, AGENTS.md | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md` |
 | `code-reviewer:pe-devtools` | Local dev tooling (single-operator threat model) — bash scripts, hooks, code-review wrappers | `scripts/dev/**`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` |
 
 Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five-pass protocol (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial) — they do NOT need a reference file at runtime.
@@ -107,7 +107,14 @@ Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five
 ```
 1. .code-reviewer.yml (project config) — if it exists, read `stacks` array;
    match changed files against each stack's `paths` globs; map to subagent.
-2. CLAUDE.md Stack Map — parse the table; map paths → stack → subagent.
+2. Instruction-file Stack Map — parse the first `## Stack Map` table found
+   in instruction_files; map paths → stack → subagent.
+     # repo-root AGENTS.md and CLAUDE.md
+     claude_imports_only = CLAUDE.md exists and every non-blank line of it is `@AGENTS.md` or `@./AGENTS.md`
+     if AGENTS.md exists and CLAUDE.md exists and not claude_imports_only:
+       instruction_files = [CLAUDE.md, AGENTS.md]
+     else:
+       instruction_files = [AGENTS.md, CLAUDE.md]   # skip whichever is absent
 3. File pattern fallback — match diff file extensions against the table above.
 4. No match — generic three-pass review (Architecture → Quality → Security)
    without stack-specific test commands or domain checklists.
@@ -115,7 +122,7 @@ Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five
 
 **Mixed diffs:** If the diff spans multiple stacks, dispatch ALL matching PE subagents in parallel (single message, multiple Agent calls). Each PE reviews only the portion of the diff relevant to its domain.
 
-**Stacks not covered by built-in agents** (Rust, Python, Java, C#, etc.): primary agent runs the generic three-pass review directly. CLAUDE.md's Stack Map still tells the parent which paths are which stack and what test commands to run.
+**Stacks not covered by built-in agents** (Rust, Python, Java, C#, etc.): primary agent runs the generic three-pass review directly. The Stack Map from step 1 or 2 still tells the parent which paths are which stack and what test commands to run.
 
 ---
 

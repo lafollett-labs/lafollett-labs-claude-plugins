@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Cross-project Claude Code plugins for LaFollett Labs \u2014 session management, issue tracking, and developer workflow tools",
-    "version": "1.29.9"
+    "version": "1.30.3"
   },
   "plugins": [
     {
