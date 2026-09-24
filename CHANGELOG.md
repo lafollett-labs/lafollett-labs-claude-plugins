@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The code-reviewer and init-project READMEs name both import forms (`code-reviewer` v2.10.3, marketplace 1.30.3).** The skills treat a `CLAUDE.md` of only `@AGENTS.md` or `@./AGENTS.md` lines as import-only, but the READMEs named just the first. A repo using the relative form would follow the `AGENTS.md` path while its README said otherwise.
+
 ### Added
 - **init-project writes the Stack Map to `AGENTS.md` when that is the project's instruction file (`code-reviewer` v2.10.2, marketplace 1.30.2).** It always targeted `CLAUDE.md`, so in an `AGENTS.md`-only repo it put the Stack Map in a new `CLAUDE.md` — and under Claude Code's default `instructionFiles` mode a `CLAUDE.md` stops `AGENTS.md` from loading at all. Phase 4 now resolves `target`: an existing Stack Map is updated where it lives (`CLAUDE.md` first, matching code-reviewer's read order); otherwise `AGENTS.md` when it exists and `CLAUDE.md` is absent or only imports `@AGENTS.md`; otherwise `CLAUDE.md`, as before.
 - **code-reviewer routes from an `AGENTS.md` Stack Map (`code-reviewer` v2.10.1, marketplace 1.30.1).** Selection Priority read only `CLAUDE.md`, so a repo governed by `AGENTS.md` alone — its Stack Map included — fell through to file-pattern matching and generic test commands. Step 2 now takes the first `## Stack Map` table in the repo-root instruction files, `AGENTS.md` before `CLAUDE.md`. When both exist, `CLAUDE.md` goes first unless every non-blank line of it is an `@AGENTS.md` import. `.code-reviewer.yml` still outranks both.

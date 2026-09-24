@@ -9,7 +9,7 @@ The five built-in PE sub-agents — `pe-go`, `pe-vue`, `pe-aws-infra`, `pe-gover
 1. **Detects stacks** — Go, Vue, React, CDK, Terraform, Rust, Python, Java, C#, Docker, CI/CD
 2. **Maps directories** — which paths belong to which stack
 3. **Finds test commands** — reads `package.json` scripts, `Makefile` targets, or uses stack defaults
-4. **Writes Stack Map to the instruction file** — single source of truth for path → stack → PE → test command. That is `AGENTS.md` when the repo has one and its `CLAUDE.md` is absent or only imports `@AGENTS.md`; otherwise `CLAUDE.md`. An existing Stack Map is updated where it already lives
+4. **Writes Stack Map to the instruction file** — single source of truth for path → stack → PE → test command. That is `AGENTS.md` when the repo has one and its `CLAUDE.md` is absent or only imports it (`@AGENTS.md` or `@./AGENTS.md`); otherwise `CLAUDE.md`. An existing Stack Map is updated where it already lives
 5. **Optionally writes `.code-reviewer.yml`** — machine-readable equivalent for the parent skill
 
 ## Usage
