@@ -27,7 +27,7 @@ Scan the repository for language markers, build files, and framework configs.
 The "Built-in PE" column maps a detected stack to one of the five plugin-shipped agents (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`, `pe-devtools`). "Generic" means no built-in agent matches — code-reviewer falls back to a generic three-pass review for that stack.
 
 | Marker | Stack | Built-in PE |
-| --- | --- | --- |
+| - | - | - |
 | `go.mod`, `*.go` | Go | `pe-go` |
 | `package.json` + `*.vue` | Vue/Nuxt | `pe-vue` |
 | `package.json` + `*.tsx`/`*.jsx` | React | `pe-vue` |
@@ -42,7 +42,7 @@ The "Built-in PE" column maps a detected stack to one of the five plugin-shipped
 | `pyproject.toml`, `requirements.txt`, `*.py` | Python | Generic |
 | `*.java`, `pom.xml`, `build.gradle` | Java | Generic |
 | `*.cs`, `*.csproj`, `*.sln` | C# / .NET | Generic |
-| `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `.claude/rules/*.md`, `docs/rules/*.md` | Agent governance markdown | `pe-governance` |
+| `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md` | Agent governance markdown | `pe-governance` |
 | `scripts/dev/**/*.sh`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` | Local dev tooling (single-operator threat model) | `pe-devtools` |
 
 ### Framework Detection
@@ -131,12 +131,12 @@ Generate a Stack Map table and prompt the user to add it to their `CLAUDE.md`:
 ## Stack Map
 
 | Path | Stack | Built-in PE | Test Command |
-| --- | --- | --- | --- |
+| - | - | - | - |
 | lambdas/**, pkg/** | Go | `pe-go` | `go vet ./... && go test ./... -count=1 -race` |
 | frontend/** | Vue/Nuxt | `pe-vue` | `cd frontend && npm run typecheck && npm test` |
 | cdk/** | CDK TypeScript | `pe-aws-infra` | `cd cdk && npm test && npx cdk synth --all` |
 | api/** | Python | Generic | `cd api && pytest` |
-| .claude/agents/**, **/SKILL.md, plugins/**/agents/*.md, **/CLAUDE.md, .claude/rules/*.md, docs/rules/*.md | Agent governance markdown | `pe-governance` | n/a (lint-shaped checks built into PE) |
+| .claude/agents/**, **/SKILL.md, plugins/**/agents/*.md, **/CLAUDE.md, **/AGENTS.md, .claude/rules/*.md, docs/rules/*.md | Agent governance markdown | `pe-governance` | n/a (lint-shaped checks built into PE) |
 | docs/architecture/** | ADRs (humans) | Generic | n/a (architectural-consistency review) |
 | docs/code-reviews/**, docs/runbooks/**, README.md | Human-targeted docs | (skip) | n/a |
 ```
@@ -144,7 +144,7 @@ Generate a Stack Map table and prompt the user to add it to their `CLAUDE.md`:
 The "Built-in PE" column drives `code-reviewer` dispatch. `Generic` rows are reviewed by the parent skill directly using the listed test command (no PE sub-agent dispatch). `(skip)` rows are not reviewed.
 
 **Audience-boundary rule for markdown:**
-- Files whose audience is the model (agent definitions, skills, plugin instructions, CLAUDE.md) → `pe-governance` enforces pseudocode + schemas + literal commands + tool-permission consistency
+- Files whose audience is the model (agent definitions, skills, plugin instructions, CLAUDE.md, AGENTS.md) → `pe-governance` enforces pseudocode + schemas + literal commands + tool-permission consistency
 - Files whose audience is humans (ADRs, runbooks, review docs, READMEs) → generic review or skip; prose is the right form
 - Hybrid documents (e.g., ADR with embedded pseudocode flow blocks) apply the rule per-section based on each section's audience
 

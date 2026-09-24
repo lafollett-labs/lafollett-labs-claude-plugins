@@ -46,7 +46,7 @@ the working branch — never to `main`.
 | `pe-go` | Go / PostgreSQL / AWS Lambda |
 | `pe-vue` | Vue 3 / Nuxt 3 / TypeScript / Tailwind / Storybook |
 | `pe-aws-infra` | AWS CDK / Cloudflare CDKTF / Terraform / Docker / GitHub Actions |
-| `pe-governance` | agent definitions, skills, `CLAUDE.md` — markdown whose audience is the model |
+| `pe-governance` | agent definitions, skills, `CLAUDE.md`, `AGENTS.md` — markdown whose audience is the model |
 | `pe-devtools` | local dev tooling, reviewed on a single-operator threat model |
 
 A diff spanning several stacks dispatches every matching PE in parallel, and
