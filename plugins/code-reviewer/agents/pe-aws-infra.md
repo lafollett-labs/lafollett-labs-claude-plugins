@@ -47,36 +47,39 @@ The parent provides metadata — you pull your own diff and read full files:
                                            idle-after-render does NOT deliver — must call the tool
 ```
 
-## Test Budget (scopes Pass 2 — read before Test Commands)
-
-The dispatch input's `TEST BUDGET:` line scopes Pass 2.
+## Test Budget
 
 ```
-match TEST BUDGET:
+match TEST BUDGET:                          # from the dispatch input
   "none":
-    run no tests; Pass 2 = the code-reading quality checks only
+    run no tests; pass2_evidence = ["none — TEST BUDGET none"]
   "targeted":
     do NOT run the full Test Commands below
-    Pass 2 evidence = the AUTHOR RECEIPTS lines — cite them in your YAML
-    run only narrow checks: one test file, a -run / -t pattern, or one synth,
-      to kill a mutation or confirm a suspected defect
+    pass2_evidence = the AUTHOR RECEIPTS lines, verbatim
+    still run the static checks no receipt names: npx tsc --noEmit; actionlint / terraform validate when those files changed
+    narrow runs: at most 3 per review, each naming one package/file — never ./...
+      npx jest <file> -t '<name>'  |  npx cdk synth <OneStack> --quiet
+      if FIX DIFF is given: narrow runs cover only what the FIX DIFF touches
+    append each narrow or static run (command → result) to pass2_evidence
   "full" | absent:
-    run the Test Commands below, once
+    run the Test Commands below, once; pass2_evidence = each command → result
 always:
-  install dependencies only when missing: [ -d node_modules ] || npm ci
   never hand-start database containers (docker run postgres …) — rely on the suite's own testcontainers
-  synth one stage (the default/dev context); synth prod only when the diff touches stage-conditional code
+  install dependencies: { [ -d node_modules ] && git diff --quiet {target}...HEAD -- package.json package-lock.json; } || npm ci
+  synth one stage (the default context); prod synth only when:
+    git diff {target}...HEAD -- <cdk_subdir> | grep -nE '^\+.*(stage *[!=]==|isProd|STAGES?\.|tryGetContext\(.stage)'
+    matches → npx cdk synth --all -c <stage_context_key>=prod --quiet   (once)
 ```
 
 ## Test Commands (Pass 2 execution)
 
 ```bash
 # CDK (TypeScript)
-cd <worktree>/<cdk_subdir> && { [ -d node_modules ] || npm ci; } && npm test
+cd <worktree>/<cdk_subdir> && { { [ -d node_modules ] && git diff --quiet {target}...HEAD -- package.json package-lock.json; } || npm ci; } && npm test
 cd <worktree>/<cdk_subdir> && npx cdk synth --all
 
 # CDKTF (TypeScript) — only if changed
-cd <worktree>/<cdktf_subdir> && { [ -d node_modules ] || npm ci; } && npm test
+cd <worktree>/<cdktf_subdir> && { { [ -d node_modules ] && git diff --quiet {target}...HEAD -- package.json package-lock.json; } || npm ci; } && npm test
 cd <worktree>/<cdktf_subdir> && npx cdktf synth
 
 # Terraform — only if changed
@@ -149,7 +152,7 @@ deploy_ordering:
 
 ## Pass 2: Quality (includes test execution)
 
-Run test suite first. Then execute lint-shaped checks.
+Run the Test Commands per § Test Budget first. Then execute lint-shaped checks.
 
 **Cross-stack verification:** For each resource that references another stack's
 output (SSM param, imported ARN), read the source stack and verify the value
@@ -234,7 +237,7 @@ alarm_and_monitoring:
       if standard metric: verify namespace/metric name spelling
 
 tdd_and_hygiene:
-  if test suite fails: flag CRITICAL "test suite failure"
+  if a test run or an AUTHOR RECEIPT shows failure: flag CRITICAL "test suite failure"
   if synth fails: flag CRITICAL "CDK/CDKTF synth failure"
 
   for each new construct/stack in diff:
@@ -242,7 +245,8 @@ tdd_and_hygiene:
     if zero test references: flag HIGH "missing CDK assertion test for new construct: <name>"
 
   for each stack in diff:
-    run synth → inspect template output
+    read <cdk_subdir>/cdk.out/<StackName>.template.json from the Test Commands synth
+    if cdk.out is absent (no synth ran under the budget): skip this check
     if template has < 2 resources: flag HIGH "near-empty synth output — stub stack or misconfigured construct"
 
   if PR body missing "Closes #NNN": flag LOW "missing issue linkage"
@@ -755,6 +759,9 @@ Return findings ONLY as a YAML block. No prose, no preamble, no closing remarks.
 
 ```yaml
 expert: PE-AWS-Infra
+test_budget: targeted            # none | targeted | full — as dispatched
+pass2_evidence:
+  - "npm test && npx cdk synth --all → pass @ <sha> (author receipt)"
 findings:
   - id: "CRITICAL-001"
     severity: CRITICAL
@@ -781,6 +788,9 @@ If you find no issues at any severity, return:
 
 ```yaml
 expert: PE-AWS-Infra
+test_budget: targeted            # none | targeted | full — as dispatched
+pass2_evidence:
+  - "npm test && npx cdk synth --all → pass @ <sha> (author receipt)"
 findings: []
 ```
 

@@ -23,6 +23,14 @@
 
 ---
 
+## Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| {PE} | {none / targeted / full} | {pass2_evidence lines} |
+
+---
+
 ## Findings Overview
 
 | Severity | In Scope | Out of Scope |
@@ -138,6 +146,12 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 ### Summary
 
 {2-3 sentences summarizing this round's findings and any agreement/disagreement with prior rounds}
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| {PE} | {none / targeted / full} | {pass2_evidence lines} |
 
 ### Findings Overview
 

@@ -107,7 +107,7 @@ Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five
 ```
 1. .code-reviewer.yml (project config) — if it exists, read `stacks` array;
    match changed files against each stack's `paths` globs; map to subagent.
-   Optional `max_parallel_pes: <int>` caps concurrent suite-running PEs (§ Dispatch).
+   Optional `settings.max_parallel_pes: <int>` caps concurrent suite-running PEs (§ Dispatch).
 2. Instruction-file Stack Map — parse the first `## Stack Map` table found
    in instruction_files; map paths → stack → subagent.
      # repo-root AGENTS.md and CLAUDE.md
@@ -183,35 +183,40 @@ match approach:
     )
 
   case "multi_pe":
-    max_parallel = .code-reviewer.yml `max_parallel_pes` if set, else 2
+    max_parallel  = settings.max_parallel_pes (.code-reviewer.yml) if a positive integer, else 2
     suite_running = matching_pes ∩ {pe-go, pe-vue, pe-aws-infra}
     suite_free    = matching_pes − suite_running        # pe-governance, pe-devtools — uncapped
-    dispatch every suite_free PE now (one message, multiple Agent calls)
-    for batch in chunks(suite_running, max_parallel):
-      dispatch batch (one message, multiple Agent calls)
-      wait for every PE in the batch to return YAML
+    batches = chunks(suite_running, max_parallel) or [[]]
+    batches[0] += suite_free                            # suite-free PEs ride the first message
+    for batch in batches:
+      one message, one Agent call per PE — prompt = that PE's dispatch input (own TEST BUDGET)
+      wait for each PE's YAML
+        team mode: re-ping an idle PE once; still silent → record it MISSING, continue
 ```
 
 ### Test Budget
 
-Every dispatch input carries a `TEST BUDGET:` line. Suite-running PEs scope their Pass 2 to it, so a
-review does not re-run suites the author already ran at the reviewed SHA.
-
 ```
-receipts = author test output at reviewed_sha, from any of:
-             the caller's invocation text, the PR body, or a hand-off message
-             — each receipt names the command, its result, and the SHA it ran at
-if no file in this PE's domain has a test command (docs, governance):
+reviewed_sha = git rev-parse HEAD
+stack_cmds   = the .code-reviewer.yml / Stack Map test command(s) for this PE's paths
+receipts     = author test output (command, result, sha) from the caller's invocation text,
+               the PR body, or a hand-off message
+if pe == pe-devtools:
+  omit TEST BUDGET                            # lint-only Pass 2; always runs
+elif pe == pe-governance or stack_cmds is empty:
   TEST BUDGET: none
-elif receipts cover this PE's stack at reviewed_sha:
+elif any receipt at reviewed_sha has result == fail:
+  TEST BUDGET: full
+elif every cmd in stack_cmds has a receipt with result == pass at reviewed_sha:
   TEST BUDGET: targeted
-  AUTHOR RECEIPTS: <the receipt lines for this stack, verbatim>
+  AUTHOR RECEIPTS: <those receipt lines, verbatim>
+elif round >= 2:
+  TEST BUDGET: targeted                       # no receipts: narrow checks on the fix diff only
 else:
   TEST BUDGET: full
+if round >= 2:
+  FIX DIFF: git diff {prior_sha}..{reviewed_sha}
 ```
-
-A round-2+ review computes the budget the same way: receipts at the new SHA make it `targeted`, scoped to
-the fix diff.
 
 ### Dispatch Input
 
@@ -234,8 +239,9 @@ WORKTREE: {absolute path to repo root}
 {optional} PROJECT SUBDIR: {e.g., "frontend/" for Vue/Nuxt subdir in a monorepo, "cdk/" for CDK subdir}
 {optional} PRIOR REVIEW: {path to prior review doc if round 2+}
 {optional} STORY_FILE: {absolute path to local story/epic markdown when PR is story-linked — PE may tag findings with discharges_ac: [AC-N] to enrich Phase 4.5 Spec Coverage}
-TEST BUDGET: {none | targeted | full — per § Test Budget}
-{when targeted} AUTHOR RECEIPTS: {command → result @ sha, one per line}
+TEST BUDGET: {none | targeted | full — per § Test Budget; omitted for pe-devtools}
+{when targeted with receipts} AUTHOR RECEIPTS: {command → result @ sha, one per line}
+{round 2+} FIX DIFF: git diff {prior_sha}..{reviewed_sha}
 
 Run your four-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read).
 
@@ -428,6 +434,8 @@ Never publish a CRITICAL/HIGH without a second look.
 `{name}` resolution from Phase 1.
 
 ### Step 2: Write or Append
+
+Each round's **Test Evidence** section lists every PE's `test_budget` and `pass2_evidence` (template).
 
 ```
 reviewed_sha = git rev-parse HEAD     # capture BEFORE writing
