@@ -65,21 +65,22 @@ match TEST BUDGET:                          # from the dispatch input
     run the Test Commands below, once; pass2_evidence = each command → result
 always:
   never hand-start database containers (docker run postgres …) — rely on the suite's own testcontainers
-  install dependencies: { [ -d node_modules ] && git diff --quiet {target}...HEAD -- package.json package-lock.json; } || npm ci
+  install dependencies: { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci
   synth one stage (the default context); prod synth only when:
-    git diff {target}...HEAD -- <cdk_subdir> | grep -nE '^\+.*(stage *[!=]==|isProd|STAGES?\.|tryGetContext\(.stage)'
+    git diff {target}...HEAD -- <cdk_subdir> | grep -nE '^[+-].*(stage *[!=]==|isProd|STAGES?\.|tryGetContext\(.stage)'
     matches → npx cdk synth --all -c <stage_context_key>=prod --quiet   (once)
+    stage_context_key = the key read by tryGetContext in <cdk_subdir>/bin/*.ts (default: stage)
 ```
 
 ## Test Commands (Pass 2 execution)
 
 ```bash
 # CDK (TypeScript)
-cd <worktree>/<cdk_subdir> && { { [ -d node_modules ] && git diff --quiet {target}...HEAD -- package.json package-lock.json; } || npm ci; } && npm test
+cd <worktree>/<cdk_subdir> && { { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci; } && npm test
 cd <worktree>/<cdk_subdir> && npx cdk synth --all
 
 # CDKTF (TypeScript) — only if changed
-cd <worktree>/<cdktf_subdir> && { { [ -d node_modules ] && git diff --quiet {target}...HEAD -- package.json package-lock.json; } || npm ci; } && npm test
+cd <worktree>/<cdktf_subdir> && { { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci; } && npm test
 cd <worktree>/<cdktf_subdir> && npx cdktf synth
 
 # Terraform — only if changed
@@ -237,7 +238,7 @@ alarm_and_monitoring:
       if standard metric: verify namespace/metric name spelling
 
 tdd_and_hygiene:
-  if a test run or an AUTHOR RECEIPT shows failure: flag CRITICAL "test suite failure"
+  if a test run fails: flag CRITICAL "test suite failure"
   if synth fails: flag CRITICAL "CDK/CDKTF synth failure"
 
   for each new construct/stack in diff:
@@ -245,9 +246,9 @@ tdd_and_hygiene:
     if zero test references: flag HIGH "missing CDK assertion test for new construct: <name>"
 
   for each stack in diff:
-    read <cdk_subdir>/cdk.out/<StackName>.template.json from the Test Commands synth
-    if cdk.out is absent (no synth ran under the budget): skip this check
-    if template has < 2 resources: flag HIGH "near-empty synth output — stub stack or misconfigured construct"
+    if no synth ran during this review: skip this check
+    elif <cdk_subdir>/cdk.out/<StackName>.template.json is missing: flag HIGH "stack in diff absent from synth output"
+    elif template has < 2 resources: flag HIGH "near-empty synth output — stub stack or misconfigured construct"
 
   if PR body missing "Closes #NNN": flag LOW "missing issue linkage"
 

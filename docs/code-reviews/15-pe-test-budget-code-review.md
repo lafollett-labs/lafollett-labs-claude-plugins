@@ -1,6 +1,6 @@
 # Code Review: plugins#15 (PE test budget and capped parallel dispatch)
 
-**Verdict:** 🔄 Round 1 CHANGES REQUESTED. The fixes are applied, and round 2 is pending.
+**Verdict:** 🔄 Round 2 CHANGES REQUESTED. The fixes are applied, and round 3 is pending.
 
 | | |
 | - | - |
@@ -34,6 +34,20 @@
 | LOW-005 | LOW | § Test Budget was missing from the sync convention. | Added to CONTRIBUTING § Sync convention. |
 | LOW-006 | LOW | Justification prose and repetition. | Cut; the round-2 rule was folded into the pseudocode. |
 | INFO-001 | INFO | Version bump and CHANGELOG comply. | None. |
+
+## Review Round 2 — CHANGES REQUESTED (`ad87aaa`), fixes applied
+
+Round-1 status: RESOLVED — MEDIUM-001, MEDIUM-002, MEDIUM-004, LOW-002, LOW-004, LOW-005, LOW-006. PARTIAL — MEDIUM-003, MEDIUM-005, MEDIUM-006, LOW-001, LOW-003; all of them are closed by the round-2 fixes below.
+
+| ID | Sev | Finding | Resolution |
+| - | - | - | - |
+| MEDIUM-001 | MEDIUM | `round` and `prior_sha` were used before they were bound. | Bound at the top of § Test Budget from the review doc: heading count + 1, and the latest Reviewed SHA. |
+| MEDIUM-002 | MEDIUM | A MISSING PE was never consumed, so the verdict could be APPROVED with a stack unreviewed. | The first Verdict Logic branch is now `⚠️ INCOMPLETE`, which is never APPROVED. Test Evidence has a MISSING row form. |
+| LOW-001 | LOW | The npm guard missed staged bumps, `{target}` was unbound, and the check wasn't idempotent. | The guard is now keyed on npm's hidden lockfile (`node_modules/.package-lock.json -nt package.json / package-lock.json`). Exercised in a scratch script: no node_modules → npm ci; fresh install → skip; bump after install → npm ci. |
+| LOW-002 | LOW | The prod-synth grep matched added lines only, and `<stage_context_key>` was unbound. | The grep matches `^[+-]`; the key is read from `tryGetContext` in `bin/*.ts`, default `stage`. |
+| LOW-003 | LOW | The cdk.out check tested whether the directory existed, not whether it was fresh. | "No synth this review → skip"; a missing stack template → HIGH. |
+| LOW-004 | LOW | pe-governance and pe-devtools don't emit `test_budget` / `pass2_evidence`. | The SKILL line is scoped: those rows read `none` / `lint-only`. |
+| INFO-001 | INFO | The failing-receipt branch in `tdd_and_hygiene` could never be reached. | Reverted to `if a test run fails`. |
 
 ---
 

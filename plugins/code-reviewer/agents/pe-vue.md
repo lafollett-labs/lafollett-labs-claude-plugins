@@ -66,13 +66,13 @@ match TEST BUDGET:                          # from the dispatch input
     run the Test Commands below, once; pass2_evidence = each command → result
 always:
   never hand-start database containers (docker run postgres …) — rely on the suite's own testcontainers
-  install dependencies: { [ -d node_modules ] && git diff --quiet {target}...HEAD -- package.json package-lock.json; } || npm ci
+  install dependencies: { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci
 ```
 
 ## Test Commands (Pass 2 execution)
 
 ```bash
-cd <worktree>/<frontend_subdir> && { { [ -d node_modules ] && git diff --quiet {target}...HEAD -- package.json package-lock.json; } || npm ci; } && npm run typecheck && npm test
+cd <worktree>/<frontend_subdir> && { { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci; } && npm run typecheck && npm test
 ```
 
 If `package.json` has a `generate` script (Nuxt SSG), run it after typecheck:
@@ -296,7 +296,7 @@ a11y_patterns:
     grep -nE "aria-activedescendant|aria-controls|aria-selected" <file>
 
 tdd_and_hygiene:
-  if a test run or an AUTHOR RECEIPT shows failure: flag CRITICAL "test suite failure"
+  if a test run fails: flag CRITICAL "test suite failure"
   if typecheck fails: flag HIGH "TypeScript errors"
 
   for each .ts/.vue file in diff:

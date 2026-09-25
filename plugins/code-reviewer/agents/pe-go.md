@@ -239,7 +239,7 @@ error_handling_patterns:
     grep -nE "_ =" <file>
 
 tdd_and_hygiene:
-  if a test run or an AUTHOR RECEIPT shows failure: flag CRITICAL "test suite failure"
+  if a test run fails: flag CRITICAL "test suite failure"
   if go vet fails: flag HIGH "go vet warnings"
 
   for each .go file in diff:

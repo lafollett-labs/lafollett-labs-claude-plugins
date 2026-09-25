@@ -198,6 +198,12 @@ match approach:
 
 ```
 reviewed_sha = git rev-parse HEAD
+review_doc   = ./docs/code-reviews/{name}-code-review.md       # {name} per Phase 1
+if review_doc exists:
+  round     = count of "## Review Round" headings in review_doc + 1
+  prior_sha = the latest round's "Reviewed SHA"
+else:
+  round = 1
 stack_cmds   = the .code-reviewer.yml / Stack Map test command(s) for this PE's paths
 receipts     = author test output (command, result, sha) from the caller's invocation text,
                the PR body, or a hand-off message
@@ -435,7 +441,7 @@ Never publish a CRITICAL/HIGH without a second look.
 
 ### Step 2: Write or Append
 
-Each round's **Test Evidence** section lists every PE's `test_budget` and `pass2_evidence` (template).
+Each round's **Test Evidence** section has one row per dispatched PE: suite-running PEs report `test_budget` + `pass2_evidence`; pe-governance / pe-devtools rows read `none` / `lint-only`; a MISSING PE reads `MISSING` / `no YAML after re-ping`.
 
 ```
 reviewed_sha = git rev-parse HEAD     # capture BEFORE writing
@@ -570,7 +576,8 @@ If you find yourself elevating a style preference or theoretical edge case to `M
 ## Verdict Logic
 
 ```
-if any CRITICAL with in_scope == true:    🚫 BLOCKED
+if any dispatched PE is MISSING:          ⚠️  INCOMPLETE — re-run the missing PE(s); never APPROVED
+elif any CRITICAL with in_scope == true:  🚫 BLOCKED
 elif any HIGH with in_scope == true:      🚫 BLOCKED
 elif any MEDIUM with in_scope == true:    ⚠️  CHANGES REQUESTED
 else (only LOW + INFO remaining):          ✅ APPROVED
