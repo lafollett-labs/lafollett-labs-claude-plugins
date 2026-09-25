@@ -1,6 +1,6 @@
 # Code Review: {ISSUE-ID}
 
-**Verdict:** ✅ APPROVED | ⚠️ CHANGES REQUESTED | 🚫 BLOCKED
+**Verdict:** ✅ APPROVED | ⚠️ CHANGES REQUESTED | 🚫 BLOCKED | ⚠️ INCOMPLETE
 
 | | |
 | - | - |
@@ -135,7 +135,7 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 
 ## Review Round {N}
 
-**Verdict:** ✅ APPROVED | ⚠️ CHANGES REQUESTED | 🚫 BLOCKED
+**Verdict:** ✅ APPROVED | ⚠️ CHANGES REQUESTED | 🚫 BLOCKED | ⚠️ INCOMPLETE
 
 | | |
 | - | - |

@@ -1,6 +1,6 @@
 # Code Review: plugins#15 (PE test budget and capped parallel dispatch)
 
-**Verdict:** 🔄 Round 2 CHANGES REQUESTED. The fixes are applied, and round 3 is pending.
+**Verdict:** 🔄 Round 3 CHANGES REQUESTED. The fixes are applied, and the round cap has been reached (see Round 3).
 
 | | |
 | - | - |
@@ -48,6 +48,17 @@ Round-1 status: RESOLVED — MEDIUM-001, MEDIUM-002, MEDIUM-004, LOW-002, LOW-00
 | LOW-003 | LOW | The cdk.out check tested whether the directory existed, not whether it was fresh. | "No synth this review → skip"; a missing stack template → HIGH. |
 | LOW-004 | LOW | pe-governance and pe-devtools don't emit `test_budget` / `pass2_evidence`. | The SKILL line is scoped: those rows read `none` / `lint-only`. |
 | INFO-001 | INFO | The failing-receipt branch in `tdd_and_hygiene` could never be reached. | Reverted to `if a test run fails`. |
+
+## Review Round 3 — CHANGES REQUESTED (`44f00ec`), fixed; the round cap has been reached
+
+Round-2 status: MEDIUM-002, LOW-001..004 and INFO-001 are RESOLVED. MEDIUM-001 was STILL_PRESENT, as shown below.
+
+| ID | Sev | Finding | Resolution |
+| - | - | - | - |
+| MEDIUM-001 | MEDIUM | The round binding is off by one: round 1 is the top-level report, which has no `## Review Round` heading. The same off-by-one already existed in Phase 6 Step 2. | Both sites now read `1 + (highest N in "## Review Round N", else 1)`. Checked against this doc: its highest heading is round 3, so round = 4. |
+| LOW-001 | LOW | INCOMPLETE was missing from the template Verdict lines and from the Step 4 PR-review mapping. | Added to both template lines. Step 4 maps `INCOMPLETE → no review posted; re-run the MISSING PE(s)`. |
+
+Round 3 is the cap. These two mechanical fixes were not re-reviewed by a PE; Copilot (Gate 2) covers them.
 
 ---
 

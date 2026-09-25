@@ -200,7 +200,7 @@ match approach:
 reviewed_sha = git rev-parse HEAD
 review_doc   = ./docs/code-reviews/{name}-code-review.md       # {name} per Phase 1
 if review_doc exists:
-  round     = count of "## Review Round" headings in review_doc + 1
+  round     = 1 + (highest N in "## Review Round N" headings, else 1)   # round 1 = the top-level report
   prior_sha = the latest round's "Reviewed SHA"
 else:
   round = 1
@@ -465,7 +465,7 @@ elif file exists (previous review):
 
   else:
     # New commits since last review.
-    count `## Review Round` headings → next_round_number = N + 1
+    next_round_number = 1 + (highest N in "## Review Round N" headings, else 1)   # round 1 = top-level report
     if prior_verdict == "✅ APPROVED":
       round_header_note = "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval changes"
     else:
@@ -502,6 +502,7 @@ if yes:
     APPROVED          → gh pr review <PR> --approve
     CHANGES REQUESTED → gh pr review <PR> --request-changes
     BLOCKED           → gh pr review <PR> --request-changes
+    INCOMPLETE        → no review posted; re-run the MISSING PE(s)
 ```
 
 ### Step 5: External Review Consolidation (PR Reviews Only, optional)
