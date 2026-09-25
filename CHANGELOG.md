@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The code-reviewer PEs follow a test budget, and the skill caps concurrent suite-running PEs (`code-reviewer` v2.11.0, marketplace 1.31.0).** Every PE re-ran its full Pass 2 — `go test ./... -race`, `npm ci && npm test`, `cdk synth --all` — at a SHA whose pre-push hook had already run those suites. The skill also dispatched every matching PE at once. On a 14-core, 36 GB laptop, parallel reviews alongside agent pushes helped drive the machine out of memory (corebizy #2179).
+  - The dispatch input now carries `TEST BUDGET: none | targeted | full`, derived from author receipts at the reviewed SHA, plus `AUTHOR RECEIPTS:` when the budget is targeted.
+  - pe-go, pe-vue and pe-aws-infra gain § Test Budget: `targeted` cites the receipts as Pass 2 evidence and runs only narrow checks, and `none` runs no tests. `npm ci` runs only when `node_modules` is missing. PEs no longer hand-start database containers. pe-aws-infra synthesizes prod only when the diff touches stage-conditional code.
+  - `multi_pe` dispatches suite-running PEs in batches of `max_parallel_pes` (`.code-reviewer.yml`, default 2). pe-governance and pe-devtools are uncapped. (#15)
+
 ### Fixed
 - **The code-reviewer and init-project READMEs name both import forms (`code-reviewer` v2.10.3, marketplace 1.30.3).** The skills treat a `CLAUDE.md` of only `@AGENTS.md` or `@./AGENTS.md` lines as import-only, but the READMEs named just the first. A repo using the relative form would follow the `AGENTS.md` path while its README said otherwise.
 

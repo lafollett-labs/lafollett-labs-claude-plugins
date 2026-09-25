@@ -77,7 +77,7 @@ if matching_pes is empty:
 elif len(matching_pes) == 1:
   approach = "single_pe"   # dispatch the one matching PE
 else:
-  approach = "multi_pe"    # dispatch all matching PEs in parallel
+  approach = "multi_pe"    # dispatch all matching PEs, batched per § Dispatch
 ```
 
 Diff size is informational only. Domain expertise is the constant — every review touching a stack with a matching PE dispatches that PE, regardless of line count.
@@ -107,6 +107,7 @@ Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five
 ```
 1. .code-reviewer.yml (project config) — if it exists, read `stacks` array;
    match changed files against each stack's `paths` globs; map to subagent.
+   Optional `max_parallel_pes: <int>` caps concurrent suite-running PEs (§ Dispatch).
 2. Instruction-file Stack Map — parse the first `## Stack Map` table found
    in instruction_files; map paths → stack → subagent.
      # repo-root AGENTS.md and CLAUDE.md
@@ -120,7 +121,7 @@ Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five
    without stack-specific test commands or domain checklists.
 ```
 
-**Mixed diffs:** If the diff spans multiple stacks, dispatch ALL matching PE subagents in parallel (single message, multiple Agent calls). Each PE reviews only the portion of the diff relevant to its domain.
+**Mixed diffs:** If the diff spans multiple stacks, dispatch every matching PE subagent, at most `max_parallel_pes` suite-running PEs at a time (§ Dispatch). Each PE reviews only the portion of the diff relevant to its domain.
 
 **Stacks not covered by built-in agents** (Rust, Python, Java, C#, etc.): primary agent runs the generic three-pass review directly. The Stack Map from step 1 or 2 still tells the parent which paths are which stack and what test commands to run.
 
@@ -182,13 +183,35 @@ match approach:
     )
 
   case "multi_pe":
-    # Dispatch all matching PEs in parallel — single message, multiple Agent calls.
-    for each pe in matching_pes:
-      Agent(
-        subagent_type: "code-reviewer:pe-{stack}",
-        prompt: <dispatch input filtered to this PE's domain>
-      )
+    max_parallel = .code-reviewer.yml `max_parallel_pes` if set, else 2
+    suite_running = matching_pes ∩ {pe-go, pe-vue, pe-aws-infra}
+    suite_free    = matching_pes − suite_running        # pe-governance, pe-devtools — uncapped
+    dispatch every suite_free PE now (one message, multiple Agent calls)
+    for batch in chunks(suite_running, max_parallel):
+      dispatch batch (one message, multiple Agent calls)
+      wait for every PE in the batch to return YAML
 ```
+
+### Test Budget
+
+Every dispatch input carries a `TEST BUDGET:` line. Suite-running PEs scope their Pass 2 to it, so a
+review does not re-run suites the author already ran at the reviewed SHA.
+
+```
+receipts = author test output at reviewed_sha, from any of:
+             the caller's invocation text, the PR body, or a hand-off message
+             — each receipt names the command, its result, and the SHA it ran at
+if no file in this PE's domain has a test command (docs, governance):
+  TEST BUDGET: none
+elif receipts cover this PE's stack at reviewed_sha:
+  TEST BUDGET: targeted
+  AUTHOR RECEIPTS: <the receipt lines for this stack, verbatim>
+else:
+  TEST BUDGET: full
+```
+
+A round-2+ review computes the budget the same way: receipts at the new SHA make it `targeted`, scoped to
+the fix diff.
 
 ### Dispatch Input
 
@@ -211,6 +234,8 @@ WORKTREE: {absolute path to repo root}
 {optional} PROJECT SUBDIR: {e.g., "frontend/" for Vue/Nuxt subdir in a monorepo, "cdk/" for CDK subdir}
 {optional} PRIOR REVIEW: {path to prior review doc if round 2+}
 {optional} STORY_FILE: {absolute path to local story/epic markdown when PR is story-linked — PE may tag findings with discharges_ac: [AC-N] to enrich Phase 4.5 Spec Coverage}
+TEST BUDGET: {none | targeted | full — per § Test Budget}
+{when targeted} AUTHOR RECEIPTS: {command → result @ sha, one per line}
 
 Run your four-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read).
 

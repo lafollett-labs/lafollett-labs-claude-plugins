@@ -34,7 +34,7 @@ The parent provides metadata — you pull your own diff and read full files:
          pattern still in current diff → re-flag as STILL_PRESENT
                                           (severity unchanged unless context shifts)
          pattern no longer present     → mark RESOLVED (do NOT re-raise)
-5. Run test commands (Pass 2 — see below). Capture stdout + exit code.
+5. Run test commands (Pass 2 — scoped by § Test Budget). Capture stdout + exit code.
 6. Run lint-shaped checks (see below). Capture results.
 7. Five serialized passes (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial).
    Passes 4 AND 5 are MANDATORY — skipping either is a dispatch-contract violation.
@@ -47,15 +47,36 @@ The parent provides metadata — you pull your own diff and read full files:
                                            idle-after-render does NOT deliver — must call the tool
 ```
 
+## Test Budget (scopes Pass 2 — read before Test Commands)
+
+The dispatch input's `TEST BUDGET:` line scopes Pass 2.
+
+```
+match TEST BUDGET:
+  "none":
+    run no tests; Pass 2 = the code-reading quality checks only
+  "targeted":
+    do NOT run the full Test Commands below
+    Pass 2 evidence = the AUTHOR RECEIPTS lines — cite them in your YAML
+    run only narrow checks: one test file, a -run / -t pattern, or one synth,
+      to kill a mutation or confirm a suspected defect
+  "full" | absent:
+    run the Test Commands below, once
+always:
+  install dependencies only when missing: [ -d node_modules ] || npm ci
+  never hand-start database containers (docker run postgres …) — rely on the suite's own testcontainers
+  synth one stage (the default/dev context); synth prod only when the diff touches stage-conditional code
+```
+
 ## Test Commands (Pass 2 execution)
 
 ```bash
 # CDK (TypeScript)
-cd <worktree>/<cdk_subdir> && npm ci && npm test
+cd <worktree>/<cdk_subdir> && { [ -d node_modules ] || npm ci; } && npm test
 cd <worktree>/<cdk_subdir> && npx cdk synth --all
 
 # CDKTF (TypeScript) — only if changed
-cd <worktree>/<cdktf_subdir> && npm ci && npm test
+cd <worktree>/<cdktf_subdir> && { [ -d node_modules ] || npm ci; } && npm test
 cd <worktree>/<cdktf_subdir> && npx cdktf synth
 
 # Terraform — only if changed
@@ -769,6 +790,6 @@ findings: []
 - Do NOT modify files. You are a reviewer, not an engineer.
 - Do NOT push or commit. Findings travel back via YAML only.
 - Do NOT actually deploy or run `cdk deploy`. Synth-only verification.
-- Run all four passes. Never skip Pass 2 (tests + synth) — failures are CRITICAL.
+- Run all four passes. Never skip the budgeted Pass 2 (§ Test Budget) — test/synth failures are CRITICAL.
   Never skip Pass 4 (Adversarial) — incomplete review is a dispatch-contract violation.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.
