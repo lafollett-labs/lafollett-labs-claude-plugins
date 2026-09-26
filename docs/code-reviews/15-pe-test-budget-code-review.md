@@ -70,6 +70,13 @@ Round 3 is the cap. These two mechanical fixes were not re-reviewed by a PE; Cop
 | 4 | A PE that returned prose or malformed YAML bypassed MISSING. | Any result that is not a parseable YAML block with `expert` and `findings` is re-dispatched once, then recorded as MISSING. |
 | 5 | A failing receipt from any stack forced `full` on every PE. | Only a failing receipt for one of this PE's `stack_cmds` forces `full`. |
 
+## Gate 2 — Copilot (round 2), fixed
+
+| # | Finding | Resolution |
+| - | - | - |
+| 6 | `<DIFF COMMAND>` already carries its `--` path separator, so appending `-- <cdk_subdir>` broke the git command. | The grep now pipes `<DIFF COMMAND>` directly; it is already scoped to this PE's paths. |
+| 7 | A suite-running PE could return valid YAML with no `test_budget` or `pass2_evidence`. | `required` keys now include both for suite-running PEs. A result missing them is re-dispatched once, then recorded as MISSING. |
+
 ---
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

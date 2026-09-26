@@ -68,7 +68,7 @@ always:
   before any npm/npx run: { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci
 synth:                                      # "none" never synthesizes
   "full":     the Test Commands synth (default context), plus prod synth once when
-              <DIFF COMMAND> -- <cdk_subdir> | grep -nE '^[+-].*(stage *[!=]==|isProd|STAGES?\.|tryGetContext\(.stage)'
+              <DIFF COMMAND> | grep -nE '^[+-].*(stage *[!=]==|isProd|STAGES?\.|tryGetContext\(.stage)'
               matches → npx cdk synth --all -c <stage_context_key>=prod --quiet
               stage_context_key = the key read by tryGetContext in <cdk_subdir>/bin/*.ts (default: stage)
   "targeted": at most one stack, as one of the narrow runs

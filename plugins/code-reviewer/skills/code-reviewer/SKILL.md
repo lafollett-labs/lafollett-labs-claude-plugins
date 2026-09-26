@@ -191,8 +191,9 @@ match approach:
     for batch in batches:
       one message, one Agent call per PE — prompt = that PE's dispatch input (own TEST BUDGET)
       wait for each PE's result
-        if the result is not a parseable YAML block with `expert` and `findings`
-           (silent teammate, prose, malformed YAML):
+        required = [expert, findings] + ([test_budget, pass2_evidence] if pe in suite_running)
+        if the result is not a parseable YAML block with every key in required
+           (silent teammate, prose, malformed YAML, missing evidence):
           re-ping / re-dispatch that PE once; still not valid → record it MISSING, continue
 ```
 
