@@ -190,8 +190,10 @@ match approach:
     batches[0] += suite_free                            # suite-free PEs ride the first message
     for batch in batches:
       one message, one Agent call per PE — prompt = that PE's dispatch input (own TEST BUDGET)
-      wait for each PE's YAML
-        team mode: re-ping an idle PE once; still silent → record it MISSING, continue
+      wait for each PE's result
+        if the result is not a parseable YAML block with `expert` and `findings`
+           (silent teammate, prose, malformed YAML):
+          re-ping / re-dispatch that PE once; still not valid → record it MISSING, continue
 ```
 
 ### Test Budget
@@ -211,7 +213,7 @@ if pe == pe-devtools:
   omit TEST BUDGET                            # lint-only Pass 2; always runs
 elif pe == pe-governance or stack_cmds is empty:
   TEST BUDGET: none
-elif any receipt at reviewed_sha has result == fail:
+elif any receipt for a cmd in stack_cmds at reviewed_sha has result == fail:
   TEST BUDGET: full
 elif every cmd in stack_cmds has a receipt with result == pass at reviewed_sha:
   TEST BUDGET: targeted

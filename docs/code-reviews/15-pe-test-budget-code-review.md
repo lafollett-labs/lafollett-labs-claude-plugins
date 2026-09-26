@@ -60,6 +60,16 @@ Round-2 status: MEDIUM-002, LOW-001..004 and INFO-001 are RESOLVED. MEDIUM-001 w
 
 Round 3 is the cap. These two mechanical fixes were not re-reviewed by a PE; Copilot (Gate 2) covers them.
 
+## Gate 2 — Copilot (round 1), all fixed
+
+| # | Finding | Resolution |
+| - | - | - |
+| 1 | pe-aws-infra ran its synth under `always`, so it ran under every budget. | Moved into its own `synth:` block. `none` runs no synth. `full` runs the Test Commands synth, plus prod when the stage grep matches. `targeted` synthesizes at most one stack, as a narrow run. |
+| 2 | The stage grep used `{target}...HEAD`, which is wrong for Staged Diff reviews. | It now uses the dispatch input's `<DIFF COMMAND>`, which covers both scopes. |
+| 3 | The per-stack template check would flag stacks that were deliberately not synthesized. | It now checks only the stacks this review synthesized. |
+| 4 | A PE that returned prose or malformed YAML bypassed MISSING. | Any result that is not a parseable YAML block with `expert` and `findings` is re-dispatched once, then recorded as MISSING. |
+| 5 | A failing receipt from any stack forced `full` on every PE. | Only a failing receipt for one of this PE's `stack_cmds` forces `full`. |
+
 ---
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

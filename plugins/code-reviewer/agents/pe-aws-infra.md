@@ -65,11 +65,13 @@ match TEST BUDGET:                          # from the dispatch input
     run the Test Commands below, once; pass2_evidence = each command → result
 always:
   never hand-start database containers (docker run postgres …) — rely on the suite's own testcontainers
-  install dependencies: { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci
-  synth one stage (the default context); prod synth only when:
-    git diff {target}...HEAD -- <cdk_subdir> | grep -nE '^[+-].*(stage *[!=]==|isProd|STAGES?\.|tryGetContext\(.stage)'
-    matches → npx cdk synth --all -c <stage_context_key>=prod --quiet   (once)
-    stage_context_key = the key read by tryGetContext in <cdk_subdir>/bin/*.ts (default: stage)
+  before any npm/npx run: { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci
+synth:                                      # "none" never synthesizes
+  "full":     the Test Commands synth (default context), plus prod synth once when
+              <DIFF COMMAND> -- <cdk_subdir> | grep -nE '^[+-].*(stage *[!=]==|isProd|STAGES?\.|tryGetContext\(.stage)'
+              matches → npx cdk synth --all -c <stage_context_key>=prod --quiet
+              stage_context_key = the key read by tryGetContext in <cdk_subdir>/bin/*.ts (default: stage)
+  "targeted": at most one stack, as one of the narrow runs
 ```
 
 ## Test Commands (Pass 2 execution)
@@ -245,7 +247,7 @@ tdd_and_hygiene:
     grep -rn "<ConstructName>" <worktree>/<infra_subdir>/test --include="*.ts"
     if zero test references: flag HIGH "missing CDK assertion test for new construct: <name>"
 
-  for each stack in diff:
+  for each stack in diff that this review synthesized:     # a stack the budget skipped is not checked
     if no synth ran during this review: skip this check
     elif <cdk_subdir>/cdk.out/<StackName>.template.json is missing: flag HIGH "stack in diff absent from synth output"
     elif template has < 2 resources: flag HIGH "near-empty synth output — stub stack or misconfigured construct"
