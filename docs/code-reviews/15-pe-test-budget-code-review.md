@@ -4,7 +4,7 @@
 
 | | |
 | - | - |
-| **Branch** | `feat/pe-test-budget` |
+| **Branch** | `feat/15-pe-test-budget` |
 | **Closes** | #15 |
 | **Reviewers** | pe-governance |
 | **Review Round** | 1 |
