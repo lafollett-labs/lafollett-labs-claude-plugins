@@ -77,7 +77,7 @@ if matching_pes is empty:
 elif len(matching_pes) == 1:
   approach = "single_pe"   # dispatch the one matching PE
 else:
-  approach = "multi_pe"    # dispatch all matching PEs in parallel
+  approach = "multi_pe"    # dispatch all matching PEs, batched per § Dispatch
 ```
 
 Diff size is informational only. Domain expertise is the constant — every review touching a stack with a matching PE dispatches that PE, regardless of line count.
@@ -107,6 +107,7 @@ Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five
 ```
 1. .code-reviewer.yml (project config) — if it exists, read `stacks` array;
    match changed files against each stack's `paths` globs; map to subagent.
+   Optional `settings.max_parallel_pes: <int>` caps concurrent suite-running PEs (§ Dispatch).
 2. Instruction-file Stack Map — parse the first `## Stack Map` table found
    in instruction_files; map paths → stack → subagent.
      # repo-root AGENTS.md and CLAUDE.md
@@ -120,7 +121,7 @@ Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five
    without stack-specific test commands or domain checklists.
 ```
 
-**Mixed diffs:** If the diff spans multiple stacks, dispatch ALL matching PE subagents in parallel (single message, multiple Agent calls). Each PE reviews only the portion of the diff relevant to its domain.
+**Mixed diffs:** If the diff spans multiple stacks, dispatch every matching PE subagent, at most `max_parallel_pes` suite-running PEs at a time (§ Dispatch). Each PE reviews only the portion of the diff relevant to its domain.
 
 **Stacks not covered by built-in agents** (Rust, Python, Java, C#, etc.): primary agent runs the generic three-pass review directly. The Stack Map from step 1 or 2 still tells the parent which paths are which stack and what test commands to run.
 
@@ -182,12 +183,49 @@ match approach:
     )
 
   case "multi_pe":
-    # Dispatch all matching PEs in parallel — single message, multiple Agent calls.
-    for each pe in matching_pes:
-      Agent(
-        subagent_type: "code-reviewer:pe-{stack}",
-        prompt: <dispatch input filtered to this PE's domain>
-      )
+    max_parallel  = settings.max_parallel_pes (.code-reviewer.yml) if a positive integer, else 2
+    suite_running = matching_pes ∩ {pe-go, pe-vue, pe-aws-infra}
+    suite_free    = matching_pes − suite_running        # pe-governance, pe-devtools — uncapped
+    batches = chunks(suite_running, max_parallel) or [[]]
+    batches[0] += suite_free                            # suite-free PEs ride the first message
+    for batch in batches:
+      one message, one Agent call per PE — prompt = that PE's dispatch input (own TEST BUDGET)
+      wait for each PE's result
+        required = [expert, findings] + ([test_budget, pass2_evidence] if pe in suite_running)
+        if the result is not a parseable YAML block with every key in required, non-empty
+           (test_budget ∈ {none, targeted, full}; pass2_evidence a list of strings)
+           (silent teammate, prose, malformed YAML, missing evidence):
+          re-ping / re-dispatch that PE once; still not valid → record it MISSING, continue
+```
+
+### Test Budget
+
+```
+reviewed_sha = git rev-parse HEAD
+review_doc   = ./docs/code-reviews/{name}-code-review.md       # {name} per Phase 1
+if review_doc exists:
+  round     = 1 + (highest N in "## Review Round N" headings, else 1)   # round 1 = the top-level report
+  prior_sha = the latest round's "Reviewed SHA"
+else:
+  round = 1
+stack_cmds   = the .code-reviewer.yml / Stack Map test command(s) for this PE's paths
+receipts     = author test output (command, result, sha) from the caller's invocation text,
+               the PR body, or a hand-off message
+if pe == pe-devtools:
+  omit TEST BUDGET                            # lint-only Pass 2; always runs
+elif pe == pe-governance or stack_cmds is empty:
+  TEST BUDGET: none
+elif any receipt for a cmd in stack_cmds at reviewed_sha has result == fail:
+  TEST BUDGET: full
+elif every cmd in stack_cmds has a receipt with result == pass at reviewed_sha:
+  TEST BUDGET: targeted
+  AUTHOR RECEIPTS: <those receipt lines, verbatim>
+elif round >= 2:
+  TEST BUDGET: targeted                       # no receipts: narrow checks on the fix diff only
+else:
+  TEST BUDGET: full
+if round >= 2:
+  FIX DIFF: git diff {prior_sha}..{reviewed_sha}
 ```
 
 ### Dispatch Input
@@ -211,6 +249,9 @@ WORKTREE: {absolute path to repo root}
 {optional} PROJECT SUBDIR: {e.g., "frontend/" for Vue/Nuxt subdir in a monorepo, "cdk/" for CDK subdir}
 {optional} PRIOR REVIEW: {path to prior review doc if round 2+}
 {optional} STORY_FILE: {absolute path to local story/epic markdown when PR is story-linked — PE may tag findings with discharges_ac: [AC-N] to enrich Phase 4.5 Spec Coverage}
+TEST BUDGET: {none | targeted | full — per § Test Budget; omitted for pe-devtools}
+{when targeted with receipts} AUTHOR RECEIPTS: {command → result @ sha, one per line}
+{round 2+} FIX DIFF: git diff {prior_sha}..{reviewed_sha}
 
 Run your four-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read).
 
@@ -404,6 +445,8 @@ Never publish a CRITICAL/HIGH without a second look.
 
 ### Step 2: Write or Append
 
+Each round's **Test Evidence** section has one row per dispatched PE: suite-running PEs report `test_budget` + `pass2_evidence`; pe-governance / pe-devtools rows read `none` / `lint-only`; a MISSING PE reads `MISSING` / `no YAML after re-ping`.
+
 ```
 reviewed_sha = git rev-parse HEAD     # capture BEFORE writing
 
@@ -426,7 +469,7 @@ elif file exists (previous review):
 
   else:
     # New commits since last review.
-    count `## Review Round` headings → next_round_number = N + 1
+    next_round_number = 1 + (highest N in "## Review Round N" headings, else 1)   # round 1 = top-level report
     if prior_verdict == "✅ APPROVED":
       round_header_note = "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval changes"
     else:
@@ -463,6 +506,7 @@ if yes:
     APPROVED          → gh pr review <PR> --approve
     CHANGES REQUESTED → gh pr review <PR> --request-changes
     BLOCKED           → gh pr review <PR> --request-changes
+    INCOMPLETE        → no review posted; re-run the MISSING PE(s)
 ```
 
 ### Step 5: External Review Consolidation (PR Reviews Only, optional)
@@ -537,7 +581,8 @@ If you find yourself elevating a style preference or theoretical edge case to `M
 ## Verdict Logic
 
 ```
-if any CRITICAL with in_scope == true:    🚫 BLOCKED
+if any dispatched PE is MISSING:          ⚠️  INCOMPLETE — re-run the missing PE(s); never APPROVED
+elif any CRITICAL with in_scope == true:  🚫 BLOCKED
 elif any HIGH with in_scope == true:      🚫 BLOCKED
 elif any MEDIUM with in_scope == true:    ⚠️  CHANGES REQUESTED
 else (only LOW + INFO remaining):          ✅ APPROVED

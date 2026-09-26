@@ -1,6 +1,6 @@
 # Code Review: {ISSUE-ID}
 
-**Verdict:** ✅ APPROVED | ⚠️ CHANGES REQUESTED | 🚫 BLOCKED
+**Verdict:** ✅ APPROVED | ⚠️ CHANGES REQUESTED | 🚫 BLOCKED | ⚠️ INCOMPLETE
 
 | | |
 | - | - |
@@ -20,6 +20,14 @@
 ## Summary
 
 {2-3 sentences summarizing the review. What was changed, what issues were found, overall assessment.}
+
+---
+
+## Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "no YAML after re-ping"} |
 
 ---
 
@@ -127,7 +135,7 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 
 ## Review Round {N}
 
-**Verdict:** ✅ APPROVED | ⚠️ CHANGES REQUESTED | 🚫 BLOCKED
+**Verdict:** ✅ APPROVED | ⚠️ CHANGES REQUESTED | 🚫 BLOCKED | ⚠️ INCOMPLETE
 
 | | |
 | - | - |
@@ -138,6 +146,12 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 ### Summary
 
 {2-3 sentences summarizing this round's findings and any agreement/disagreement with prior rounds}
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "no YAML after re-ping"} |
 
 ### Findings Overview
 

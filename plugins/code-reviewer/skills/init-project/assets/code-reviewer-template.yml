@@ -43,6 +43,9 @@ settings:
   # Output directory for review documents
   output_dir: "docs/code-reviews"
 
+  # Max concurrent suite-running PEs (pe-go, pe-vue, pe-aws-infra); default 2
+  max_parallel_pes: 2
+
   # Verdict strictness
   # strict: MEDIUM and above block merge (default)
   # standard: only CRITICAL/HIGH block merge

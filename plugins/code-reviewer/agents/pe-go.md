@@ -33,7 +33,7 @@ The parent provides metadata — you pull your own diff and read full files:
          pattern still in current diff → re-flag as STILL_PRESENT
                                           (severity unchanged unless context shifts)
          pattern no longer present     → mark RESOLVED (do NOT re-raise)
-5. Run test commands (Pass 2 — see below). Capture stdout + exit code.
+5. Run test commands (Pass 2 — scoped by § Test Budget). Capture stdout + exit code.
 6. Run lint-shaped checks (see below). Capture results.
 7. Five serialized passes (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial).
    Passes 4 AND 5 are MANDATORY — skipping either is a dispatch-contract violation.
@@ -44,6 +44,26 @@ The parent provides metadata — you pull your own diff and read full files:
        foreground (no team_name)        → return YAML as final tool-result message
        background-teammate (team_name)  → SendMessage(to: "team-lead", message: <yaml>)
                                            idle-after-render does NOT deliver — must call the tool
+```
+
+## Test Budget
+
+```
+match TEST BUDGET:                          # from the dispatch input
+  "none":
+    run no tests; pass2_evidence = ["none — TEST BUDGET none"]
+  "targeted":
+    do NOT run the full Test Commands below
+    pass2_evidence = the AUTHOR RECEIPTS lines, verbatim
+    still run the static checks no receipt names: go vet on the changed packages
+    narrow runs: at most 3 per review, each naming one package/file — never ./...
+      go test ./<pkg> -run '^TestName$' -count=1
+      if FIX DIFF is given: narrow runs cover only what the FIX DIFF touches
+    append each narrow or static run (command → result) to pass2_evidence
+  "full" | absent:
+    run the Test Commands below, once; pass2_evidence = each command → result
+always:
+  never hand-start database containers (docker run postgres …) — rely on the suite's own testcontainers
 ```
 
 ## Test Commands (Pass 2 execution)
@@ -104,7 +124,7 @@ hardcoded_values:
 
 ## Pass 2: Quality (includes test execution)
 
-Run test suite first. Then execute lint-shaped checks.
+Run the Test Commands per § Test Budget first. Then execute lint-shaped checks.
 
 **Cross-file verification:** For every function call in the changed code that
 crosses a package boundary, read the callee's signature and doc. Verify the
@@ -219,7 +239,7 @@ error_handling_patterns:
     grep -nE "_ =" <file>
 
 tdd_and_hygiene:
-  if test suite fails: flag CRITICAL "test suite failure"
+  if a test run fails: flag CRITICAL "test suite failure"
   if go vet fails: flag HIGH "go vet warnings"
 
   for each .go file in diff:
@@ -702,6 +722,9 @@ Return findings ONLY as a YAML block. No prose, no preamble, no closing remarks.
 
 ```yaml
 expert: PE-Go
+test_budget: targeted            # none | targeted | full — as dispatched
+pass2_evidence:
+  - "go test ./... -race → ok @ <sha> (author receipt)"
 findings:
   - id: "CRITICAL-001"
     severity: CRITICAL
@@ -728,6 +751,9 @@ If you find no issues at any severity, return:
 
 ```yaml
 expert: PE-Go
+test_budget: targeted            # none | targeted | full — as dispatched
+pass2_evidence:
+  - "go test ./... -race → ok @ <sha> (author receipt)"
 findings: []
 ```
 
@@ -736,6 +762,6 @@ findings: []
 - Only review CHANGED lines from the diff. Pre-existing issues = `in_scope: false` (don't block PR).
 - Do NOT modify files. You are a reviewer, not an engineer.
 - Do NOT push or commit. Findings travel back via YAML only.
-- Run all four passes. Never skip Pass 2 (tests) — failures are CRITICAL.
+- Run all four passes. Never skip the budgeted Pass 2 (§ Test Budget) — test failures are CRITICAL.
   Never skip Pass 4 (Adversarial) — incomplete review is a dispatch-contract violation.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.

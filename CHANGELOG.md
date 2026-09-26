@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The code-reviewer PEs follow a test budget, and the skill caps concurrent suite-running PEs (`code-reviewer` v2.11.0, marketplace 1.31.0).** Every PE re-ran its full Pass 2 — `go test ./... -race`, `npm ci && npm test`, `cdk synth` for every stack — at a SHA whose pre-push hook had already run those suites. The skill also dispatched every matching PE at once. On a 14-core, 36 GB laptop, parallel reviews alongside agent pushes helped drive the machine out of memory (corebizy #2179).
+  - The skill derives `TEST BUDGET: none | targeted | full` for each PE from author receipts. `targeted` requires a passing receipt, at the reviewed SHA, for every test command of that stack; a failing receipt forces `full`.
+  - Round 2 and later rounds pass a `FIX DIFF` and default to `targeted`.
+  - pe-go, pe-vue and pe-aws-infra gain § Test Budget:
+    - `targeted` cites the receipts, still runs the static checks no receipt names, and allows at most 3 narrow runs, each on one package or file;
+    - every budget reports `test_budget` and `pass2_evidence` in the YAML, which the report template's new Test Evidence section records.
+  - `npm ci` is skipped only when `node_modules` exists and `package.json` and `package-lock.json` are unchanged.
+  - PEs no longer hand-start database containers.
+  - pe-aws-infra reads templates from the Test Commands synth rather than synthesizing each stack again, and synthesizes prod only when a stage-conditional grep matches.
+  - `multi_pe` dispatches suite-running PEs in batches of `settings.max_parallel_pes`, default 2.
+  - pe-governance and pe-devtools are uncapped, since both run lint-only Pass 2s. pe-devtools is also left unbudgeted, a deliberate departure from #15. (#15)
+
 ### Fixed
 - **The code-reviewer and init-project READMEs name both import forms (`code-reviewer` v2.10.3, marketplace 1.30.3).** The skills treat a `CLAUDE.md` of only `@AGENTS.md` or `@./AGENTS.md` lines as import-only, but the READMEs named just the first. A repo using the relative form would follow the `AGENTS.md` path while its README said otherwise.
 

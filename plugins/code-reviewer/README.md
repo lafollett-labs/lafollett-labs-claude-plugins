@@ -49,7 +49,8 @@ the working branch — never to `main`.
 | `pe-governance` | agent definitions, skills, `CLAUDE.md`, `AGENTS.md` — markdown whose audience is the model |
 | `pe-devtools` | local dev tooling, reviewed on a single-operator threat model |
 
-A diff spanning several stacks dispatches every matching PE in parallel, and
+A diff spanning several stacks dispatches every matching PE (suite-running PEs
+at most `max_parallel_pes` at a time, default 2), and
 findings are de-duplicated and cross-verified — a handler claiming an env var
 the CDK stack never sets gets flagged by the pair, not by either alone.
 

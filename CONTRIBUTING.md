@@ -43,6 +43,8 @@ The four production PE files (`pe-go.md`, `pe-vue.md`, `pe-aws-infra.md`, `pe-go
 
 Stack-flavored examples for `silence_check` (and any stack-specific lenses) differ per file. The shared blocks must stay in sync. When editing any of those blocks, edit ALL FOUR files together.
 
+The § Test Budget `match` block is identical across `pe-go.md`, `pe-vue.md` and `pe-aws-infra.md`; only the static-check, narrow-run and `always:` lines vary by stack. Edit all three together.
+
 `pe-devtools.md` runs a different lens set (single-operator local threat model) and is NOT part of this sync.
 
 ## Reporting Issues

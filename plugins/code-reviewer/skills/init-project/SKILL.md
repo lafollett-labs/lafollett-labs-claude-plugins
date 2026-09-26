@@ -192,7 +192,8 @@ Run /code-reviewer to start reviewing!
 ## Edge Cases
 
 - **Monorepo with many stacks:** map every directory in the Stack Map. The
-  code-reviewer skill dispatches one PE sub-agent per matched stack in parallel.
+  code-reviewer skill dispatches one PE sub-agent per matched stack (suite-running
+  PEs capped by `max_parallel_pes`, default 2).
 - **Stack not covered by a built-in PE** (Rust, Python, Java, C#, etc.): record
   the stack + test command in the Stack Map. The code-reviewer skill falls back
   to a generic three-pass review using those test commands. Do NOT generate a

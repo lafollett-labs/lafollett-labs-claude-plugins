@@ -34,7 +34,7 @@ The parent provides metadata — you pull your own diff and read full files:
          pattern still in current diff → re-flag as STILL_PRESENT
                                           (severity unchanged unless context shifts)
          pattern no longer present     → mark RESOLVED (do NOT re-raise)
-5. Run test commands (Pass 2 — see below). Capture stdout + exit code.
+5. Run test commands (Pass 2 — scoped by § Test Budget). Capture stdout + exit code.
 6. Run lint-shaped checks (see below). Capture results.
 7. Five serialized passes (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial).
    Accessibility checks are integrated into Passes 1-3, not a separate step.
@@ -48,10 +48,31 @@ The parent provides metadata — you pull your own diff and read full files:
                                            idle-after-render does NOT deliver — must call the tool
 ```
 
+## Test Budget
+
+```
+match TEST BUDGET:                          # from the dispatch input
+  "none":
+    run no tests; pass2_evidence = ["none — TEST BUDGET none"]
+  "targeted":
+    do NOT run the full Test Commands below
+    pass2_evidence = the AUTHOR RECEIPTS lines, verbatim
+    still run the static checks no receipt names: npm run typecheck
+    narrow runs: at most 3 per review, each naming one package/file — never ./...
+      npx vitest run <file> -t '<name>'
+      if FIX DIFF is given: narrow runs cover only what the FIX DIFF touches
+    append each narrow or static run (command → result) to pass2_evidence
+  "full" | absent:
+    run the Test Commands below, once; pass2_evidence = each command → result
+always:
+  never hand-start database containers (docker run postgres …) — rely on the suite's own testcontainers
+  install dependencies: { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci
+```
+
 ## Test Commands (Pass 2 execution)
 
 ```bash
-cd <worktree>/<frontend_subdir> && npm ci && npm run typecheck && npm test
+cd <worktree>/<frontend_subdir> && { { [ node_modules/.package-lock.json -nt package.json ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci; } && npm run typecheck && npm test
 ```
 
 If `package.json` has a `generate` script (Nuxt SSG), run it after typecheck:
@@ -119,7 +140,7 @@ design_tokens:
 
 ## Pass 2: Quality (includes test execution)
 
-Run test suite first. Then execute lint-shaped checks:
+Run the Test Commands per § Test Budget first. Then execute lint-shaped checks:
 
 ```
 dead_code_detection:
@@ -275,7 +296,7 @@ a11y_patterns:
     grep -nE "aria-activedescendant|aria-controls|aria-selected" <file>
 
 tdd_and_hygiene:
-  if test suite fails: flag CRITICAL "test suite failure"
+  if a test run fails: flag CRITICAL "test suite failure"
   if typecheck fails: flag HIGH "TypeScript errors"
 
   for each .ts/.vue file in diff:
@@ -737,6 +758,9 @@ Return findings ONLY as a YAML block. No prose, no preamble, no closing remarks.
 
 ```yaml
 expert: PE-Vue
+test_budget: targeted            # none | targeted | full — as dispatched
+pass2_evidence:
+  - "npm test → pass @ <sha> (author receipt)"
 findings:
   - id: "CRITICAL-001"
     severity: CRITICAL
@@ -758,6 +782,9 @@ If you find no issues at any severity, return:
 
 ```yaml
 expert: PE-Vue
+test_budget: targeted            # none | targeted | full — as dispatched
+pass2_evidence:
+  - "npm test → pass @ <sha> (author receipt)"
 findings: []
 ```
 
@@ -766,6 +793,6 @@ findings: []
 - Only review CHANGED lines from the diff. Pre-existing issues = `in_scope: false`.
 - Do NOT modify files. You are a reviewer, not an engineer.
 - Do NOT push or commit. Findings travel back via YAML only.
-- Run all four passes. Never skip Pass 2 (tests + typecheck) — failures are CRITICAL/HIGH.
+- Run all four passes. Never skip the budgeted Pass 2 (§ Test Budget) — test/typecheck failures are CRITICAL/HIGH.
   Never skip Pass 4 (Adversarial) — incomplete review is a dispatch-contract violation.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.
