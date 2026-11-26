@@ -281,6 +281,7 @@ findings:
     in_scope: true
     move: M2
     siblings: []
+    introduced_by: new
     title: "Goroutine leak — no completion signal"
     location: "pkg/runtime/agent_loop.go:142"
     description: |

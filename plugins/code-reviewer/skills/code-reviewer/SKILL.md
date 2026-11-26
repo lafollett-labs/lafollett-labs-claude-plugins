@@ -287,8 +287,9 @@ else:
 stack_cmds   = the .code-reviewer.yml / Stack Map test command(s) for this PE's paths
 receipts     = author test output (command, result, sha) from the caller's invocation text,
                the PR body, or a hand-off message
-ripple_receipts = "<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>" lines from the same
-                  sources whose `git rev-parse <sha>` == reviewed_sha (§ Remediation Pre-flight)
+ripple_receipts = "<rule> → N restatements checked[; kept <path:line> — <why>] @ <7–40 hex sha>" lines from the
+                  same sources whose sha, lowercased, is 7–40 hex and a prefix of reviewed_sha (§ Remediation Pre-flight)
+dropped_receipts = receipt-shaped lines from those sources that fail that test   # HEAD or a branch name is not a sha
 if pe == pe-devtools:
   omit TEST BUDGET                            # lint-only Pass 2; always runs
 elif pe in {pe-governance, pe-audio} or stack_cmds is empty:
@@ -331,7 +332,7 @@ WORKTREE: {absolute path to repo root}
 TEST BUDGET: {none | targeted | full — per § Test Budget; omitted for pe-devtools}
 {when targeted with receipts} AUTHOR RECEIPTS: {command → result @ sha, one per line}
 {round 2+} FIX DIFF: git diff {prior_sha}..{reviewed_sha}
-{round 2+} RIPPLE RECEIPTS: {<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>, one per line | none}
+{round 2+} RIPPLE RECEIPTS: {<rule> → N restatements checked[; kept <path:line> — <why>] @ <7–40 hex sha>, one per line | none}
 REVIEW_MOVES: {absolute path — § Asset Paths}
 
 Run your five-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read
@@ -569,7 +570,7 @@ Each round's **Moves Coverage** section has one row per dispatched PE plus `Prim
 
 From round 2, each round's header carries:
 - **Fix cascade:** `<n> / <total>`, where n counts the in-scope findings whose `introduced_by` is a prior finding id and total counts all in-scope findings;
-- **Ripple receipts:** `<N> spot-checked`, or `none — M1 ran exhaustive over the fix diff's rules`.
+- **Ripple receipts:** `<N> spot-checked`, or `none — M1 ran exhaustive over the fix diff's rules`; when dropped_receipts is non-empty, append `, <M> dropped — no hex SHA of the reviewed commit`.
 
 Each finding shows its `siblings`, and from round 2 its `introduced_by`. Action Items render each finding as `fix <location> + <N> siblings`.
 
@@ -750,7 +751,7 @@ for each rule the fix diff adds or changes:
   M1: grep every restatement, align it or record why it stays
   M3: give each new branch a defined outcome
 commit, then record one RIPPLE RECEIPT per rule:
-  "<rule> → N restatements checked[; kept <path:line> — <why>] @ <commit sha>"
+  "<rule> → N restatements checked[; kept <path:line> — <why>] @ <7–40 hex sha of that commit>"
 ```
 
 ---

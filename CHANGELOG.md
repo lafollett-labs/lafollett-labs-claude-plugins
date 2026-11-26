@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **code-reviewer ripple receipts must cite a hex commit SHA (`code-reviewer` v2.14.1, marketplace 1.34.1).** In 2.14.0 a receipt counted when `git rev-parse <sha>` resolved to the reviewed SHA. That also accepted `HEAD` or a branch name, so a receipt left in a PR body matched every later round, and the token reached a shell unvalidated.
+  - A receipt now counts only when its SHA, lowercased, is 7–40 hex characters and a prefix of the reviewed SHA; a ref is not a receipt. The format reads `@ <7–40 hex sha>` in SKILL.md, the review-moves asset, all seven PE Inputs bullets and the README.
+  - The caller drops every other receipt line, and the round header reports `, M dropped — no hex SHA of the reviewed commit`, so a dropped receipt is no longer silent.
+  - The 2.14.0 headline now says later rounds say *whether* a prior fix caused each finding, and the Spec Coverage example's stack finding carries `introduced_by`.
+
 ### Added
-- **code-reviewer stops remediation-round churn: findings list their siblings, later rounds say which fix caused each finding, and remediation runs a ripple pre-flight (`code-reviewer` v2.14.0, marketplace 1.34.0).** This came from a multi-round docs review where every MEDIUM in rounds 3–5 was caused by the previous fix. Each finding named one location. The fix changed only that location, so every other restatement of the rule stayed stale, and each fix's new edge cases went unchecked.
+- **code-reviewer stops remediation-round churn: findings list their siblings, later rounds say whether a prior fix caused each finding, and remediation runs a ripple pre-flight (`code-reviewer` v2.14.0, marketplace 1.34.0).** This came from a multi-round docs review where every MEDIUM in rounds 3–5 was caused by the previous fix. Each finding named one location. The fix changed only that location, so every other restatement of the rule stayed stale, and each fix's new edge cases went unchecked.
   - Every finding carries `siblings:`. When its fix would change a rule, contract, definition or repeated value, or the same defect recurs elsewhere, that is every other `path:line` stating or repeating it; otherwise it is `[]`. Action Items render "fix <location> + N siblings".
   - From round 2, every finding carries `introduced_by:`:
     - `<prior finding id>` when a fix from the latest prior round caused it;
