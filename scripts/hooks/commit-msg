@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# commit-msg: run the maintainer's private denylist scanner (when configured) over the message.
+# See scripts/hooks/pre-commit for setup.
+set -u
+scan="$(git config --get labs.denylistScan || true)"
+[ -n "$scan" ] || exit 0
+[ -x "$scan" ] || { echo "commit-msg: labs.denylistScan is set but $scan is not executable" >&2; exit 1; }
+"$scan" "$1" >&2 || { echo "commit-msg: private denylist hit in the commit message" >&2; exit 1; }

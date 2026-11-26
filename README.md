@@ -75,6 +75,11 @@ plugins/
 docs/
   code-reviews/                 # Review records, pinned to a SHA
   plans/                        # Live design work
+changelog.d/                    # One fragment per unreleased PR
+scripts/
+  ci/                           # Validators, secret scan, release engine + their suites
+  hooks/                        # Optional git hooks
+.github/workflows/              # CI, PR title, release
 ```
 
 `code-reviewer` also ships seven PE sub-agents under `agents/`, and `ux-designer`
@@ -92,15 +97,17 @@ naming, commit format, and authoring style guide.
 3. Write `plugins/<name>/README.md` — what it does, how to use it, and the tips that are not obvious
 4. Add an entry to `.claude-plugin/marketplace.json`
 5. Add the plugin to the table in this README
-6. Add a `## [Unreleased]` entry to [CHANGELOG.md](./CHANGELOG.md)
+6. Add a changelog fragment, `changelog.d/<branch-slug>.md`
 
 ### Versioning
 
-Any edit under `plugins/<name>/` bumps that plugin's `plugin.json` version,
-`.claude-plugin/marketplace.json`'s `metadata.version`, and CHANGELOG.md — all
-three in the same commit. Without a bump, `/plugin marketplace update` sees no
-difference and keeps serving the stale cached copy, so the change reaches
-nobody.
+Versions are stamped on release, never by hand. After each merge the release
+workflow bumps every changed plugin by the squash commit's conventional type
+(`feat` minor, `fix`/`chore`/… patch, `!` major), bumps the marketplace's
+`metadata.version` (which is what `/plugin marketplace update` compares), folds
+the `changelog.d/` fragments into [CHANGELOG.md](./CHANGELOG.md), and opens a
+release PR that auto-merges and is tagged `v<marketplace version>`. A new plugin
+debuts at the version its `plugin.json` declares.
 
 ## License
 

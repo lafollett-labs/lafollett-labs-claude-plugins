@@ -1,0 +1,13 @@
+{
+  "name": "example-marketplace",
+  "plugins": [
+    {
+      "name": "alpha",
+      "source": "./plugins/alpha",
+      "version": "0.0.1"
+    }
+  ],
+  "metadata": {
+    "version": "1.0.0"
+  }
+}

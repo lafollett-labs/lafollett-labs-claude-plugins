@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# Tests for scripts/ci/security/secret-scan.sh and the repo's .gitleaks.toml.
+#   range      SCAN_BASE..SCAN_HEAD is scanned; no usable base scans the whole tree
+#   gate       a secret in range fails; the script never passes without scanning
+#   allow-list an entry clears one exact value at one exact path, never a whole path
+#   tree       the current tree passes with the repo's config
+# Range contracts use a stub gitleaks; the rest need the real gitleaks on PATH. Fake secrets are
+# assembled at runtime so none is ever committed. Exit 0 = all pass.
+set -u
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/../../../.." && pwd)"
+SCAN="$ROOT/scripts/ci/security/secret-scan.sh"
+CONFIG="$ROOT/.gitleaks.toml"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+fails=0
+total=0
+pass() { total=$((total + 1)); echo "PASS: $1"; }
+fail() { total=$((total + 1)); echo "FAIL: $1 — $2"; fails=$((fails + 1)); }
+check() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "expected [$3], got [$2]"; fi; }
+
+ZERO=0000000000000000000000000000000000000000
+# A GitHub-PAT-shaped value gitleaks' default rules flag; built here, never stored.
+fake_secret() { printf 'ghp_%s' "$(printf 'x7Kq2Lm9Pz4Rt8Vw1Ny3x7Kq2Lm9Pz4Rt8Vw' | tr 'x' 'A')"; }
+
+export GIT_CONFIG_GLOBAL="$WORK/gitconfig" GIT_CONFIG_NOSYSTEM=1
+git config --global init.defaultBranch main
+
+new_repo() {
+  git init -q "$1"
+  git -C "$1" config user.name test
+  git -C "$1" config user.email test@example.com
+  git -C "$1" config commit.gpgsign false
+}
+commit_file() { mkdir -p "$(dirname "$1/$2")" && printf '%s\n' "$3" > "$1/$2" && git -C "$1" add "$2" && git -C "$1" commit -qm "$2"; }
+
+# scan_in <repo> [VAR=value ...]: run the scan in <repo> with only the given inputs.
+scan_in() {
+  local repo="$1"; shift
+  (cd "$repo" && env -u SCAN_BASE -u SCAN_HEAD GITLEAKS_CONFIG="$CONFIG" "$@" bash "$SCAN") >"$WORK/out" 2>&1
+  echo $?
+}
+
+# --- range contracts (stub gitleaks records its arguments) ---------------------------------------
+STUB="$WORK/stub"
+mkdir -p "$STUB"
+cat > "$STUB/gitleaks" <<'EOF'
+#!/usr/bin/env sh
+printf '%s\n' "$*" > "$STUB_LOG"
+exit "${STUB_EXIT:-0}"
+EOF
+chmod +x "$STUB/gitleaks"
+R="$WORK/range"
+new_repo "$R"
+commit_file "$R" a.txt one
+BASE="$(git -C "$R" rev-parse HEAD)"
+commit_file "$R" b.txt two
+HEAD_SHA="$(git -C "$R" rev-parse HEAD)"
+stubbed() { scan_in "$R" STUB_LOG="$WORK/args" PATH="$STUB:$PATH" "$@"; }
+
+code="$(stubbed SCAN_BASE="$BASE" SCAN_HEAD="$HEAD_SHA")"
+check "range: exits with gitleaks' status" "$code" 0
+check "range: scans base..head" "$(grep -c -- "--log-opts=-m $BASE..$HEAD_SHA" "$WORK/args")" 1
+
+code="$(stubbed SCAN_BASE="$ZERO" SCAN_HEAD="$HEAD_SHA")"
+check "range: an all-zero base scans the whole tree" "$(grep -c '^dir ' "$WORK/args")" 1
+
+code="$(stubbed SCAN_HEAD="$HEAD_SHA")"
+check "range: no base scans the whole tree" "$(grep -c '^dir ' "$WORK/args")" 1
+
+code="$(stubbed SCAN_BASE=1234567890123456789012345678901234567890 SCAN_HEAD="$HEAD_SHA")"
+check "range: a base absent from the clone scans the whole tree" "$(grep -c '^dir ' "$WORK/args")" 1
+
+rm -f "$WORK/args"
+code="$(stubbed SCAN_BASE="$BASE")"
+check "refuses to pass without a head" "$code:$(test -f "$WORK/args" && echo ran || echo not-run)" "2:not-run"
+rm -f "$WORK/args"
+code="$(stubbed SCAN_BASE='HEAD~1' SCAN_HEAD="$HEAD_SHA")"
+check "refuses a ref that is not a SHA" "$code:$(test -f "$WORK/args" && echo ran || echo not-run)" "2:not-run"
+rm -f "$WORK/args"
+code="$(stubbed SCAN_BASE="$BASE" SCAN_HEAD="$HEAD_SHA --no-git")"
+check "refuses an injected flag" "$code:$(test -f "$WORK/args" && echo ran || echo not-run)" "2:not-run"
+
+code="$(stubbed SCAN_BASE="$BASE" SCAN_HEAD="$HEAD_SHA" STUB_EXIT=1)"
+check "a finding from gitleaks fails the scan" "$code" 1
+check "uses the repo's config and redacts" "$(grep -c -- "--config $CONFIG .*--redact" "$WORK/args")" 1
+
+# --- real gitleaks -------------------------------------------------------------------------------
+if ! command -v gitleaks >/dev/null 2>&1; then
+  fail "gitleaks available" "gitleaks is not on PATH; the remaining tests need it"
+else
+  S="$WORK/secret"
+  new_repo "$S"
+  commit_file "$S" README.md clean
+  OLD="$(git -C "$S" rev-parse HEAD)"
+  commit_file "$S" config.env "TOKEN=$(fake_secret)"
+  NEW="$(git -C "$S" rev-parse HEAD)"
+  code="$(scan_in "$S" SCAN_BASE="$OLD" SCAN_HEAD="$NEW")"
+  check "a secret in range fails the scan" "$code:$(grep -c 'leaks found: 1' "$WORK/out")" "1:1"
+  check "the finding is redacted in the log" "$(grep -c "$(fake_secret)" "$WORK/out")" 0
+
+  commit_file "$S" notes.md "clean change"
+  LATEST="$(git -C "$S" rev-parse HEAD)"
+  code="$(scan_in "$S" SCAN_BASE="$NEW" SCAN_HEAD="$LATEST")"
+  check "a secret committed before the range does not fail a clean range" "$code" 0
+
+  A="$WORK/allow"
+  new_repo "$A"
+  commit_file "$A" README.md clean
+  A_BASE="$(git -C "$A" rev-parse HEAD)"
+  commit_file "$A" fixtures/token.txt "TOKEN=$(fake_secret)"
+  cat > "$WORK/allow.toml" <<EOF
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "test: fake token in a fixture"
+condition = "AND"
+paths = ['''^fixtures/token\.txt$''']
+regexTarget = "line"
+regexes = ['''^TOKEN=ghp_''']
+EOF
+  code="$(scan_in "$A" GITLEAKS_CONFIG="$WORK/allow.toml" SCAN_BASE="$A_BASE" SCAN_HEAD="$(git -C "$A" rev-parse HEAD)")"
+  check "an allow-listed value at its listed path passes" "$code" 0
+  A_MID="$(git -C "$A" rev-parse HEAD)"
+  commit_file "$A" other.txt "TOKEN=$(fake_secret)"
+  code="$(scan_in "$A" GITLEAKS_CONFIG="$WORK/allow.toml" SCAN_BASE="$A_MID" SCAN_HEAD="$(git -C "$A" rev-parse HEAD)")"
+  check "the same value at another path still fails" "$code" 1
+
+  I="$WORK/inline"
+  new_repo "$I"
+  commit_file "$I" README.md clean
+  I_BASE="$(git -C "$I" rev-parse HEAD)"
+  commit_file "$I" config.env "TOKEN=$(fake_secret) # gitleaks:allow"
+  code="$(scan_in "$I" SCAN_BASE="$I_BASE" SCAN_HEAD="$(git -C "$I" rev-parse HEAD)")"
+  check "an inline gitleaks:allow comment does not hide a secret" "$code" 1
+
+  G="$WORK/ignorefile"
+  new_repo "$G"
+  commit_file "$G" README.md clean
+  G_BASE="$(git -C "$G" rev-parse HEAD)"
+  commit_file "$G" .gitleaksignore "anything"
+  code="$(scan_in "$G" SCAN_BASE="$G_BASE" SCAN_HEAD="$(git -C "$G" rev-parse HEAD)")"
+  check "a .gitleaksignore file fails the scan" "$code:$(grep -c 'gitleaksignore' "$WORK/out")" "2:1"
+
+  M="$WORK/merge"
+  new_repo "$M"
+  commit_file "$M" README.md clean
+  M_BASE="$(git -C "$M" rev-parse HEAD)"
+  git -C "$M" checkout -q -b side
+  commit_file "$M" side.txt side
+  git -C "$M" checkout -q -
+  commit_file "$M" main.txt main
+  git -C "$M" merge -q --no-commit side >/dev/null 2>&1
+  printf 'TOKEN=%s\n' "$(fake_secret)" > "$M/merged.env" && git -C "$M" add merged.env
+  git -C "$M" commit -qm merge
+  git -C "$M" rm -q merged.env && git -C "$M" commit -qm "remove it"
+  code="$(scan_in "$M" SCAN_BASE="$M_BASE" SCAN_HEAD="$(git -C "$M" rev-parse HEAD)")"
+  check "a secret introduced in a merge commit fails the scan" "$code" 1
+
+  code="$(scan_in "$ROOT" SCAN_BASE="$ZERO" SCAN_HEAD="$(git -C "$ROOT" rev-parse HEAD)")"
+  check "the current tree passes with the repo's config" "$code" 0
+fi
+
+# --- allow-list shape ----------------------------------------------------------------------------
+good_entry='[[allowlists]]
+description = "fake token in a fixture"
+condition = "AND"
+paths = ['"'''"'^fixtures/token\.txt$'"'''"']
+regexTarget = "line"
+regexes = ['"'''"'^TOKEN=ghp_'"'''"']'
+shape_case() { # shape_case <label> <want> <config body>
+  printf '[extend]\nuseDefault = true\n\n%s\n' "$3" > "$WORK/shape.toml"
+  rm -f "$WORK/args"
+  code="$(stubbed GITLEAKS_CONFIG="$WORK/shape.toml" SCAN_BASE="$BASE" SCAN_HEAD="$HEAD_SHA")"
+  check "allow-list shape: $1" "$code:$(test -f "$WORK/args" && echo ran || echo not-run)" "$2"
+}
+shape_case "a reasoned exact-value, exact-file entry is accepted" "0:ran" "$good_entry"
+shape_case "an entry without a description is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | grep -v '^description')"
+shape_case "an entry without condition AND is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | grep -v '^condition')"
+shape_case "an entry without an exact value is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | grep -v '^regexes')"
+shape_case "an unanchored path prefix is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed 's/\$'"'''"'\]/'"'''"']/')"
+shape_case "a directory regex path is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed 's/token\\\.txt/.*/')"
+shape_case "two paths in one entry are refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^paths = \[\(.*\)\]$/paths = [\1, '''^b\\\\.txt\$''']/")"
+shape_case "a multi-line paths array is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^paths = \[\(.*\)\]$/paths = [\\
+  \1,\\
+]/")"
+shape_case "a legacy [allowlist] table is refused" "2:not-run" "$(printf '[allowlist]\npaths = ['"'''"'fixtures'"'''"']\n')"
+shape_case "a per-rule allow-list is refused" "2:not-run" "$(printf '[[rules]]\nid = "x"\nregex = '"'''"'x'"'''"'\n[[rules.allowlists]]\npaths = ['"'''"'fixtures'"'''"']\n')"
+shape_case "disabling a default rule is refused" "2:not-run" "$(printf 'disabledRules = ["github-pat"]\n%s\n' "$good_entry")"
+
+# --- workflow wiring -----------------------------------------------------------------------------
+# A cancelled run on main would leave that push's commits unscanned: the next push scans only its own.
+CI_YML="$ROOT/.github/workflows/ci.yml"
+check "ci.yml cancels in-progress runs only for pull requests" \
+  "$(grep -cF "cancel-in-progress: \${{ github.event_name == 'pull_request' }}" "$CI_YML")" 1
+
+echo "=============================================="
+echo "$total checks, $fails failed"
+[ "$total" -gt 0 ] || { echo "FAIL: no checks ran"; exit 1; }
+[ "$fails" -eq 0 ] || exit 1
+echo "ALL PASS"

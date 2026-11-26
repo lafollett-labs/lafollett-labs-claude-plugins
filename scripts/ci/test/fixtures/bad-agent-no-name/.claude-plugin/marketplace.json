@@ -1,0 +1,20 @@
+{
+  "name": "test-marketplace",
+  "owner": {
+    "name": "Fixture Owner",
+    "email": "owner@example.com"
+  },
+  "metadata": {
+    "description": "Fixture marketplace for validator tests",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "alpha",
+      "description": "Alpha fixture plugin",
+      "source": "./plugins/alpha",
+      "category": "developer-tools",
+      "homepage": "https://example.com"
+    }
+  ]
+}

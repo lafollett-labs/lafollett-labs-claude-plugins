@@ -10,7 +10,15 @@ Thanks for your interest in improving the LaFollett Labs Claude Code plugins.
    - `feat: add X`
    - `fix: handle Y in /code-reviewer`
    - `docs: clarify Z`
-4. Open a PR with a short description of the change and its motivation
+4. If you changed anything under `plugins/`, add a changelog fragment: `changelog.d/<branch-slug>.md` ([format](changelog.d/README.md))
+5. Open a PR whose title is a conventional commit, with a short description of the change and its motivation
+
+Never edit a `version` field. After a PR merges, the release workflow bumps each changed plugin
+by its squash subject (`feat` minor, `fix`/`chore`/… patch, `!` major), bumps the marketplace,
+folds the fragments into `CHANGELOG.md`, and tags the release. CI fails a PR that edits a version
+or changes a plugin without a fragment.
+
+Optional local hooks (gitleaks on the staged diff): `git config core.hooksPath scripts/hooks`.
 
 ## Plugin & Skill Authoring Style
 

@@ -22,36 +22,29 @@ plugins/
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). Each plugin is independently versioned; this repo is the source of truth.
 
-### Version bumping — HARD RULE
+### Versions and changelog — HARD RULE
+
+The release workflow stamps every version after merge. A branch never edits one.
 
 ```
 on ANY edit under plugins/<name>/:
-    bump plugins/<name>/.claude-plugin/plugin.json  .version
-    bump .claude-plugin/marketplace.json            .metadata.version
-    add a CHANGELOG.md entry under [Unreleased]
-    # all three in the SAME commit as the change, not a follow-up
+    never edit plugin.json .version or marketplace.json .metadata.version   # CI fails the PR
+    add changelog.d/<branch-slug>.md (format: changelog.d/README.md)        # CI fails the PR without one
+    title the PR, and a single-commit PR's commit, as a conventional commit
+on a new plugin:
+    author its plugin.json version and its marketplace.json entry; it debuts at that version
 ```
 
-| Change | Bump |
+| Squash subject | Plugin bump |
 | - | - |
-| bug fix, perf, text | patch — 1.0.0 → 1.0.1 |
-| new feature or command | minor — 1.0.1 → 1.1.0 |
-| breaking change | major — 1.1.0 → 2.0.0 |
+| `feat` | minor |
+| `fix`, `chore`, `docs`, `refactor`, `test`, … | patch |
+| `type!:` or a `BREAKING CHANGE:` footer | major |
 
-Both files, every time. `/plugin marketplace update` compares versions: without a
-bump it sees no difference and keeps serving the stale cached copy, so the change
-reaches nobody and the working tree lies about what users have.
+The marketplace bumps minor when a plugin debuts, major when one is removed under `!`, else patch.
+Use `feat` only for a capability a user could ask for by name; everything else is `fix` or `chore`.
 
-Check before every commit that touches `plugins/`:
-
-```bash
-# `if`, not a trailing `A && B || C` — when A is false the || branch fires and
-# every non-plugin commit gets a false warning.
-if git diff --cached --name-only | grep -q '^plugins/'; then
-  git diff --cached -- '*/plugin.json' '.claude-plugin/marketplace.json' \
-    | grep -q '^+.*version' || echo "MISSING VERSION BUMP"
-fi
-```
+Enable the hooks once per clone: `git config core.hooksPath scripts/hooks`.
 
 ## License
 

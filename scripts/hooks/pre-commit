@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Pre-commit: refuse a staged secret (gitleaks, when installed) or a hit from the maintainer's private
+# denylist scanner (when configured). Enable once per clone:
+#   git config core.hooksPath scripts/hooks
+#   git config labs.denylistScan /path/to/private/scan.sh   # optional; never commit that file
+set -u
+rc=0
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --redact --no-banner --config .gitleaks.toml . >/dev/null 2>&1 \
+    || { echo "pre-commit: gitleaks found a secret in the staged diff (run: gitleaks git --pre-commit --staged --redact .)" >&2; rc=1; }
+fi
+scan="$(git config --get labs.denylistScan || true)"
+if [ -n "$scan" ]; then
+  [ -x "$scan" ] || { echo "pre-commit: labs.denylistScan is set but $scan is not executable" >&2; exit 1; }
+  "$scan" >&2 || { echo "pre-commit: private denylist hit in the staged diff" >&2; rc=1; }
+fi
+exit "$rc"
