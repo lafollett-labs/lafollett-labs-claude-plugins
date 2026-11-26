@@ -30,7 +30,7 @@ These plugins are intended to work for any project that installs them. When addi
 
 Sub-agents (e.g., the PE reviewers in `code-reviewer/agents/*.md`) load their full agent definition file into context at dispatch time. They do NOT automatically inherit `SKILL.md` content, plugin paths, or `${CLAUDE_PLUGIN_ROOT}` substitution in arbitrary markdown body prose. Treat each sub-agent file as a self-contained unit:
 
-- Keep all instructions a sub-agent needs to execute its task INLINE in its agent file
+- Keep all instructions a sub-agent needs to execute its task INLINE in its agent file, except skill assets the dispatcher passes as absolute paths (`REVIEW_MOVES`, `SPEC_COVERAGE_PROTOCOL`)
 - Do NOT reference plugin assets via relative paths from sub-agent prose — the path resolution is unreliable from sub-agent context
 - If multiple sub-agents share content (e.g., the six production PEs share the Pass 4 Common Adversarial Lenses + Calibration Anchor + Apply Protocol), inline the shared block in each agent file and document the sync convention below
 

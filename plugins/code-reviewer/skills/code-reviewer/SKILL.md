@@ -139,7 +139,7 @@ The plugin ships seven built-in PE sub-agents. A **stack** PE owns the files it 
 | `code-reviewer:pe-devtools` | stack | Local dev tooling (single-operator threat model) — bash scripts, hooks, code-review wrappers | `scripts/dev/**`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` |
 | `code-reviewer:pe-audio` | domain | Real-time audio / DSP — audio-thread rules, analysis windows, sample rate, signal hygiene, scheduling, mic capture, pitch/cents accuracy, fixture coverage | `**/{audio,dsp,pitch}/**/*.{rs,ts,js,mjs,vue}`, `**/*[Ww]orklet*.{ts,js,mjs}` — always applied, plus Stack Map rows naming `pe-audio` |
 
-Each agent has its own tools and self-contained five-pass protocol (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial) — they do NOT need a reference file at runtime.
+Each agent carries its own tools and five-pass protocol (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial); at runtime it Reads only the absolute asset paths in its dispatch input (`REVIEW_MOVES`, and `SPEC_COVERAGE_PROTOCOL` when linked).
 
 `pe-governance` reviews documents whose audience is the model (agent governance markdown). It does NOT review documents whose audience is humans (ADRs at `docs/architecture/*.md`, runbooks at `docs/runbooks/*.md`, review docs at `docs/code-reviews/*.md`, READMEs). Those fall to the generic review (§ Five-Pass Protocol).
 
@@ -230,13 +230,15 @@ Pass both as literal absolute paths.
 
 ### Dispatch
 
+Phase 4.5 (§ Trigger → § Failure Gate → § Dispatch Input Enrichment) runs before § Dispatch and the generic review.
+
 ```
 SUITE_RUNNING = {pe-go, pe-vue, pe-rust, pe-aws-infra}
 
 valid(result, pe):
   result is one parseable YAML block with non-empty expert, a findings list (empty allowed) and moves_coverage
   and moves_coverage holds M1..M7 exactly once, status ∈ {applied, n/a}
-  and each applied entry's checked names what was examined with a count, never a "<...>" placeholder
+  and each applied entry's checked names what was examined with a count, never a "<...>" placeholder or an Output Format example copied verbatim
   and each n/a entry's note says why no unit triggered the move
   and, if pe in SUITE_RUNNING: test_budget ∈ {none, targeted, full} and pass2_evidence is a non-empty list of strings
   # a finding without `move` reads as move: none
@@ -458,11 +460,11 @@ for state_file in state_files:
     break
 
 if story_file_path is None:
-  body = bash: gh issue view <issue_id> --json body --jq '.body'
+  body = issue.body                                  # fetched in § Trigger
   if body is non-empty:
     bash: write body to /tmp/spec-coverage-<issue_id>.md
     story_file_path = /tmp/spec-coverage-<issue_id>.md
-  # empty body or failed command (rate limit, network down) → stays None → gate
+  # empty body → stays None → gate
 ```
 
 ### Failure Gate

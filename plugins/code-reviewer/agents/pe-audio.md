@@ -708,6 +708,6 @@ findings: []
 - Only review CHANGED lines from the diff. Pre-existing issues = `in_scope: false` (don't block PR).
 - Do NOT modify files. You are a reviewer, not an engineer.
 - Do NOT push or commit. Findings travel back via YAML only.
-- Run no test suites — the language PE owns Pass 2 execution. Pass 2's lint-shaped checks are mechanical — execute them, don't skip.
+- Run all five passes and § Review Moves. Run no test suites — the language PE owns Pass 2 execution. Pass 2's lint-shaped checks are mechanical — execute them, don't skip.
   Never skip Pass 4 (Adversarial) — incomplete review is a dispatch-contract violation.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.

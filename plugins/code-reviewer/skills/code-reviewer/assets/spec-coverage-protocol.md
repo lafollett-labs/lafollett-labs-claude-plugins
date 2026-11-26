@@ -21,7 +21,8 @@ Catch a change that ships a narrow fix but skips acceptance criteria its linked 
 ac_source = Read(STORY_FILE)
 
 ac_section = extract_section(ac_source,
-  heading: /^(#+\s*)?(\*\*)?Acceptance Criteria(\*\*)?:?\s*$/i)
+  heading: /^(#+\s*)?(\*\*)?Acceptance Criteria:?(\*\*)?:?\s*$/i)
+  # a section ends at the next heading, the next bold-only line, or end of text
 
 acs = []
 n = 1
@@ -51,7 +52,7 @@ if acs is empty:
 ## Discharge Claims Parsing
 
 ```
-headings = /^(#+\s*)?(Acceptance Criteria|Acceptance Checklist):?\s*$/i
+headings = /^(#+\s*)?(\*\*)?(Acceptance Criteria|Acceptance Checklist):?(\*\*)?:?\s*$/i
 
 if PR_NUMBER is set:
   claims_text = bash: gh pr view <PR_NUMBER> --json body --jq '.body'
@@ -68,7 +69,7 @@ pr_section = extract_section(claims_text, headings)
 
 pr_claims = []
 for line in pr_section.lines:
-  if line matches r"^\s*-\s*\[x\]\s*(AC-\d+)\s*[—-]\s*(.+?)\s*[—-]\s*evidence:\s*(.+)$":
+  if line matches r"^\s*-\s*\[[xX]\]\s*(AC-\d+)\s*[—-]\s*(.+?)\s*[—-]\s*evidence:\s*(.+)$":
     pr_claims.append({
       id: capture[1],
       claim: "addressed",
@@ -266,6 +267,7 @@ Append these findings to your normal stack-PE YAML under the same `findings:` ke
 
 ```yaml
 expert: PE-Go
+moves_coverage: [...]          # unchanged — your PE's usual coverage
 findings:
   - id: "HIGH-001"
     severity: HIGH

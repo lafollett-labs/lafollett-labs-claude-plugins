@@ -89,6 +89,7 @@ structural_check:
     - skill: Phase 1 (entry conditions), input/output contracts, exit conditions
     - CLAUDE.md / AGENTS.md: project description, Stack Map (if code-reviewer plugin used)
       exempt: a CLAUDE.md whose every non-blank line is `@AGENTS.md` or `@./AGENTS.md`
+    - skill asset / reference: none, and no frontmatter; check it against the SKILL.md or agent that Reads it
   - Frontmatter complete:
     - agent: name, description, tools, model
     - skill: name, description
