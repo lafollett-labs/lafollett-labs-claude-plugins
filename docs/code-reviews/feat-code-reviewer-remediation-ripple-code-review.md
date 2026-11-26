@@ -1,6 +1,6 @@
 # Code Review: feat-code-reviewer-remediation-ripple
 
-**Verdict:** ⚠️ CHANGES REQUESTED
+**Verdict:** ✅ APPROVED
 
 | | |
 | - | - |
@@ -154,8 +154,80 @@ That contradicts the Verdict Logic, which says LOW and INFO are awareness only, 
 
 ## Merge Eligibility
 
-**Locked to SHA:** `3d8e18d6344081b28cbfec8dc4b0b7422148b96e`
-**Status:** ⚠️ Not mergeable — CHANGES REQUESTED.
+**Locked to SHA:** `83351e353fc37ac41240a3fe7c90f879c8658dc2`
+**Status:** ✅ Mergeable IF `git rev-parse HEAD == 83351e353fc37ac41240a3fe7c90f879c8658dc2`. Any commit after this SHA invalidates this round and requires re-review (`/code-reviewer` again before merge).
+
+---
+
+## Review Round 2
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer` 2.13.0) |
+| **Reviewed SHA** | `83351e353fc37ac41240a3fe7c90f879c8658dc2` |
+| **Date** | 2026-11-26 |
+| **Fix cascade** | 4 / 7 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 9 spot-checked |
+
+### Summary
+
+Round 2 reviewed the round-1 fix (`3d8e18d..83351e3`) against 9 ripple receipts. All 16 round-1 findings are RESOLVED. The 7 new findings are LOW or INFO. Four were caused by round-1 fixes, and the spot-check caught where the receipts drifted: the receipt-shape receipt counted 8 lines that lack the new `; kept` clause, and the gating receipt left out 5 lines it should have kept.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-Governance (skill + assets) | none | lint-shaped checks; `§` refs resolve; Finding Keys classifier × 6 inputs; receipts absent / none / present / stale |
+| PE-Governance (agents) | none | lint-shaped checks; md5 of 5 synced blocks (Inputs ×7, Review Moves paragraph ×7, Calibration Anchor ×6, scope comment ×7, probes frame ×7) |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-Governance (skill + assets) | 9 receipts spot-checked; 11 fix-diff hunks grepped; 16 round-1 findings checked | receipt lifecycle × 3 cases; ids across rounds 2→3 and a post-approval round | classifier × 6 inputs; pre-flight × 3 verdicts; receipts × 4 states | 3 guards: sha filter, spot-check count, `valid()` enum | 3 paths: receipts dropped by the sha filter, PRIOR REVIEW missing, no RIPPLE RECEIPTS line | 6 YAML examples vs `valid()` (1 mixes shapes) | 7 CHANGELOG claims; 2 README claims; 3 `§` refs |
+| PE-Governance (agents) | 6 receipts spot-checked; 5 synced blocks md5-identical | `introduced_by` gate vs round state in 7 PE workflows | Inputs bullet × 4 receipt shapes; example blocks × 2 shapes | FIX DIFF gate vs `valid()` round gate; MISSING rule; repo-root rule | n/a — the fix diff adds no command, call or read to the agent files | 12 example findings vs the new keys (3 mix shapes) | 4 claims |
+| Primary | 7 changed rules grepped across all non-review markdown before dispatch (0 stale) | n/a — human docs hold no state | n/a — no branch or parser | n/a — no guard | n/a — no call | n/a — no test | versions 2.14.0 / 1.34.0 unchanged since round 1 |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 5 | 0 |
+| ℹ️ INFO | 2 | 0 |
+
+### In Scope Findings
+
+#### 🟢 LOW findings
+
+| ID | Move | Introduced by | Finding | Location | Siblings |
+| - | - | - | - | - | - |
+| LOW-001 | M1 | LOW-008 | The synced PE "Ripple receipts" Inputs bullet gives the receipt shape without the `; kept <path:line> — <why>` clause the fix added (both PE reviews) | `agents/pe-governance.md:23` | the bullet in the other 6 PEs, `plugins/code-reviewer/README.md:103` |
+| LOW-002 | M4 | MEDIUM-003 | The receipt filter `sha == reviewed_sha` is a literal equality: a 7-char receipt SHA fails it, and the drop is silent | `SKILL.md:291` | `SKILL.md:753`, `:572`, `summary-report-template.md:157`, `CHANGELOG.md:20` |
+| LOW-003 | M4 | missed | The spot-check makes a count mismatch the finding, so an aligned restatement a receipt counted differently gets flagged | `assets/review-moves.md:93` | none |
+| LOW-004 | M6 | missed | Example result blocks put a finding with `introduced_by` beside one without it, a shape `valid()` rejects from round 2 | `SKILL.md:772` | `agents/pe-governance.md:544`, `agents/pe-go.md:766` |
+| LOW-005 | M7 | missed | The READMEs say every round-2 finding names the prior fix that caused it; most carry another enum value | `skills/code-reviewer/README.md:10` | `plugins/code-reviewer/README.md:103` |
+
+#### ℹ️ INFO
+
+| ID | Move | Introduced by | Finding | Location |
+| - | - | - | - | - |
+| INFO-001 | M7 | LOW-002 | CHANGELOG omits the Pass 4 severity-block change in the 6 synced PEs | `CHANGELOG.md:24` |
+| INFO-002 | M1 | LOW-001 | The gating receipt's kept list omits 5 round-gated lines that are correct as written; receipt only, no file change | `SKILL.md:247` |
+
+### Action Items
+
+#### Consider
+- [ ] LOW-001: fix `agents/pe-governance.md:23` + 7 siblings
+- [ ] LOW-002: fix `SKILL.md:291` + 4 siblings
+- [ ] LOW-003: fix `assets/review-moves.md:93` + 0 siblings
+- [ ] LOW-004: fix `SKILL.md:772` + 2 siblings
+- [ ] LOW-005: fix `skills/code-reviewer/README.md:10` + 1 sibling
+- [ ] INFO-001: fix `CHANGELOG.md:24` + 0 siblings
 
 ---
 
