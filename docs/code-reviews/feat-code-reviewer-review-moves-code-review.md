@@ -179,4 +179,77 @@ Eleven reference docs that SKILL.md files load at runtime matched no PE.
 
 ---
 
+## Review Round 2
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer`) |
+| **Reviewed SHA** | `bd2665dcc67d8520aba2f6af4098e4abbf4d7154` |
+| **Date** | 2026-11-26 |
+
+### Summary
+
+Every round-1 in-scope finding has been verified as resolved at HEAD. Both PE dispatches read the branch's pe-governance definition, not the cached copy. Checks confirmed the fixes:
+- the shared paragraph is hash-identical across all 7 PEs;
+- the governance glob matches all 16 skill asset and reference files;
+- every probe row has the right number of pipes;
+- no added line names a private repository, path or PR number.
+
+The round found no CRITICAL, HIGH or MEDIUM issues, so the verdict is APPROVED. It did find 7 LOW and 3 INFO, mostly siblings of round-1 fixes. All of them are fixed in `56a56df`. That commit invalidates this lock, so round 3 reviews it.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-Governance (skill + assets) | none | lint-shaped checks; AC heading regex run under python `re` against 8 inputs; `--jq` label extraction run under jq |
+| PE-Governance (agents) | none | lint-shaped checks; paragraph hash ×7; pipe count per probe row; `git ls-files ':(glob)'` on the governance globs |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-Governance (skill + assets) | 4 fix contracts → 2 predicate copies, 5 glob restatements, 3 AC siblings, 2 template rows | Phase 4.5 order vs dispatch (1 gap); re-ping → MISSING; 2 deploy orders | 8 AC headings; empty `generic_files`; empty issue body; 3 server layouts | `server_side` 3+3 inputs; AC regex 8 inputs (1 miss); `valid()` 2 edge inputs | 4 paths: asset Read, Trigger fetch, second body fetch, Primary coverage | 5 YAML examples vs `valid()` | 7 facts run or read (jq, python `re`, description length 838) |
+| PE-Governance (agents) | paragraph and workflow line ×7; move names; glob ×4 + CHANGELOG; pass-count wording in 7 intros, 7 Constraints | move ordering ×7; 2 deploy orders | absent vs unreadable `REVIEW_MOVES`; pe-audio with zero audio units | 11 FIX DIFF hunks; `valid()` vs 14 example strings (1 miss); 7 tables pipe-counted | 3 paths: asset absent, unreadable, coverage omitted | 14 coverage blocks vs `valid()`; 9 move tags | 5 facts (BSD grep `\d` run; GFM pipe escape; CHANGELOG claim vs 7 files) |
+| Primary | CHANGELOG, CONTRIBUTING, 3 READMEs vs the fixed contracts (1 drift: init-project README) | n/a — human docs and manifests hold no state | n/a — no branch, parser or limit | n/a — no guard | n/a — no call that can fail | n/a — no test added or changed | version fields 2.13.0 / 1.33.0 vs CHANGELOG |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 7 | 0 |
+| ℹ️ INFO | 3 | 0 |
+
+### In Scope Findings
+
+| ID | Move | Finding | Location | Disposition |
+| - | - | - | - | - |
+| LOW-001 | M4 | AC heading regex rejected `**Acceptance Criteria:**` (colon inside bold); a bold heading's section had no end | `assets/spec-coverage-protocol.md:24` | fixed |
+| LOW-002 | M1 | The claims heading and `[x]` claim regex were not widened along with the AC parser | `assets/spec-coverage-protocol.md:54` | fixed |
+| LOW-003 | M2 | The generic Spec step depended on Phase 4.5, which was never ordered before dispatch | `SKILL.md:207` | fixed: ordering line in § Dispatch |
+| LOW-004 | M1 | "PEs need no reference file at runtime" contradicted `REVIEW_MOVES`, and CONTRIBUTING had no exception (agents INFO-002 merged here) | `SKILL.md:142`, `CONTRIBUTING.md:33` | fixed |
+| LOW-005 | M4 | A verbatim copy of the shared example `checked` passed `valid()` | `agents/pe-go.md:747` | fixed: `valid()` rejects a copied example |
+| LOW-006 | M1 | pe-audio Constraints lacked "five passes and § Review Moves", so the CHANGELOG claim was false for it | `agents/pe-audio.md:711` | fixed |
+| LOW-007 | M1 | init-project README still named `api/` dirs and an unconditional `server/` | `skills/init-project/README.md:14` | fixed |
+| INFO-001 | M1 | pe-governance structural_check had no entry for skill assets or references | `agents/pe-governance.md:86` | fixed |
+| INFO-002 | M5 | Story File Resolution re-fetched the body the Trigger already held | `SKILL.md:461` | fixed: reuses `issue.body` |
+| INFO-003 | M6 | The Spec Coverage YAML example lacked `moves_coverage` | `assets/spec-coverage-protocol.md:267` | fixed |
+
+### Action Items
+
+#### Must Fix (blocks merge)
+- [x] none
+
+#### Should Fix
+- [x] none
+
+#### Consider
+- [x] LOW-001 – LOW-007, INFO-001 – INFO-003 (all applied in `56a56df`)
+
+---
+
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
