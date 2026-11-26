@@ -11,7 +11,8 @@ The seven built-in PE sub-agents — `pe-go`, `pe-vue`, `pe-rust`, `pe-aws-infra
 2. **Maps directories** — which paths belong to which stack
 3. **Finds test commands** — reads `package.json` scripts, `Makefile` targets, or uses stack defaults
 4. **Writes Stack Map to the instruction file** — single source of truth for path → stack → PE → test command. That is `AGENTS.md` when the repo has one and its `CLAUDE.md` is absent or only imports it (`@AGENTS.md` or `@./AGENTS.md`); otherwise `CLAUDE.md`. An existing Stack Map is updated where it already lives
-5. **Optionally writes `.code-reviewer.yml`** — machine-readable equivalent for the parent skill
+5. **Warns on misrouted backend code** — a Stack Map row that sends server-side code (Node HTTP servers, database clients or ORMs, `backend/`, `functions/`, `lambda/` or non-Nuxt `server/` dirs) to `pe-vue` gets a warning and a proposed `Generic` row for its test command
+6. **Optionally writes `.code-reviewer.yml`** — machine-readable equivalent for the parent skill
 
 ## Usage
 
@@ -30,7 +31,7 @@ Claude: [Scans repo, writes Stack Map to AGENTS.md or CLAUDE.md, prints summary]
 Go, Vue/Nuxt, React, Svelte, Angular, Astro, Next.js, AWS CDK, CDKTF,
 Terraform, Rust, Python, Java, C#/.NET, Docker, GitHub Actions, GitLab CI.
 
-Unsupported stacks fall back to generic three-pass review without
+Unsupported stacks fall back to the generic review without
 stack-specific test commands.
 
 ---

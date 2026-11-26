@@ -11,7 +11,7 @@ See [README.md](./README.md) for the full plugin list and repository tree.
 .claude-plugin/
   marketplace.json          # Marketplace registry
 plugins/
-  code-reviewer/            # PE-powered four-pass code reviews
+  code-reviewer/            # PE-powered five-pass code reviews + review moves
   context-handoff/          # /handoff-context + /resume-context
   issue-manager/            # GitHub Issue management
   session-analyzer/         # JSONL session analysis

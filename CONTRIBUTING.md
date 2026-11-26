@@ -30,7 +30,7 @@ These plugins are intended to work for any project that installs them. When addi
 
 Sub-agents (e.g., the PE reviewers in `code-reviewer/agents/*.md`) load their full agent definition file into context at dispatch time. They do NOT automatically inherit `SKILL.md` content, plugin paths, or `${CLAUDE_PLUGIN_ROOT}` substitution in arbitrary markdown body prose. Treat each sub-agent file as a self-contained unit:
 
-- Keep all instructions a sub-agent needs to execute its task INLINE in its agent file
+- Keep all instructions a sub-agent needs to execute its task INLINE in its agent file, except skill assets the dispatcher passes as absolute paths (`REVIEW_MOVES`, `SPEC_COVERAGE_PROTOCOL`)
 - Do NOT reference plugin assets via relative paths from sub-agent prose — the path resolution is unreliable from sub-agent context
 - If multiple sub-agents share content (e.g., the six production PEs share the Pass 4 Common Adversarial Lenses + Calibration Anchor + Apply Protocol), inline the shared block in each agent file and document the sync convention below
 
@@ -46,6 +46,10 @@ Stack-flavored examples for `silence_check` (and any stack-specific lenses) diff
 The § Test Budget `match` block is identical across `pe-go.md`, `pe-vue.md`, `pe-rust.md` and `pe-aws-infra.md`; only the static-check, narrow-run and `always:` lines vary by stack. Edit all four together.
 
 `pe-devtools.md` runs a different lens set (single-operator local threat model) and is NOT part of this sync.
+
+All seven PE files, `pe-devtools.md` included, carry an identical § Review Moves paragraph; only its Probes table varies by stack. The move procedures live once, in `skills/code-reviewer/assets/review-moves.md`, which the skill passes to each PE as an absolute `REVIEW_MOVES` path. Edit the paragraph in all seven files together, and keep the M1–M7 names in the asset, the probe tables, `SKILL.md` and the report template identical.
+
+`server_side(f)` is identical in `skills/code-reviewer/SKILL.md` § PE Routing and `skills/init-project/SKILL.md` § 5a.1. Edit both together.
 
 ## Reporting Issues
 

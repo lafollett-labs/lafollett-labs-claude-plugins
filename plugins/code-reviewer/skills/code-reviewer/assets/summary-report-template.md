@@ -27,14 +27,22 @@
 
 | PE | Budget | Pass 2 evidence |
 | - | - | - |
-| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "no YAML after re-ping"} |
+| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "<failed check> after re-ping"} |
+
+---
+
+## Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| {PE or Primary} | {checked, or "n/a — note", or MISSING} | … | … | … | … | … | … |
 
 ---
 
 ## Findings Overview
 
 | Severity | In Scope | Out of Scope |
-| -------- | -------- | ------------ |
+| - | - | - |
 | 🔴 CRITICAL | 0 | 0 |
 | 🟠 HIGH | 0 | 0 |
 | 🟡 MEDIUM | 0 | 0 |
@@ -49,7 +57,7 @@
 
 ### 🔴 CRITICAL-001: {Title}
 
-**Domains:** [Security]
+**Domains:** [Security] · **Move:** {M1..M7 | none}
 **Location:** `{src/full/path/from/repo/root}:{line}`
 
 {Description of the issue}
@@ -61,7 +69,7 @@
 
 ### 🟠 HIGH-001: {Title}
 
-**Domains:** [Architecture, Code Quality]
+**Domains:** [Architecture, Code Quality] · **Move:** {M1..M7 | none}
 **Location:** `{src/full/path/from/repo/root}:{line}`
 
 {Description}
@@ -73,7 +81,7 @@
 
 ### 🟡 MEDIUM-001: {Title}
 
-**Domains:** [{Domain}]
+**Domains:** [{Domain}] · **Move:** {M1..M7 | none}
 **Location:** `{src/full/path/from/repo/root}:{line}`
 
 {Description and recommendation}
@@ -85,7 +93,7 @@
 -Pre-existing issues not introduced by this PR - log to backlog, don't block-
 
 | Severity | Issue | Location |
-| -------- | ----- | -------- |
+| - | - | - |
 | 🟡 MEDIUM | {Pre-existing issue description} | `{file}:{line}` |
 | 🟢 LOW | {Pre-existing issue description} | `{file}:{line}` |
 
@@ -111,7 +119,7 @@
 ## Files Reviewed
 
 | File | Findings |
-| ---- | -------- |
+| - | - |
 | `{path/to/file}` | {count} |
 | `{path/to/file}` | {count} |
 
@@ -151,12 +159,18 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 
 | PE | Budget | Pass 2 evidence |
 | - | - | - |
-| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "no YAML after re-ping"} |
+| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "<failed check> after re-ping"} |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| {PE or Primary} | {checked, or "n/a — note", or MISSING} | … | … | … | … | … | … |
 
 ### Findings Overview
 
 | Severity | In Scope | Out of Scope |
-| -------- | -------- | ------------ |
+| - | - | - |
 | 🔴 CRITICAL | 0 | 0 |
 | 🟠 HIGH | 0 | 0 |
 | 🟡 MEDIUM | 0 | 0 |

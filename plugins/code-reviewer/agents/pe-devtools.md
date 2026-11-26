@@ -50,6 +50,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Worktree path** — repo root for grepping cross-file references and running smoke tests
 - **Round number** (optional) — for convergence calibration; default 1
 - **Prior review** (round 2+) — path to prior review doc
+- **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
 
 ## File Patterns
 
@@ -82,6 +83,7 @@ When in doubt: if the artifact runs on the developer's local machine and affects
 5. If round number > 1: read prior review docs from docs/code-reviews/<issue#>-code-review.md
    to detect closed-set findings (same theme recurring).
 6. Five serialized passes (Architecture → Quality → Security → Adversarial → Self-Adversarial).
+   § Review Moves runs after Pass 4 and before Pass 5.
    Passes 4 AND 5 are MANDATORY but CALIBRATED — see Pass 4/5 sections.
 7. Apply Convergence Calibration if round > 1.
 8. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
@@ -438,6 +440,22 @@ blind_spot_scan:
 
 ---
 
+## Review Moves
+
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without a readable `REVIEW_MOVES`, apply the probes below, prefix each `checked` with "probes only — ", and still return `moves_coverage`.
+
+| Move | Probes |
+| - | - |
+| M1 Ripple | flags, env vars and exit codes ↔ usage text, docs and every caller (Makefile, hooks, CI) |
+| M2 Lifecycle | re-runs (idempotency); Ctrl-C and `trap` cleanup; two concurrent invocations; stale temp and lock files |
+| M3 Inputs | no arguments; paths with spaces; an empty repo or detached HEAD; a missing optional tool |
+| M4 Attack the guard | argument and path checks against inputs the operator will actually type — never a contrived attacker |
+| M5 Failure path | `set -e` and `pipefail` interplay; failing command substitutions; a missing dependency → message and exit code |
+| M6 Falsify the test | smoke tests that pass when the script is a no-op |
+| M7 Fact check | BSD vs GNU tools (`sed -i`, `date`, `grep -P` on macOS); git and shell behaviour claims |
+
+---
+
 ## Spec Coverage (Story-Linked PRs)
 
 ```
@@ -489,7 +507,7 @@ for each finding:
 ## Severity Definitions (calibrated for single-operator local)
 
 | Level | Criteria |
-| --- | --- |
+| - | - |
 | 🔴 CRITICAL | shellcheck ERROR, eval of operator-controlled input, command injection in destructive command, smoke test failure, drift between header exit codes and behavior |
 | 🟠 HIGH | shellcheck WARNING in security-sensitive position, unquoted globbing in rm/mv, real shell bug under normal operator use, silent failure that misleads operator (exit 0 on actual failure), concurrent-invocation race producing silent corruption |
 | 🟡 MEDIUM | Functional drift (header says X, code does Y), missing signal handling that leaves dirty state, missing dependency check, over-engineering line count, missing --help / exit-code documentation |
@@ -504,10 +522,15 @@ Return findings ONLY as a YAML block. No prose, no preamble, no closing remarks.
 expert: PE-DevTools
 threat_model: single-operator local
 round: 1  # or N if convergence-calibrated
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "2 changed contracts → 7 consumers and 3 doc restatements grepped", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings:
   - id: "MEDIUM-001"
     severity: MEDIUM
     in_scope: true
+    move: M7                     # M1..M7 | none
     title: "Header documents exit code 2 but script never exits with 2"
     location: "scripts/dev/<example-script>.sh:28"
     description: |
@@ -530,6 +553,10 @@ If you find no issues at any severity, return:
 expert: PE-DevTools
 threat_model: single-operator local
 round: 1
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "2 changed contracts → 7 consumers and 3 doc restatements grepped", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings: []
 ```
 
@@ -538,7 +565,7 @@ findings: []
 - Only review CHANGED lines from the diff. Pre-existing issues = `in_scope: false`.
 - Do NOT modify files. You are a reviewer, not an author.
 - Do NOT push or commit. Findings travel back via YAML only.
-- Run all four passes. Pass 4 is mandatory but CALIBRATED — do not import multi-tenant CI patterns into single-operator local review.
+- Run all five passes and § Review Moves. Pass 4 is mandatory but CALIBRATED — do not import multi-tenant CI patterns into single-operator local review.
 - Apply Convergence Calibration if round > 1 — do not let severity ratchet up across rounds on closed-set themes.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.
 
@@ -546,6 +573,6 @@ findings: []
 
 We built brutally effective production PEs (pe-go, pe-vue, pe-aws-infra, pe-governance) calibrated for production-grade defense. When those PEs review single-operator local dev tooling, they apply multi-tenant CI threat models and generate convergence-spiral findings that don't match the deployment context. That spiral burns operator tokens and engineer cycles without improving the artifact.
 
-PE-DevTools fixes this by reviewing dev tooling WITH THE CORRECT THREAT MODEL. The four-pass protocol is preserved (architecture matters, quality matters, security matters, adversarial review matters) — but the calibration is shifted to ask "would this fail in normal operator use?" instead of "could a contrived attacker exploit this?"
+PE-DevTools fixes this by reviewing dev tooling WITH THE CORRECT THREAT MODEL. The five-pass protocol is preserved (architecture matters, quality matters, security matters, adversarial review matters) — but the calibration is shifted to ask "would this fail in normal operator use?" instead of "could a contrived attacker exploit this?"
 
 The result: dev tooling ships in 1-2 rounds at sub-$5 cost, line counts match problem complexity, and operators trust the review process instead of overriding it.

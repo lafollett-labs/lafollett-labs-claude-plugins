@@ -1,4 +1,4 @@
-# Spec Coverage Protocol (Story-Linked Pass)
+# Spec Coverage Protocol (Linked-Issue Pass)
 
 You execute this protocol when your dispatch input includes:
 
@@ -13,20 +13,25 @@ If `STORY_LINKED` is absent or false: do not execute this protocol. Return only 
 
 ## Goal
 
-Catch the failure mode where a PR ships a narrow code change but skips acceptance criteria the linked story explicitly mandates. Reference incident: Corebizy Phase 5/6 of Story #1435 shipped without integrating the Story #1443 hardening payload it was contracted to ship — narrow code change passed all four reviewer passes; story acceptance criteria were never verified.
+Catch a change that ships a narrow fix but skips acceptance criteria its linked issue or story mandates. `STORY_FILE` is the linked story, task, bug or issue body.
 
 ## Acceptance Criteria Parsing
 
 ```
+extract_section(text, heading):          # every call below
+  start after the first line matching heading
+  if that line starts with "#": end at the next heading with the same or fewer "#", else at end of text
+  else:                         end at the next "#" heading or bold-only line, else at end of text
+
 ac_source = Read(STORY_FILE)
 
 ac_section = extract_section(ac_source,
-  headings: ["Acceptance Criteria", "Acceptance criteria"])
+  heading: /^(#+\s*)?(\*\*)?Acceptance Criteria:?(\*\*)?:?\s*$/i)
 
 acs = []
 n = 1
 for line in ac_section.lines:
-  if line matches r"^\s*-\s*\[[ x]\]\s*(.+)$":
+  if line matches r"^\s*-\s*\[[ xX]\]\s*(.+)$":
     acs.append({id: "AC-" + n, text: capture[1], shape: "checkbox"})
     n += 1
   elif line matches r"^\s*\d+\.\s*(.+)$":
@@ -37,21 +42,21 @@ if acs is empty:
   flag CHANGES_REQUESTED:
     severity: MEDIUM
     id: "SPEC-NO-AC"
-    title: "Story file has no parseable Acceptance Criteria section"
+    title: "Linked issue or story has no parseable Acceptance Criteria section"
     location: <STORY_FILE>
     description: |
-      Could not extract any acceptance criteria from the linked story.
+      Could not extract any acceptance criteria from the linked issue or story.
       Either the story is missing an "Acceptance Criteria" section, or the
       section uses an unsupported shape (not checkbox / not numbered).
     recommendation: |
-      Update the story file to include an "## Acceptance Criteria" section
+      Update the story file, or for a GitHub issue its body, to include an "## Acceptance Criteria" section
       with either `- [ ]` checklist items or numbered (`1. ...`) items.
 ```
 
 ## Discharge Claims Parsing
 
 ```
-headings = /^(#+\s*)?(Acceptance Criteria|Acceptance Checklist):?\s*$/i
+headings = /^(#+\s*)?(\*\*)?(Acceptance Criteria|Acceptance Checklist):?(\*\*)?:?\s*$/i
 
 if PR_NUMBER is set:
   claims_text = bash: gh pr view <PR_NUMBER> --json body --jq '.body'
@@ -68,7 +73,7 @@ pr_section = extract_section(claims_text, headings)
 
 pr_claims = []
 for line in pr_section.lines:
-  if line matches r"^\s*-\s*\[x\]\s*(AC-\d+)\s*[—-]\s*(.+?)\s*[—-]\s*evidence:\s*(.+)$":
+  if line matches r"^\s*-\s*\[[xX]\]\s*(AC-\d+)\s*[—-]\s*(.+?)\s*[—-]\s*evidence:\s*(.+)$":
     pr_claims.append({
       id: capture[1],
       claim: "addressed",
@@ -99,7 +104,7 @@ for ac in acs:
       severity: HIGH
       id: "SPEC-MISSING-" + ac.id
       in_scope: true
-      title: "Story AC " + ac.id + " not addressed in " + claims_loc
+      title: "Linked AC " + ac.id + " not addressed in " + claims_loc
       location: <STORY_FILE>
       description: |
         Linked story declares acceptance criterion {ac.id}:
@@ -223,7 +228,7 @@ verify_local(ac, followup, file):
   if file is None:                                     invalid(ac, followup, "resolves to no story file")
   elif realpath(file) == realpath(STORY_FILE):         invalid(ac, followup, "is the story under review")
   elif code is None:                                   invalid(ac, followup, "is not a story — it has no `**Code:** <CODE>` line")
-  elif `grep -rqE '^\s*-\s*\[x\]\s*(\*\*|\[)?<code>\b' docs/epics --include='*.md'` succeeds:
+  elif `grep -rqE '^\s*-\s*\[[xX]\]\s*(\*\*|\[)?<code>\b' docs/epics --include='*.md'` succeeds:
     closed(ac, followup, "is checked off as done in its epic")
 
 invalid(ac, target, why):
@@ -266,6 +271,7 @@ Append these findings to your normal stack-PE YAML under the same `findings:` ke
 
 ```yaml
 expert: PE-Go
+moves_coverage: [...]          # unchanged — your PE's usual coverage
 findings:
   - id: "HIGH-001"
     severity: HIGH
@@ -281,8 +287,8 @@ findings:
   - id: "SPEC-MISSING-AC-3"
     severity: HIGH
     in_scope: true
-    title: "Story AC-3 not addressed in PR description checklist"
-    location: "docs/epics/020-crew-system-architecture/07-Story-...-Hardening.md"
+    title: "Linked AC-3 not addressed in PR description checklist"
+    location: "docs/epics/01-example-epic/03-Story-example.md"
     description: |
       Linked story declares acceptance criterion AC-3: "Pseudocode for the
       composition algorithm present in the ADR, deterministic, with inputs
@@ -295,7 +301,7 @@ findings:
 ## Severity Discipline (Spec Coverage)
 
 | Finding ID prefix | Severity | Verdict impact |
-| --- | --- | --- |
+| - | - | - |
 | `SPEC-MISSING-*` | HIGH | BLOCKING |
 | `SPEC-EVIDENCE-MISSING-*` | HIGH | BLOCKING |
 | `SPEC-DEFER-INVALID-*` | HIGH | BLOCKING |
@@ -303,7 +309,7 @@ findings:
 | `SPEC-DEFER-UNVERIFIED-*` | INFO | Awareness (does NOT block) |
 | `SPEC-WEAK-EVIDENCE-*` | MEDIUM | CHANGES REQUESTED |
 | `SPEC-FORMAT-*` | LOW | Awareness (does NOT block) |
-| `SPEC-NO-AC` | MEDIUM | CHANGES REQUESTED (story file issue) |
+| `SPEC-NO-AC` | MEDIUM | CHANGES REQUESTED (linked issue or story) |
 
 ## Constraints
 
