@@ -1,6 +1,6 @@
 # Code Review: feat-github-actions-release
 
-**Verdict:** ⚠️ CHANGES REQUESTED
+**Verdict:** ✅ APPROVED (round 2)
 
 | | |
 | - | - |
@@ -222,8 +222,110 @@ None.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `e073e6aea8d46a955716b61d3fcc4adad78d7160`
-**Status:** ⚠️ Not mergeable: CHANGES REQUESTED. Remediate, then run `/code-reviewer` again.
+**Locked to SHA:** `7840f9dad5dfcf388cf3dc09bff919f8ad9ec882` (round 2)
+**Status:** ✅ Mergeable IF the branch head is `7840f9dad5dfcf388cf3dc09bff919f8ad9ec882` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
+
+---
+
+## Review Round 2
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer` 2.14.1) for Cali LaFollett |
+| **Reviewed SHA** | `7840f9dad5dfcf388cf3dc09bff919f8ad9ec882` |
+| **Date** | 2026-11-26 |
+| **Fix cascade** | 15 / 20 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 8 spot-checked |
+
+### Summary
+
+All 4 MEDIUM findings from round 1 are closed:
+- `manifests • skills` now waits on every other job.
+- Every release run dispatches CI.
+- pre-commit gives the scanner only the staged paths and added lines.
+- The hook uses CI's gitleaks flags.
+
+Each fix was checked against the pre-fix code: the new cases fail there (hooks 15, orchestrator 6, validator 7, engine 1).
+
+Round 2 found no CRITICAL, HIGH or MEDIUM. 15 of the 20 LOW and INFO findings are edge cases of round-1 fixes, so the set is converging. Notable ones:
+- The title gate can be skipped by a hand dispatch.
+- The validator still accepts some match-anything spellings and `[extend] path`.
+- The gate step itself has no test.
+- commit-msg skips `#` lines that `-m` keeps.
+
+CI was green on all 5 jobs at the reviewed SHA (run 45907086907).
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-AWS-Infra | none | none — TEST BUDGET none; scratch configs on real gitleaks 8.30.1, a ci.yml mutation and actionlint ran under M4/M6 |
+| PE-Governance | none | none |
+| PE-DevTools | lint-only | run-hooks-tests.sh 21/21; 15 mutants, 13 killed |
+| Primary | — | CI run 45907086907 at `7840f9d`: all 5 jobs green; the gate step listed every need as ok; 6 suites, hooks 21/21 on Ubuntu |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-AWS-Infra | 6 of 8 receipts spot-checked against their restatements, 0 disagree; 1 unreceipted rule; 2 fix siblings (LOW-001, LOW-005) | dispatch fail → rerun; main moving under an open release PR; API tag then local tag failing; look-alike vs a trailer-less real release; edited cancelling a run | gate step × 7 NEEDS shapes; check-pr `if:` × 5 sources; trailer regex vs sed; title gate 1 vs many commits | 12 scratch configs on real gitleaks (5 got through); title gate vs dispatch; required-check app pin; env-only expression inputs | create_tag, dispatch, auto-merge, wait timeout, gate jq, title engine | 2 unit + 3 integration + 10 shape cases fail when their fix is reverted; gate-step deletion survives the wiring tests (LOW-004) | skipped-required semantics; `cancelled()`; refs API with GITHUB_TOKEN; GH_REPO; repo settings; CI time vs wait; 1 UNVERIFIED |
+| PE-Governance | 9 prior findings + 1 out-of-scope all resolved; 1 receipt (8 restatements agree); 7 unreceipted rules grepped (1 drift) | bootstrap order of the CHANGELOG move; squash-subject source as the commit count changes | 10 PR shapes through the rule (1 gap) | 3 "CI fails" claims vs their guards (check-pr false clean without node) | pre-push line exit paths; unset `labs.denylistScan` | n/a — no test in the CLAUDE.md diff | 7 claims (COMMIT_OR_PR_TITLE, footer shape on 2 real squashes, marketplace major, per-plugin level, hooks, tree count, separators) |
+| PE-DevTools | 6 prior findings closed (each by suite + killed mutant); hook receipt spot-checked (1 overclaim); 3 unreceipted fix rules agree; pre-commit vs secret-scan.sh (1 guard missing) | temp files through hit/clean/early exit/Ctrl-C; amend; `commit -a` / `commit <path>`; `--no-verify` HEAD; unborn; concurrent commits | -m / -F / editor / -v; `core.commentChar`; renamed, deleted, non-ASCII paths; `~/` and `~user/`; no gitleaks; empty commit | 6 guards: `.gitleaksignore`, `--ignore-gitleaks-allow`, working-tree allow-list, awk header skip, `--diff-filter=d`, scissors + strip | gitleaks exits 0/3/126/1; git config 1 vs 128; scanner non-zero; mktemp | 21 checks; 15 mutants, 2 survive (LOW-012, LOW-013) | 9 claims (exit codes, hint, cleanup default, `~user`, BSD sed, CI parity, `/dev/null` comment, v8.19, header) |
+| Primary | 8 receipted rules vs CONTRIBUTING, README, changelog.d/README, CHANGELOG header: all agree | n/a — human docs hold no state | the local check command in a fork clone (INFO-006) | n/a — no guard in the human docs | n/a — human docs make no call | n/a — no test in the human docs | CONTRIBUTING "CI fails … non-conventional title" vs the title job + gate; README tree vs workflows |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 14 | 0 |
+| ℹ️ INFO | 6 | 0 |
+
+### In Scope Findings
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| LOW-001 | M4 | `.github/workflows/ci.yml:200` | MEDIUM-001 | A hand `workflow_dispatch` on a PR branch makes the required check green with the title gate skipped | `.github/workflows/ci.yml:10`, `.github/workflows/ci.yml:189`, `.github/workflows/ci.yml:212`, `CONTRIBUTING.md:20` |
+| LOW-002 | M4 | `scripts/ci/security/secret-scan.sh:51` | still-present | The validator still accepts match-anything regexes (`^\S*`, `^[\s\S]*`, `^(?:.)*`) and any stopword (e.g. `ghp_`), each clearing every secret in the named file | `scripts/ci/security/secret-scan.sh:47`, `scripts/ci/security/secret-scan.sh:24`, `.gitleaks.toml:3`, `.gitleaks.toml:7`, `scripts/ci/security/test/run-secret-scan-tests.sh:198`, `scripts/ci/security/test/run-secret-scan-tests.sh:199` |
+| LOW-003 | M4 | `scripts/ci/security/secret-scan.sh:42` | missed | `[extend] path` loads a second config the validator never reads; a legacy directory allow-list there clears secrets | `.gitleaks.toml:13`, `.gitleaks.toml:9`, `scripts/ci/security/secret-scan.sh:8` |
+| LOW-004 | M6 | `scripts/ci/security/test/run-secret-scan-tests.sh:209` | MEDIUM-001 | The wiring tests pass with the "Every other gate passed" step deleted; no test runs the gate logic | `.github/workflows/ci.yml:188`, `.github/workflows/ci.yml:33`, `.github/workflows/ci.yml:196` |
+| LOW-005 | M7 | `scripts/ci/release/run-release.sh:228` | LOW-006 | UNVERIFIED: the release/next force-push is still a GITHUB_TOKEN git push and may be refused after main gains a workflow change; no recovery is stated | `scripts/ci/release/run-release.sh:70`, `scripts/ci/release/run-release.sh:217` |
+| LOW-006 | M7 | `CLAUDE.md:48` | LOW-014 | A single-commit PR squashes under its commit subject, so `type!:` only in the title never reaches the engine; title and commit may disagree | `CLAUDE.md:32`, `CLAUDE.md:41`, `CLAUDE.md:44`, `.github/workflows/ci.yml:210`, `.github/workflows/ci.yml:241`, `.github/workflows/ci.yml:244`, `CONTRIBUTING.md:14`, `CONTRIBUTING.md:18`, `README.md:105` |
+| LOW-007 | M5 | `scripts/ci/check-pr.sh:32` | missed | Without node on PATH, check-pr reads both versions as `<unreadable>` and reports clean | `CLAUDE.md:33`, `CONTRIBUTING.md:21`, `scripts/ci/check-pr.sh:12` |
+| LOW-008 | M3 | `scripts/hooks/commit-msg:10` | LOW-004 | commit-msg strips `#` lines that `-m` / `-F` commits keep, so a term on such a line commits unscanned; the scissors pattern ignores `core.commentChar` | `scripts/hooks/commit-msg:2`, `scripts/hooks/commit-msg:3`, `scripts/ci/test/run-hooks-tests.sh:125` |
+| LOW-009 | M1 | `scripts/hooks/pre-commit:4` | MEDIUM-004 | The header says the gitleaks scan matches CI's, but the hook skips CI's allow-list shape check and reads the working-tree config | `scripts/hooks/pre-commit:17`, `scripts/ci/security/secret-scan.sh:8`, `scripts/ci/security/secret-scan.sh:28`, `.gitleaks.toml:9` |
+| LOW-010 | M3 | `scripts/hooks/pre-commit:34` | MEDIUM-003 | Staged paths reach the scanner octal-quoted (`core.quotePath`), so a non-ASCII term in a filename is missed | none |
+| LOW-011 | M5 | `scripts/hooks/pre-commit:39` | MEDIUM-003 | A denylist hit gives no usable location: the scanner's file:line names a deleted temp file | `scripts/hooks/pre-commit:38`, `scripts/hooks/pre-commit:40`, `scripts/hooks/commit-msg:11`, `scripts/hooks/commit-msg:12` |
+| LOW-012 | M6 | `scripts/ci/test/run-hooks-tests.sh:107` | LOW-003 | No test reaches commit-msg's `~` resolution or its missing-scanner message (pre-commit exits first) | `scripts/ci/test/run-hooks-tests.sh:109`, `scripts/hooks/commit-msg:5`, `scripts/hooks/commit-msg:7` |
+| LOW-013 | M6 | `scripts/ci/test/run-hooks-tests.sh:89` | LOW-001 | The gitleaks-failure stub exits 126; real config errors exit 1, so a mutant that again reads 1 as "secret" survives | `scripts/ci/test/run-hooks-tests.sh:92`, `scripts/hooks/pre-commit:17`, `scripts/hooks/pre-commit:21` |
+| LOW-014 | M1 | `scripts/ci/test/run-hooks-tests.sh:1` | new | The new suite is committed 100644; every sibling suite is 100755 | none |
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| INFO-001 | M2 | `scripts/ci/release/run-release.sh:114` | LOW-007 | A real release squash whose message was edited to drop the `Base:` trailer is skipped, and the next stamp bumps its plugins again | `scripts/ci/release/version-stamp.js:93`, `scripts/ci/release/version-stamp.js:147`, `scripts/ci/release/version-stamp.js:270` |
+| INFO-002 | M7 | `CLAUDE.md:27` | LOW-017 | The hooks line implies `core.hooksPath` alone runs the denylist scan; it also needs `labs.denylistScan` | `scripts/hooks/pre-commit:7`, `scripts/hooks/pre-commit:29`, `scripts/hooks/commit-msg:6`, `CONTRIBUTING.md:23` |
+| INFO-003 | none | `scripts/hooks/pre-commit:1` | new | Convergence signal: severity falling, round-2 hook findings are edge cases of round-1 fixes | none |
+| INFO-004 | M5 | `scripts/hooks/pre-commit:29` | LOW-003 | A `~user/` typo makes `git config --type=path` exit 128, which `\|\| true` reads as unset, so the scan turns off | `scripts/hooks/commit-msg:5` |
+| INFO-005 | M7 | `scripts/hooks/pre-commit:22` | LOW-001 | "it needs v8.19+" blames the version for a broken config too | none |
+| INFO-006 | M3 | `CLAUDE.md:33` | INFO-003 | In a fork, `origin/main` is the fork's main; a stale fork makes `check-pr.sh origin/main HEAD` blame upstream release bumps on the branch | `CONTRIBUTING.md:21` |
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+None.
+
+#### Should Fix
+
+None.
+
+#### Consider
+
+- [ ] LOW-001 … LOW-014 and INFO-001 … INFO-006: each at its location + the siblings listed above
 
 ---
 
