@@ -154,8 +154,8 @@ That contradicts the Verdict Logic, which says LOW and INFO are awareness only, 
 
 ## Merge Eligibility
 
-**Locked to SHA:** `83351e353fc37ac41240a3fe7c90f879c8658dc2`
-**Status:** ✅ Mergeable IF `git rev-parse HEAD == 83351e353fc37ac41240a3fe7c90f879c8658dc2`. Any commit after this SHA invalidates this round and requires re-review (`/code-reviewer` again before merge).
+**Locked to SHA:** `d5a87ca145b04ac9e977ebcd6e3ae7abf11d4c9e`
+**Status:** ✅ Mergeable IF `git rev-parse HEAD == d5a87ca145b04ac9e977ebcd6e3ae7abf11d4c9e`. Any commit after this SHA invalidates this round and requires re-review (`/code-reviewer` again before merge).
 
 ---
 
@@ -228,6 +228,72 @@ Round 2 reviewed the round-1 fix (`3d8e18d..83351e3`) against 9 ripple receipts.
 - [ ] LOW-004: fix `SKILL.md:772` + 2 siblings
 - [ ] LOW-005: fix `skills/code-reviewer/README.md:10` + 1 sibling
 - [ ] INFO-001: fix `CHANGELOG.md:24` + 0 siblings
+
+---
+
+## 🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval changes
+
+## Review Round 3
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer` 2.13.0) |
+| **Reviewed SHA** | `d5a87ca145b04ac9e977ebcd6e3ae7abf11d4c9e` |
+| **Date** | 2026-11-26 |
+| **Fix cascade** | 3 / 3 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 5 spot-checked |
+
+### Summary
+
+Round 3 reviewed the post-approval fix of the round-2 LOWs (`83351e3..d5a87ca`) against 5 ripple receipts. All 7 round-2 findings are RESOLVED. Three new findings, all LOW or INFO, each caused by a round-2 fix. Across three rounds the blocking count went 4 MEDIUM → 0 → 0. Round 3 is the cap, so these are deferred, not remediated.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-Governance (skill + assets) | none | lint-shaped checks; 39 `§` refs resolve; `git rev-parse` binding run with 7 inputs; example-key scan over 14 findings in 10 files |
+| PE-Governance (agents) | none | md5 of 4 synced blocks; receipt SHA token run with 9 inputs |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-Governance (skill + assets) | 5 receipts spot-checked; 3 fix-diff hunks grepped; 7 round-2 findings checked | receipt lifecycle rounds 1→3; 7 `introduced_by` ids vs round 2 | SHA filter × 7 inputs; spot-check × 3 receipt cases | 2 guards: rev-parse binding (2 bad inputs accepted), disagreement rule (0 bypasses) | 1 path: rev-parse on an unknown SHA fails closed | 14 example findings in 10 files (1 lacks the key) | 2 `git rev-parse` facts run; 1 CHANGELOG claim |
+| PE-Governance (agents) | 4 receipts spot-checked; 4 synced blocks md5-identical; 8 fix-diff hunks grepped | receipt written `@ HEAD` across 2 rounds; FIX DIFF gate vs `valid()` | Inputs bullet × 4 shapes; SHA token × 9 inputs | rev-parse filter × 9 inputs (3 refs accepted); disagreement rule | 1 call: rev-parse on an unknown SHA fails closed | 14 example findings vs the keys | 5 claims incl. rev-parse resolution (run) |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 2 | 0 |
+| ℹ️ INFO | 1 | 0 |
+
+### In Scope Findings
+
+#### 🟢 LOW findings
+
+| ID | Move | Introduced by | Finding | Location | Siblings |
+| - | - | - | - | - | - |
+| LOW-001 | M4 | LOW-002 | `git rev-parse <sha>` also resolves refs, so a receipt written `@ HEAD` or `@ <branch>` matches in every later round; the token also reaches a shell unvalidated (both PE reviews) | `SKILL.md:291` | AUTHOR RECEIPTS "at reviewed_sha" at `SKILL.md:296`, `:298` |
+| LOW-002 | M1 | LOW-005 | The CHANGELOG headline still says later rounds say "which fix caused each finding" | `CHANGELOG.md:11` | none |
+
+#### ℹ️ INFO
+
+| ID | Move | Introduced by | Finding | Location |
+| - | - | - | - | - |
+| INFO-001 | M6 | LOW-004 | The Spec Coverage example's stack finding is the only example without `introduced_by`; valid as a round-1 shape, and the example-keys receipt neither counted nor kept it (both PE reviews) | `assets/spec-coverage-protocol.md:283` |
+
+### Action Items
+
+#### Consider
+- [ ] LOW-001: fix `SKILL.md:291` + 2 siblings — `sha_ok(s) = lower(s) matches ^[0-9a-f]{7,40}$ and reviewed_sha starts with lower(s)`, shared with AUTHOR RECEIPTS
+- [ ] LOW-002: fix `CHANGELOG.md:11` + 0 siblings
+- [ ] INFO-001: fix `assets/spec-coverage-protocol.md:283` + 0 siblings
 
 ---
 
