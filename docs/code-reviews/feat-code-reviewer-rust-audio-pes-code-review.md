@@ -1,6 +1,6 @@
 # Code Review: feat-code-reviewer-rust-audio-pes
 
-**Verdict:** ⚠️ CHANGES REQUESTED (Round 2)
+**Verdict:** ✅ APPROVED (Round 3)
 
 | | |
 | - | - |
@@ -110,8 +110,8 @@ The branch adds `pe-rust` (stack) and `pe-audio` (domain) agents, extends `pe-vu
 
 ## Merge Eligibility
 
-**Locked to SHA:** `298bbf8` (Round 2)
-**Status:** ⚠️ Not mergeable — CHANGES REQUESTED.
+**Locked to SHA:** `dba6c75` (Round 3)
+**Status:** ✅ Mergeable IF the plugin content equals `dba6c75` (later commits on this branch touch only this review doc). Any later change under `plugins/` invalidates this round.
 
 ---
 
@@ -172,6 +172,53 @@ All six round-1 MEDIUMs and LOW-001…LOW-007, LOW-009 are RESOLVED, as is the o
 
 #### Consider
 - [ ] LOW-001 … LOW-005
+
+---
+
+## Review Round 3
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | @Cali LaFollett (pe-governance dispatched) |
+| **Reviewed SHA** | `dba6c75` |
+| **Fix diff** | `298bbf8..dba6c75` |
+| **Date** | 2026-11-26 |
+
+### Summary
+
+Both round-2 MEDIUMs and all round-2 LOWs are RESOLVED, including the out-of-scope model-pin INFO. Commit-subject links now require a `feat` subject that names exactly one resolving code. Stories already checked off at the target never link, and repo-derived paths must pass `safe_path` before any shell use. Four LOWs remain; they are awareness-only and do not block. The round cap has been reached, so they are left for a follow-up rather than a fourth round.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| pe-governance | none | lint-shaped checks; named § refs resolve; frontmatter tools ⊇ body calls in all 7 PEs; temp-repo run of `done_at_target` (plain/bold/link forms, `LT-04` ≠ `LT-040`), `story_code` grep and the `feat` subject filter; § Test Budget block identical across pe-go / pe-vue / pe-rust / pe-aws-infra |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 4 | 0 |
+| ℹ️ INFO | 0 | 0 |
+
+### In Scope Findings
+
+| ID | Location | Finding | Recommendation |
+| - | - | - | - |
+| 🟢 LOW-001 | `plugins/code-reviewer/skills/code-reviewer/assets/spec-coverage-protocol.md:214` | The deferral `<CODE>` branch passes a `grep -rl` filename to `realpath` without the `safe_path` check. A contributor-added file named `…$(…).md` that carries a matching `**Code:**` line could reach a shell. | Apply the SKILL.md `safe_path` check before `verify_local`, or compare paths without a shell. |
+| 🟢 LOW-002 | `plugins/code-reviewer/skills/code-reviewer/SKILL.md:76` | A story file rejected by `safe_path` looks the same as a missing one. A lowercase branch token skips Phase 4.5 silently, and the gate's message does not name the cause. | Return the rejected path so the gate fires and names it. |
+| 🟢 LOW-003 | `plugins/code-reviewer/agents/pe-rust.md:263` | pe-rust rates a u64/i64 → `number` mismatch MEDIUM where pe-vue and SKILL.md rate it HIGH. pe-rust exempts `--weak-refs` builds from `.free()`, but pe-vue does not. | Align on HIGH, and add the `--weak-refs` exemption to pe-vue. |
+| 🟢 LOW-004 | `plugins/code-reviewer/agents/pe-vue.md:432` | The lifecycle-leak rule does not accept cleanup in `onUnmounted`. | Accept any unmount hook or `onScopeDispose`. |
+
+### Action Items
+
+#### Consider
+- [ ] LOW-001 … LOW-004 (follow-up; round cap reached)
 
 ---
 
