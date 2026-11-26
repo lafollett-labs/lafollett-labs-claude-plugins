@@ -59,6 +59,7 @@
 
 **Domains:** [Security] · **Move:** {M1..M7 | none}
 **Location:** `{src/full/path/from/repo/root}:{line}`
+**Siblings:** {`path:line`, … | none}
 
 {Description of the issue}
 
@@ -71,6 +72,7 @@
 
 **Domains:** [Architecture, Code Quality] · **Move:** {M1..M7 | none}
 **Location:** `{src/full/path/from/repo/root}:{line}`
+**Siblings:** {`path:line`, … | none}
 
 {Description}
 
@@ -83,6 +85,7 @@
 
 **Domains:** [{Domain}] · **Move:** {M1..M7 | none}
 **Location:** `{src/full/path/from/repo/root}:{line}`
+**Siblings:** {`path:line`, … | none}
 
 {Description and recommendation}
 
@@ -103,16 +106,16 @@
 
 ### Must Fix (blocks merge)
 
-- [ ] {CRITICAL item}
-- [ ] {HIGH item}
+- [ ] {CRITICAL-NNN}: fix `{location}` + {N} siblings
+- [ ] {HIGH-NNN}: fix `{location}` + {N} siblings
 
 ### Required
 
-- [ ] {MEDIUM item}
+- [ ] {MEDIUM-NNN}: fix `{location}` + {N} siblings
 
 ### Optional
 
-- [ ] {LOW item}
+- [ ] {LOW-NNN}: fix `{location}` + {N} siblings
 
 ---
 
@@ -150,6 +153,8 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 | **Reviewer** | @{reviewer} |
 | **Reviewed SHA** | `{full-sha}` |
 | **Date** | {YYYY-MM-DD} |
+| **Fix cascade** | {n} / {total} in-scope findings introduced by a prior fix |
+| **Ripple receipts** | {N spot-checked, or "none — M1 ran exhaustive over the fix diff's rules"} |
 
 ### Summary
 
@@ -179,18 +184,18 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 
 ### In Scope Findings
 
-{Same format as primary findings}
+{Same format as primary findings, plus `**Introduced by:** {prior finding id | missed | pre-existing}` under each Location}
 
 ### Action Items
 
 #### Must Fix (blocks merge)
-- [ ] {item}
+- [ ] {ID}: fix `{location}` + {N} siblings
 
 #### Should Fix
-- [ ] {item}
+- [ ] {ID}: fix `{location}` + {N} siblings
 
 #### Consider
-- [ ] {item}
+- [ ] {ID}: fix `{location}` + {N} siblings
 -->
 
 ---

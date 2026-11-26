@@ -7,6 +7,7 @@ Lean, pragmatic code reviews with scope discipline. Uses right-sized approach �
 - **Right-sized reviews** — < 200 lines: primary agent; ≥ 200 lines: stack-specific PE sub-agents
 - **Built-in PE sub-agents** — `pe-go` (Go/SQL/Lambda), `pe-vue` (Vue on Nuxt or Vite SPA/PWA/TS), `pe-rust` (Rust/unsafe/WASM), `pe-aws-infra` (CDK/CDKTF/IaC), `pe-governance` (agent definitions/skills/CLAUDE.md/AGENTS.md), `pe-devtools` (local dev tooling, single-operator threat model), and the domain PE `pe-audio` (real-time audio/DSP, dispatched beside the stack PE), each with a self-contained protocol
 - **Review moves** — seven language-agnostic moves (ripple, lifecycle, inputs, attack the guard, failure path, falsify the test, fact check) in `assets/review-moves.md`, applied by every PE through stack-specific probes and by the generic review; each result reports per-move coverage, and a result without it is MISSING
+- **Remediation ripple** — every finding lists its `siblings` (each other `path:line` stating the rule its fix changes); from round 2 each finding names the prior fix that `introduced_by` it, each round reports its fix cascade, and a round that requests changes prints a pre-flight whose `RIPPLE RECEIPTS` the next round spot-checks
 - **Scope discipline** — In Scope (blocks PR) vs Out of Scope (tech debt)
 - **Finding validation** — All CRITICAL/HIGH/MEDIUM verified before publishing
 - **Multiple review types** — Branch diff, PR review, staged changes, specific files, ad-hoc
@@ -100,11 +101,12 @@ while verdict != "✅ APPROVED":
 
 ### Round-to-round continuity
 
-The committed review doc IS the continuity mechanism. Round N writes/appends to `./docs/code-reviews/{name}-code-review.md` on the branch; Round N+1's PE reads that file at review start before running its four passes:
+The committed review doc IS the continuity mechanism. Round N writes/appends to `./docs/code-reviews/{name}-code-review.md` on the branch; Round N+1's PE reads that file at review start before running its five passes:
 
 - prior finding still present in current diff → re-flag as `STILL_PRESENT` (severity unchanged unless context shifts)
 - prior finding's pattern no longer in code → mark `RESOLVED`, do NOT re-raise
 - new finding from Pass 4 → flag as `NEW`
+- every round-2+ finding carries `introduced_by`: the prior finding whose fix caused it, `missed`, or `pre-existing`; the round's **Fix cascade** counts the first kind
 
 PEs that re-flag closed-set findings on a remediated diff are over-firing — the convergence-spiral failure mode. The Pass 4 Calibration Anchor in each PE definition governs this.
 
@@ -116,7 +118,7 @@ Pass 4 with fresh adversarial lenses can surface NEW findings on every round; th
 - subsequent rounds surface no new findings above MEDIUM, AND
 - Pass 2 (tests + lint + typecheck) is clean
 
-Typical convergence: 2–3 rounds. Round-4+ requires operator authorization. If the cap is repeatedly hit on similar diffs, the diff is too large (split into smaller PRs) or the area is fragile (escalate for second-opinion review).
+Typical convergence: 2–3 rounds. Round-4+ requires operator authorization, and the halt message shows the last round's fix cascade. A cascade near n/n means the fixes are generating the findings: remediate with the pre-flight (fix every sibling, ripple each changed rule) before authorizing another round. If the cap is repeatedly hit on similar diffs, the diff is too large (split into smaller PRs) or the area is fragile (escalate for second-opinion review).
 
 ### Automation via `/loop`
 

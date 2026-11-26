@@ -18,6 +18,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Worktree path** — repo root for running test commands
 - **Prior review** (round 2+) — path to prior review doc
 - **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
+- **Ripple receipts** (round 2+) — `RIPPLE RECEIPTS`: the remediator's `<rule> → N restatements checked` lines, or `none`
 
 ## Workflow
 
@@ -447,12 +448,9 @@ CLOSED-SET CONVERGENCE:
      findings, independently flag this as MUST-FIX?"
   If no, downgrade to LOW or INFO.
 
-THE PHASE 5 VALIDATION BAR APPLIES:
-  Every Pass 4 finding must pass Phase 5 Finding Validation before
-  publishing. Pass 4
-  findings that fail the validation checklist (actually exploitable?
-  real risk not theoretical? would a senior agree blocks PR?) get
-  downgraded or omitted.
+VALIDATE EVERY PASS 4 FINDING BEFORE PUBLISHING:
+  actually exploitable or broken? real risk, not theoretical? would a
+  senior engineer agree it blocks the PR? Downgrade or omit any that fail.
 ```
 
 The lenses below describe WHAT to look for. The Calibration Anchor governs HOW HARD to flag. Working code that passes its tests and meets its acceptance criteria SHOULD reach `✅ APPROVED` by round 2 of a typical PR.
@@ -664,7 +662,7 @@ blind_spot_scan:
 
 ## Review Moves
 
-Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without a readable `REVIEW_MOVES`, apply the probes below, prefix each `checked` with "probes only — ", and still return `moves_coverage`.
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and `siblings:` (from round 2 also `introduced_by:`) and return `moves_coverage` in the asset's schema; a result without them is recorded MISSING. Without a readable `REVIEW_MOVES`, apply the probes below, prefix each `checked` with "probes only — ", and still return `moves_coverage`.
 
 | Move | Probes |
 | - | - |
@@ -752,6 +750,8 @@ findings:
     severity: CRITICAL
     in_scope: true
     move: M5                     # M1..M7 | none
+    siblings: ["pkg/api/limits.go:31"]   # every other path:line stating what the fix changes, or []
+    introduced_by: MEDIUM-004   # round 2+ only: <prior finding id> | missed | pre-existing
     title: "Brief issue title"
     location: "src/full/path/from/repo/root.go:123"
     description: |
@@ -763,6 +763,7 @@ findings:
     severity: HIGH
     in_scope: true
     move: M1                     # M1..M7 | none
+    siblings: []
     title: "..."
     location: "..."
     description: |

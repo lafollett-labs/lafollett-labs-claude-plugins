@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **code-reviewer stops remediation-round churn: findings list their siblings, later rounds say which fix caused each finding, and remediation runs a ripple pre-flight (`code-reviewer` v2.14.0, marketplace 1.34.0).** This came from a multi-round docs review where every MEDIUM in rounds 3–5 was caused by the previous fix. Each finding named one location. The fix changed only that location, so every other restatement of the rule stayed stale, and each fix's new edge cases went unchecked.
+  - Every finding carries `siblings:`. When its fix would change a rule, contract, definition or repeated value, that is every other `path:line` stating it, found by M1's grep; otherwise it is `[]`. Action Items render "fix <location> + N siblings".
+  - From round 2, every finding carries `introduced_by:`:
+    - `<prior finding id>` when that finding's fix caused it;
+    - `missed` when it was present at the prior SHA but unreported;
+    - `pre-existing` when it is out of scope.
+  - Each round reports a **Fix cascade** (introduced-by-a-prior-fix count over in-scope findings) and its **Ripple receipts**.
+  - A round that ends CHANGES REQUESTED or BLOCKED prints a remediation pre-flight: fix every sibling, ripple and edge-check each changed rule, and record one `RIPPLE RECEIPT` per rule. From round 2 the caller passes `RIPPLE RECEIPTS:` like `AUTHOR RECEIPTS`, and reviewers spot-check them under M1. Without receipts, M1 runs exhaustive over every rule the fix diff touches, and the report says so.
+  - `valid()` requires `siblings` on every finding and, from round 2, an `introduced_by` naming a prior finding, `missed` or `pre-existing`.
+  - The halt message at the round cap shows the last round's fix cascade, so the operator can tell churn from progress.
+  - Spec Coverage `extract_section` now states three edge cases: no heading match returns empty, a line inside a code fence is never a heading or an item, and a bold-only line does not end a `#` section.
+  - The six synced PEs replace "THE PHASE 5 VALIDATION BAR" with an inline checklist.
 - **code-reviewer applies seven review moves in every PE and in the generic review, and every result shows what it checked (`code-reviewer` v2.13.0, marketplace 1.33.0).** Reviews approved changes that an external reviewer then caught. The misses clustered: a fix that covered only the cited case, a guard reviewed only against the inputs it targets, consumers left out of step with a changed contract, files routed to a PE that does not fit them, and reports that said "clean" without saying what was checked.
   - New `skills/code-reviewer/assets/review-moves.md` defines the moves, each with a trigger and a procedure:
     - M1 Ripple: every producer, consumer, restatement and sibling of a change, the repo's hard rules applied literally, and every other instance of a pattern a fix fixes;
