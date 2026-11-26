@@ -202,8 +202,10 @@ generic review (calling agent, expert: Primary):
                             ("would this survive a pentest?", not "probably fine")
                             cross-file claim verification: doc-vs-artifact drift
                             on IAM/RBAC/auth claims is a security-grade finding
-  Moves  — Read(REVIEW_MOVES) (§ Asset Paths) and apply every move to every unit; tag each
-           finding with `move:` and record moves_coverage like a PE; it must pass valid() (§ Dispatch)
+  Moves  — Read(REVIEW_MOVES) (§ Asset Paths) and apply every move to every unit; give each finding
+           `move:`, `siblings:` and, from round 2, `introduced_by:` (REVIEW_MOVES § Finding Keys), and
+           record moves_coverage like a PE;
+           it must pass valid() (§ Dispatch)
   Spec   — if approach == "generic" and Phase 4.5 reaches § Dispatch Input Enrichment:
            Read(SPEC_COVERAGE_PROTOCOL) and run it with those STORY_FILE and PR_NUMBER values
 
@@ -241,6 +243,9 @@ valid(result, pe):
   and each applied entry's checked names what was examined with a count, never a "<...>" placeholder or a copied example ("2 changed contracts → 7 consumers and 3 doc restatements grepped", or one from this file or REVIEW_MOVES)
   and each n/a entry's note says why no unit triggered the move
   and, if pe in SUITE_RUNNING: test_budget ∈ {none, targeted, full} and pass2_evidence is a non-empty list of strings
+  and every finding but SPEC-* has siblings, a list of path:line (empty allowed)
+  and, if round >= 2: every finding but SPEC-* has introduced_by ∈ {an id from PRIOR REVIEW's latest round,
+      still-present, new, missed, pre-existing}
   # a finding without `move` reads as move: none
 
 for every dispatched PE, after its result arrives:
@@ -282,6 +287,8 @@ else:
 stack_cmds   = the .code-reviewer.yml / Stack Map test command(s) for this PE's paths
 receipts     = author test output (command, result, sha) from the caller's invocation text,
                the PR body, or a hand-off message
+ripple_receipts = "<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>" lines from the same
+                  sources whose `git rev-parse <sha>` == reviewed_sha (§ Remediation Pre-flight)
 if pe == pe-devtools:
   omit TEST BUDGET                            # lint-only Pass 2; always runs
 elif pe in {pe-governance, pe-audio} or stack_cmds is empty:
@@ -297,6 +304,7 @@ else:
   TEST BUDGET: full
 if round >= 2:
   FIX DIFF: git diff {prior_sha}..{reviewed_sha}
+  RIPPLE RECEIPTS: <ripple_receipts, verbatim> if any, else none    # none → the PE runs M1 exhaustive
 ```
 
 ### Dispatch Input
@@ -318,15 +326,17 @@ TARGET BRANCH: {main | etc.}
 SOURCE BRANCH: {current branch}
 WORKTREE: {absolute path to repo root}
 {optional} PROJECT SUBDIR: {e.g., "frontend/" for a Vue subdir in a monorepo, "cdk/" for CDK, "engine/" for a Cargo workspace}
-{optional} PRIOR REVIEW: {path to prior review doc if round 2+}
+{round 2+} PRIOR REVIEW: {path to prior review doc}
 {optional} STORY_FILE: {absolute path to local story/epic markdown when PR is story-linked — PE may tag findings with discharges_ac: [AC-N] to enrich Phase 4.5 Spec Coverage}
 TEST BUDGET: {none | targeted | full — per § Test Budget; omitted for pe-devtools}
 {when targeted with receipts} AUTHOR RECEIPTS: {command → result @ sha, one per line}
 {round 2+} FIX DIFF: git diff {prior_sha}..{reviewed_sha}
+{round 2+} RIPPLE RECEIPTS: {<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>, one per line | none}
 REVIEW_MOVES: {absolute path — § Asset Paths}
 
 Run your five-pass protocol (Architecture → Quality+Tests → Security → MANDATORY Adversarial Re-read
-→ Self-Adversarial) and § Review Moves. Return `moves_coverage`; without it your result is recorded MISSING.
+→ Self-Adversarial) and § Review Moves. Return `moves_coverage`, and `siblings` (when FIX DIFF is set,
+also `introduced_by`) on every finding; without them your result is recorded MISSING.
 
 DELIVERY CONTRACT — match your invocation mode:
   if dispatched as foreground Agent (no team_name):
@@ -354,7 +364,11 @@ When consolidating sub-agent findings:
 ```
 1. Merge duplicates:        same issue from multiple PEs = ONE finding
 2. Tag domains:             merged finding gets `domains: [Security, Architecture]`
-3. Keep highest severity:   if PEs disagree, use the higher severity, and that copy's `move`
+3. Keep highest severity:   if PEs disagree, use the higher severity, and that copy's `move` and
+                            `introduced_by` (on a tie: a prior id over still-present, new, missed,
+                            pre-existing); union the copies' `siblings`
+4. Own findings:            each finding the calling agent raises below carries siblings and, from
+                            round 2, introduced_by (REVIEW_MOVES § Finding Keys)
 
 cross_pe_verification (when multiple PEs dispatched):
   Compare findings across PE domains for consistency:
@@ -553,6 +567,12 @@ Each round's **Test Evidence** section has one row per dispatched PE: suite-runn
 
 Each round's **Moves Coverage** section has one row per dispatched PE plus `Primary` when the generic review ran, one cell per move: `checked` when applied, `n/a — <note>` otherwise, `MISSING` for a MISSING PE. A round with no findings still shows what was checked.
 
+From round 2, each round's header carries:
+- **Fix cascade:** `<n> / <total>`, where n counts the in-scope findings whose `introduced_by` is a prior finding id and total counts all in-scope findings;
+- **Ripple receipts:** `<N> spot-checked`, or `none — M1 ran exhaustive over the fix diff's rules`.
+
+Each finding shows its `siblings`, and from round 2 its `introduced_by`. Action Items render each finding as `fix <location> + <N> siblings`.
+
 Never quote private user data or user content verbatim in the review doc (§ Output Hygiene in REVIEW_MOVES); rewrite any finding that does to cite `file:line` and describe the shape.
 
 ```
@@ -710,13 +730,28 @@ ROUND_CAP = 3
 each /code-reviewer invocation = one round
 operator drives the loop by re-invoking after remediating
 
+if this round's verdict ∈ {CHANGES REQUESTED, BLOCKED}:
+  print § Remediation Pre-flight with each in-scope CRITICAL, HIGH and MEDIUM finding's location and siblings filled in
+  the remediator passes its RIPPLE RECEIPTS with the next invocation
+
 if round > ROUND_CAP:
-  HALT to operator with finding counts and ask:
+  HALT to operator with finding counts and the last round's fix cascade (<n> / <total>), and ask:
     "proceed (one more round, cap += 1) | abort | escalate"
   do NOT auto-continue
 ```
 
 Round-to-round continuity is enforced inside each PE (PEs read the prior committed review doc on round 2+ before running their passes). See README.md for methodology rationale, convergence expectations, automation patterns, and the engineer-as-reviewer conflict mitigation.
+
+### Remediation Pre-flight
+
+```
+for each in-scope CRITICAL, HIGH or MEDIUM finding: fix its location AND every sibling
+for each rule the fix diff adds or changes:
+  M1: grep every restatement, align it or record why it stays
+  M3: give each new branch a defined outcome
+commit, then record one RIPPLE RECEIPT per rule:
+  "<rule> → N restatements checked[; kept <path:line> — <why>] @ <commit sha>"
+```
 
 ---
 
@@ -734,6 +769,8 @@ findings:
   - id: "CRITICAL-001"
     severity: CRITICAL
     move: M4                     # M1..M7 | none
+    siblings: []                 # every other path:line stating or repeating what the fix changes — REVIEW_MOVES § Finding Keys
+    introduced_by: new
     in_scope: true
     title: "XSS via unsanitized HTML injection"
     location: "src/components/email-viewer.ts:207"
@@ -750,6 +787,8 @@ findings:
   - id: "HIGH-001"
     severity: HIGH
     move: M2
+    siblings: ["src/components/inbox-viewer.ts:188"]   # the same listener pattern
+    introduced_by: MEDIUM-004    # when FIX DIFF is set: <prior finding id> | still-present | new | missed | pre-existing
     in_scope: true
     title: "Memory leak — event listener not removed"
     location: "src/components/email-viewer.ts:210"

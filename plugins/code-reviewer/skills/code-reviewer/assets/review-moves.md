@@ -84,7 +84,36 @@ M7 Fact check:
     if unverifiable: severity LOW, title prefixed "UNVERIFIED — "
 ```
 
-If `FIX DIFF` is set, every hunk in it outside docs/code-reviews/** is a fix: apply M1's sibling grep and M4 to each.
+## Round 2+
+
+```
+if FIX DIFF is set:                     # every hunk outside docs/code-reviews/** is a fix
+  for each hunk: apply M1's sibling grep and M4
+  if RIPPLE RECEIPTS lists receipts:    # spot-check
+    for each receipt: grep its rule; a restatement that disagrees with it is a finding,
+      unless the receipt keeps it with a reason that holds   # a count mismatch alone is not
+    grep every rule the fix diff adds or changes that no receipt names, as below
+  else:                                 # RIPPLE RECEIPTS: none → exhaustive
+    list every rule the fix diff adds or changes and grep every restatement of each
+    prefix M1's checked with "exhaustive, no ripple receipts — "
+```
+
+## Finding Keys
+
+After all passes and moves, for every finding except Spec Coverage `SPEC-*` findings:
+
+```
+if its fix would change a rule, contract, definition or repeated value, or the same defect recurs elsewhere:
+  siblings = every other path:line, from repo root, stating or repeating it, grepped by name and literal value
+else:
+  siblings = []
+if FIX DIFF is set:                     # ids name findings in PRIOR REVIEW's latest round
+  if in_scope is false:                                     introduced_by = pre-existing
+  elif it re-flags a prior finding (STILL_PRESENT):         introduced_by = still-present
+  elif a prior finding's fix (its hunks, or a sibling it left) caused it: introduced_by = <that finding's id>
+  elif its lines are absent at the prior SHA:               introduced_by = new
+  else:                                                     introduced_by = missed    # present at the prior SHA, unreported
+```
 
 ## Output
 
@@ -92,6 +121,8 @@ If `FIX DIFF` is set, every hunk in it outside docs/code-reviews/** is a fix: ap
 findings:
   - id: "HIGH-001"
     move: M4                 # M1..M7 whose trigger the finding falls under, or none
+    siblings: ["docs/limits.md:12", "src/config.ts:40"]   # every other path:line stating or repeating what the fix changes, or []
+    introduced_by: MEDIUM-004   # when FIX DIFF is set: <prior finding id> | still-present | new | missed | pre-existing
     # ...the PE's usual finding keys
 moves_coverage:              # M1..M7, each exactly once
   - move: M1
@@ -105,7 +136,7 @@ moves_coverage:              # M1..M7, each exactly once
   # ...M2–M5 and M7, one entry each
 ```
 
-`checked` names what was examined and how many; it is required when `status: applied`. `note` is required when `status: n/a`. A result whose `moves_coverage` is missing, empty or short of a move is recorded MISSING.
+Every finding except Spec Coverage `SPEC-*` findings carries `siblings`, and when `FIX DIFF` is set `introduced_by` (§ Finding Keys). `checked` names what was examined and how many; it is required when `status: applied`. `note` is required when `status: n/a`. A result whose `moves_coverage` is missing, empty or short of a move is recorded MISSING.
 
 ## Output Hygiene
 

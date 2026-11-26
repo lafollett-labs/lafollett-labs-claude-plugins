@@ -19,9 +19,12 @@ Catch a change that ships a narrow fix but skips acceptance criteria its linked 
 
 ```
 extract_section(text, heading):          # every call below
+  a line inside a ``` fence is never a heading, a bold-only line or an item
+  if no line matches heading: return ""
   start after the first line matching heading
-  if that line starts with "#": end at the next heading with the same or fewer "#", else at end of text
-  else:                         end at the next "#" heading or bold-only line, else at end of text
+  if that line starts with "#": end at the next heading with the same or fewer "#"   # a bold-only line does not end it
+  else:                         end at the next "#" heading or bold-only line
+  no end found: end of text; return the section without its fenced lines
 
 ac_source = Read(STORY_FILE)
 
@@ -276,6 +279,8 @@ findings:
   - id: "HIGH-001"
     severity: HIGH
     in_scope: true
+    move: M2
+    siblings: []
     title: "Goroutine leak — no completion signal"
     location: "pkg/runtime/agent_loop.go:142"
     description: |

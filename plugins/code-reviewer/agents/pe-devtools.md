@@ -51,6 +51,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Round number** (optional) — for convergence calibration; default 1
 - **Prior review** (round 2+) — path to prior review doc
 - **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
+- **Ripple receipts** (round 2+) — `RIPPLE RECEIPTS`: the remediator's `<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>` lines, or `none`
 
 ## File Patterns
 
@@ -442,7 +443,7 @@ blind_spot_scan:
 
 ## Review Moves
 
-Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without a readable `REVIEW_MOVES`, apply the probes below, prefix each `checked` with "probes only — ", and still return `moves_coverage`.
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and `siblings:` (when `FIX DIFF` is set, also `introduced_by:`) and return `moves_coverage` in the asset's schema; a result without them is recorded MISSING. Without a readable `REVIEW_MOVES`, apply the probes below, prefix each `checked` with "probes only — ", and still return `moves_coverage`.
 
 | Move | Probes |
 | - | - |
@@ -499,7 +500,7 @@ for each finding:
   elif issue is in script/section containing changes:   in_scope = true
   else:                                                  in_scope = false  # pre-existing — awareness only
 
-# Use FULL file paths from repo root in `location`:
+# Use FULL file paths from repo root in `location` and `siblings`:
 #   ✅ scripts/dev/format-staged.sh:42
 #   ❌ format-staged.sh:42
 ```
@@ -531,6 +532,8 @@ findings:
     severity: MEDIUM
     in_scope: true
     move: M7                     # M1..M7 | none
+    siblings: ["scripts/dev/README.md:9"]   # every other path:line stating or repeating what the fix changes, or []
+    introduced_by: MEDIUM-004   # when FIX DIFF is set: <prior finding id> | still-present | new | missed | pre-existing
     title: "Header documents exit code 2 but script never exits with 2"
     location: "scripts/dev/<example-script>.sh:28"
     description: |

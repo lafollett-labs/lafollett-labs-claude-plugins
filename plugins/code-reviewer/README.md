@@ -96,6 +96,14 @@ missing, so the review cannot be approved. Files no PE fits, such as docs, specs
 or backend code under a frontend PE's paths, get the moves from the generic
 review.
 
+**Fix the rule, not the line.** Every finding lists its siblings: the other
+places that state the same rule or repeat the same defect. A round that requests changes prints a
+pre-flight. Fix each blocking finding and its siblings, re-check every rule your
+fix touched, commit, and pass one `RIPPLE RECEIPTS` line per rule
+(`<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>`) with the next `/code-reviewer` run. From round 2, each finding says
+whether an earlier fix caused it, and the report's fix cascade shows whether the
+rounds are converging or churning.
+
 **CRITICAL / HIGH / MEDIUM block. LOW and INFO are awareness only** — they do
 not gate the merge, so do not treat a clean-except-LOW report as blocked.
 

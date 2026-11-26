@@ -20,6 +20,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Worktree path** — repo root for read-only commands
 - **Prior review** (round 2+) — path to prior review doc
 - **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
+- **Ripple receipts** (round 2+) — `RIPPLE RECEIPTS`: the remediator's `<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>` lines, or `none`
 
 ## Workflow
 
@@ -368,10 +369,10 @@ Pass 4 is a **catch net**, not a **ratchet**. Its purpose is to surface defects 
 
 ```
 PASS 4 SEVERITY DISCIPLINE:
-  Default severities below are CEILINGS, not floors. Apply the SKILL.md
-  Severity Definitions calibration anchor:
+  Default severities below are CEILINGS, not floors:
     MUST FIX = actual defects, security issues, regressions
     LOW + INFO = awareness-only, do NOT block
+    INFO = the default for taste-level or future-proofing observations
 
   Apply each lens VIVIDLY but HONESTLY. If applying a lens forces you to
   imagine an unlikely scenario (contrived attacker, scale 1000x not 10x,
@@ -399,12 +400,9 @@ CLOSED-SET CONVERGENCE:
      findings, independently flag this as MUST-FIX?"
   If no, downgrade to LOW or INFO.
 
-THE PHASE 5 VALIDATION BAR APPLIES:
-  Every Pass 4 finding must pass Phase 5 Finding Validation before
-  publishing. Pass 4
-  findings that fail the validation checklist (actually exploitable?
-  real risk not theoretical? would a senior agree blocks PR?) get
-  downgraded or omitted.
+VALIDATE EVERY PASS 4 FINDING BEFORE PUBLISHING:
+  actually exploitable or broken? real risk, not theoretical? would a
+  senior engineer agree it blocks the PR? Downgrade or omit any that fail.
 ```
 
 The lenses below describe WHAT to look for. The Calibration Anchor governs HOW HARD to flag. Working code that passes its tests and meets its acceptance criteria SHOULD reach `✅ APPROVED` by round 2 of a typical PR.
@@ -593,7 +591,7 @@ blind_spot_scan:
 
 ## Review Moves
 
-Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without a readable `REVIEW_MOVES`, apply the probes below, prefix each `checked` with "probes only — ", and still return `moves_coverage`.
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and `siblings:` (when `FIX DIFF` is set, also `introduced_by:`) and return `moves_coverage` in the asset's schema; a result without them is recorded MISSING. Without a readable `REVIEW_MOVES`, apply the probes below, prefix each `checked` with "probes only — ", and still return `moves_coverage`.
 
 | Move | Probes |
 | - | - |
@@ -651,7 +649,7 @@ for each finding:
   elif issue is in functions/processors containing changes:  in_scope = true
   else:                                                  in_scope = false  # pre-existing — awareness only
 
-# Use FULL file paths from repo root in `location`:
+# Use FULL file paths from repo root in `location` and `siblings`:
 #   ✅ web/src/audio/pitch-processor.ts:42
 #   ❌ pitch-processor.ts:42
 ```
@@ -681,6 +679,8 @@ findings:
     severity: HIGH
     in_scope: true
     move: M3                     # M1..M7 | none
+    siblings: ["web/src/audio/constants.ts:5"]   # every other path:line stating or repeating what the fix changes, or []
+    introduced_by: MEDIUM-004   # when FIX DIFF is set: <prior finding id> | still-present | new | missed | pre-existing
     title: "Analysis window cannot resolve contrabassoon range"
     location: "engine/crates/dsp/src/pitch.rs:31"
     description: |
