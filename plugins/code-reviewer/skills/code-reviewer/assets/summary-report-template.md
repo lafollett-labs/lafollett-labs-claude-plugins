@@ -154,7 +154,7 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 | **Reviewed SHA** | `{full-sha}` |
 | **Date** | {YYYY-MM-DD} |
 | **Fix cascade** | {n} / {total} in-scope findings introduced by a prior fix |
-| **Ripple receipts** | {N spot-checked, or "none — M1 ran exhaustive over the fix diff's rules"} |
+| **Ripple receipts** | {N spot-checked, or "none — M1 ran exhaustive over the fix diff's rules"}{", M dropped — no hex SHA of the reviewed commit" when any were dropped} |
 
 ### Summary
 
