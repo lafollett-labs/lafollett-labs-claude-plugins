@@ -119,8 +119,11 @@ crate_boundaries:
     cargo tree -p <crate> -e normal --depth 1
 
 workspace_hygiene:
-  if a virtual workspace Cargo.toml has no `resolver = "2"` (or "3") and no member uses edition >= 2021:
-    flag MEDIUM "resolver v1 unifies dev-dependency features into normal builds"
+  resolver = `resolver` in the root [workspace] or [package], else:
+               virtual workspace → "1"                                  # member editions are ignored
+               root package      → "3" if its edition is 2024, "2" if 2021, else "1"
+  if resolver == "1":
+    flag MEDIUM "resolver v1 unifies dev-dependency features into normal builds — set resolver = \"2\" or \"3\" in [workspace]"
   for each dependency added to a member Cargo.toml:
     if [workspace.dependencies] exists and the dep is not `{ workspace = true }`:
       flag MEDIUM "version drift — declare <dep> in [workspace.dependencies]"
@@ -130,7 +133,7 @@ workspace_hygiene:
     flag LOW "member opts out of workspace lints"
 
   verification commands:
-    grep -nE "^\[workspace(\.dependencies|\.lints)?\]|resolver" Cargo.toml
+    grep -nE "^\[(workspace|package)\]|^\[workspace\.(dependencies|lints)\]|resolver|^edition" Cargo.toml
     cargo tree -d <locked>
 
 feature_design:
@@ -208,8 +211,12 @@ float_handling:
     grep -nE "[^=!<>]==[^=]" <file>   # then inspect float operands
     → if comparing floats for equality outside tests of exact constants: flag MEDIUM "float equality — compare with a tolerance in the domain unit"
     grep -nE "\.(ln|log2|log10|sqrt|powf|acos|asin)\(" <file>
-    → if the argument can be <= 0 (or outside [-1,1] for acos/asin) with no guard:
-        flag HIGH "NaN/-inf source at <location> — guard or clamp the domain"
+    → if an unguarded operand can leave that function's domain:
+        ln / log2 / log10   receiver <= 0
+        sqrt                receiver < 0
+        powf                receiver < 0 with a non-integer exponent, or receiver == 0 with exponent < 0
+        acos / asin         receiver outside [-1, 1]
+      flag HIGH "NaN/-inf source at <location> — guard or clamp the domain"
     - division by a value that can be 0.0 (length, RMS, sum of weights) without a guard:
       flag HIGH "inf/NaN propagation — guard the denominator"
     - f32 accumulators summing > ~4096 terms or across frames: flag MEDIUM "accumulate in f64 — f32 sum drifts"
@@ -276,7 +283,7 @@ wasm_js_interop:
     - init: if #[wasm_bindgen(start)] does more than install a panic hook / logger:
         flag MEDIUM "heavy start fn blocks instantiation — expose an explicit init()"
     - console_error_panic_hook: if absent from the binding crate: flag LOW "panics surface as bare 'unreachable'"
-    - bindings consumed inside an AudioWorklet or Worker:
+    - bindings consumed inside an AudioWorklet (not a Web Worker — WorkerGlobalScope has fetch and TextDecoder):
         if strings, JsValue::from_str, or serde cross the boundary:
           flag HIGH "AudioWorkletGlobalScope lacks TextDecoder/TextEncoder — wasm-bindgen string glue throws"
         if the glue instantiates via fetch/URL rather than initSync({ module }):

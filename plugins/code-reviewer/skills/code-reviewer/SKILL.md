@@ -375,13 +375,15 @@ code      = story_code(current_branch_name)          # § Story Code
 if code is None or code.file is None:
   texts = [pr.title if pr_number] + `git log --format=%s <target>..<source>`
   texts = texts matching /^feat(\([^)]*\))?!?:/          # fix/chore/docs subjects never link
-  hits  = distinct story_code(t) over texts where story_code(t).file is set
+  hits  = distinct story_code(tok) over every /\b[A-Za-z]{2,5}-[0-9]+\b/ token tok in texts,
+          where story_code(tok).file is set
   if len(hits) == 1: code = hits[0]                    # several codes → ambiguous, no link from subjects
 
 story_linked = false; story_file_path = None
 if the invocation names a story file path or story code:                       # 1. explicit
   story_linked    = true
-  story_file_path = that path if the file exists, else story_code(<code>).file
+  if a path:  story_file_path = <path> if the file exists, else None
+  else:       story_file_path = story_code(<code>).file if story_code(<code>) else None
 elif code and code.file and the first H1 of code.file does not start "# Task:" or "# Bug:"
      and not done_at_target(code.code):
   story_linked    = true                                                        # 2. local story code — beats a bare number

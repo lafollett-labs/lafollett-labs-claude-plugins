@@ -147,14 +147,20 @@ realtime_thread_rules:
 
 analysis_windows:
   for each window/frame size constant or computation in diff:
-    fmin = range.fmin, else the lowest fundamental the code itself claims to detect; neither → skip this check
+    fmin = the lowest fundamental this window must resolve:
+             min fmin of the profiles that select it              (a per-profile window)
+             | range.fmin                                          (one window shared by every profile)
+             | the lowest fundamental the code claims to detect   (profiles is [])
+           none of these → skip this check
     required = 2 · fs / fmin
     if window < required:
       flag HIGH "window <N> cannot resolve <fmin> Hz — needs ≥ <required> samples at <fs> Hz"
     if window is a single global constant while profile fmins span more than an octave:
       flag MEDIUM "one window for every instrument — wastes latency on high instruments; size from the active range"
-    if window is in samples but was derived assuming 48 kHz (literal 2048/4096/8192 with no fs term):
-      flag MEDIUM "window fixed in samples — at 44.1 kHz it covers less time; derive from fs"
+    if window is a literal sample count with no fs term:
+      for each rate the path can run at (44.1 and 48 kHz; 96 kHz when the device stream allows it):
+        re-run the floor check above and latency_budget at that rate
+      flag only a failing rate, at that check's severity, suffixed "at <fs> Hz — derive the window from fs"
   for each lag-domain detector (YIN, MPM, autocorrelation, AMDF):
     if tau_max = fs / fmin exceeds the integration length (window/2 for YIN):
       flag HIGH "lag range exceeds integration window — low notes return garbage"

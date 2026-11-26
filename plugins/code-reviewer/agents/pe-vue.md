@@ -559,9 +559,13 @@ auth_flow:
 csrf_and_csp:
   - grep for inline <script> or style= with dynamic content: flag MEDIUM "CSP risk"
   - grep for fetch/axios without CSRF token on mutation requests: flag MEDIUM "missing CSRF protection"
-  - (wasm) if a CSP is set (meta tag, host headers, SW responses) and script-src lacks 'wasm-unsafe-eval':
-      flag HIGH "CSP blocks WebAssembly compilation"
-  - (pwa) if runtimeCaching caches authenticated or cross-origin API responses: flag MEDIUM "SW serves another session's data"
+  - (wasm) for each enforced CSP (meta tag, host headers, SW responses — not Content-Security-Policy-Report-Only):
+      effective = script-src, else default-src, else None
+      if effective and it contains neither 'wasm-unsafe-eval' nor 'unsafe-eval':
+        flag HIGH "CSP blocks WebAssembly compilation — add 'wasm-unsafe-eval' to <directive>"
+  - (pwa) if runtimeCaching caches user-specific responses (credentialed requests, per-user API paths)
+      and that cache outlives the user (no per-user cache name, no caches.delete on logout or account switch):
+      flag MEDIUM "SW serves the previous user's data after logout or account switch"
 
 dependency_audit:
   if package.json or package-lock.json changed:

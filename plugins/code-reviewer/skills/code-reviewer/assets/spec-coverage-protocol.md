@@ -214,17 +214,17 @@ verify_deferral(followup, ac):
       file = first line of: grep -rlE '^\*\*Code:\*\* +<CODE> *$' docs/epics --include='*.md'
       verify_local(ac, followup, file)
     "<path>.md":                                       # local story file
-      if path contains ".." or starts with "/": file = None
+      if path contains ".." or does not start with "docs/epics/": file = None
       else: file = <path> if Glob(<path>) matches it (repo root) else None   # Glob/Read, never Bash
       verify_local(ac, followup, file)
 
 verify_local(ac, followup, file):
+  code = the `**Code:** <CODE>` value in file if file and it matches ^[A-Z]{2,5}-[0-9]+$, else None   # never interpolate other text
   if file is None:                                     invalid(ac, followup, "resolves to no story file")
   elif realpath(file) == realpath(STORY_FILE):         invalid(ac, followup, "is the story under review")
-  else:
-    code = the `**Code:** <CODE>` value in file if it matches ^[A-Z]{2,5}-[0-9]+$, else None   # never interpolate other text
-    if code and `grep -rqE '^\s*-\s*\[x\]\s*(\*\*|\[)?<code>\b' docs/epics --include='*.md'` succeeds:
-      closed(ac, followup, "is checked off as done in its epic")
+  elif code is None:                                   invalid(ac, followup, "is not a story — it has no `**Code:** <CODE>` line")
+  elif `grep -rqE '^\s*-\s*\[x\]\s*(\*\*|\[)?<code>\b' docs/epics --include='*.md'` succeeds:
+    closed(ac, followup, "is checked off as done in its epic")
 
 invalid(ac, target, why):
   flag BLOCKING:
