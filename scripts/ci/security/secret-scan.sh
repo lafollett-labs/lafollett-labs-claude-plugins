@@ -21,9 +21,10 @@ die() { echo "secret-scan: $1" >&2; exit 2; }
 case "$head$before" in *[!0-9a-f]*) die "SCAN_BASE and SCAN_HEAD must be commit SHAs" ;; esac
 [ -f "$config" ] || die "missing gitleaks config $config"
 
-# Every [[allowlists]] entry: a description, condition = "AND", an exact value (regexes or stopwords),
-# and exactly one anchored single-file path on the `paths =` line. No other allow-list form, and no
-# disabled default rule.
+# Every [[allowlists]] entry: a description, condition = "AND", an exact value (stopwords, or one
+# ^-anchored regex with no .* or .+), and exactly one anchored single-file path on the `paths =` line.
+# No other allow-list form (legacy or per-rule tables, dotted keys, inline arrays), and no disabled
+# default rule.
 problems="$(awk -v q="'" '
   function flush() {
     if (!inblock) return
@@ -33,14 +34,23 @@ problems="$(awk -v q="'" '
     if (paths != 1)  print "entry at line " start ": needs exactly one paths line naming one anchored file"
   }
   /^[[:space:]]*#/ { next }
-  /^[[:space:]]*\[allowlist\]/        { print "line " NR ": legacy [allowlist] table is not allowed" }
-  /^[[:space:]]*\[\[rules\.allowlists\]\]/ { print "line " NR ": per-rule allow-lists are not allowed" }
+  {
+    key = $0; sub(/=.*/, "", key)
+    if (tolower(key) ~ /allowlist/ && $0 !~ /^[[:space:]]*\[\[allowlists\]\][[:space:]]*(#.*)?$/)
+      print "line " NR ": an allow-list outside a top-level [[allowlists]] table is not allowed"
+  }
   /^[[:space:]]*disabledRules[[:space:]]*=/ { print "line " NR ": disabling default rules is not allowed" }
   /^[[:space:]]*\[\[allowlists\]\]/ { flush(); inblock = 1; desc = cond = val = paths = 0; start = NR; next }
   /^[[:space:]]*\[/ { flush(); inblock = 0; next }
   inblock && /^[[:space:]]*description[[:space:]]*=[[:space:]]*"[^"]+"/ { desc = 1 }
   inblock && /^[[:space:]]*condition[[:space:]]*=[[:space:]]*"AND"[[:space:]]*$/ { cond = 1 }
-  inblock && /^[[:space:]]*(regexes|stopwords)[[:space:]]*=/ { val = 1 }
+  inblock && /^[[:space:]]*stopwords[[:space:]]*=/ { val = 1 }
+  inblock && /^[[:space:]]*regexes[[:space:]]*=/ {
+    one = "^[[:space:]]*regexes[[:space:]]*=[[:space:]]*\\[" q q q "\\^[^" q "]+" q q q "\\][[:space:]]*$"
+    pat = $0; sub("^[^" q "]*" q q q, "", pat); sub(q q q ".*$", "", pat); gsub(/\\./, "", pat)
+    if ($0 ~ one && pat !~ /\.[*+{]/) val = 1
+    else print "entry at line " start ": regexes must be one ^-anchored pattern on one line, with no .* or .+"
+  }
   inblock && /^[[:space:]]*paths[[:space:]]*=/ {
     one = "^[[:space:]]*paths[[:space:]]*=[[:space:]]*\\[" q q q "\\^[A-Za-z0-9_./\\\\-]+[$]" q q q "\\][[:space:]]*$"
     if ($0 ~ one) paths++; else paths += 2

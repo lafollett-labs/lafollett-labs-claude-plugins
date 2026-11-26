@@ -4,9 +4,10 @@ All notable changes to this marketplace. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-From the first automated release on, the release workflow writes each entry from the `changelog.d/`
-fragments: the heading is the marketplace version, and **Plugins** lists the
-plugin versions it bumped. Unreleased work lives in `changelog.d/`.
+From the first automated release on, the release workflow writes each entry
+from the `changelog.d/` fragments: the heading is the marketplace version, and
+**Plugins** lists the plugin versions it bumped. Unreleased work lives in
+`changelog.d/`; never edit this file by hand.
 
 ## [1.34.1] — 2026-11-26
 

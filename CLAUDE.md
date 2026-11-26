@@ -14,37 +14,41 @@ plugins/
   code-reviewer/            # PE-powered five-pass code reviews + review moves
   context-handoff/          # /handoff-context + /resume-context
   issue-manager/            # GitHub Issue management
+  plugin-janitor/           # Plugin cache cleanup
   session-analyzer/         # JSONL session analysis
   ux-designer/              # UX design harness
+  watchwith/                # Watch a video, write down what was on screen
 ```
 
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). Each plugin is independently versioned; this repo is the source of truth.
 
+Optional: `git config core.hooksPath scripts/hooks` runs gitleaks and the private denylist scan on each commit. The hooks check no version or fragment rule.
+
 ### Versions and changelog — HARD RULE
 
-The release workflow stamps every version after merge. A branch never edits one.
+Never edit an existing `version` in a plugin.json or marketplace.json, or CHANGELOG.md. The release workflow writes all three after merge, and CI fails a version edit.
+Title every PR, and a single-commit PR's commit, as a conventional commit; CI fails the PR otherwise.
+Check before pushing: `bash scripts/ci/check-pr.sh origin/main HEAD`.
 
 ```
-on ANY edit under plugins/<name>/:
-    never edit plugin.json .version or marketplace.json .metadata.version   # CI fails the PR
-    add changelog.d/<branch-slug>.md (format: changelog.d/README.md)        # CI fails the PR without one
-    title the PR, and a single-commit PR's commit, as a conventional commit
-on a new plugin:
-    author its plugin.json version and its marketplace.json entry; it debuts at that version
+if the PR changes plugins/:
+    add changelog.d/<branch-slug>.md (format: changelog.d/README.md)   # CI fails the PR without one
+if it adds a plugin:
+    author its plugin.json version and marketplace.json entry          # the only version a branch writes
+if it removes a plugin:
+    title it `type!:`                                                   # the marketplace bumps major
 ```
 
-| Squash subject | Plugin bump |
+| Squash commit | Plugin bump |
 | - | - |
 | `feat` | minor |
 | `fix`, `chore`, `docs`, `refactor`, `test`, … | patch |
-| `type!:` or a `BREAKING CHANGE:` footer | major |
+| `type!:` in the title, or a `BREAKING CHANGE:` footer in a commit message (not the PR description) | major |
 
-The marketplace bumps minor when a plugin debuts, major when one is removed under `!`, else patch.
-Use `feat` only for a capability a user could ask for by name; everything else is `fix` or `chore`.
-
-Enable the hooks once per clone: `git config core.hooksPath scripts/hooks`.
+The level applies to every plugin the PR touches, so keep unrelated plugin edits in separate PRs.
+Use `feat` only for a capability a user could ask for by name; every other change takes a patch type.
 
 ## License
 

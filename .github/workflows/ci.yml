@@ -6,10 +6,14 @@ name: CI
 #
 # workflow_dispatch: the release workflow opens its PR with GITHUB_TOKEN, which triggers no
 # pull_request run, so it dispatches this workflow on the release branch to report the checks.
+#
+# `manifests • skills` is the one required check. It runs after every other job and fails unless
+# each passed, so every gate here blocks the merge, the release PR's auto-merge included.
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, edited]   # edited: a retitle re-runs the title gate
   workflow_dispatch:
 
 # Cancel superseded PR runs only: a cancelled main run leaves that push's commits unscanned,
@@ -24,6 +28,9 @@ permissions:
 jobs:
   check:
     name: manifests • skills
+    needs: [title, shellcheck, gitleaks, suites]
+    # A failed or skipped need would skip this job, and a skipped required check counts as passing.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -111,10 +118,14 @@ jobs:
           node scripts/ci/validate-manifests.js
 
       - name: Branches carry no version edits; plugin changes carry a changelog fragment
-        if: github.event_name == 'pull_request'
+        # Every PR and dispatched branch except this repo's release/next, the one branch that stamps.
+        if: >-
+          (github.event_name == 'pull_request'
+            && !(github.head_ref == 'release/next' && github.event.pull_request.head.repo.full_name == github.repository))
+          || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/release/next')
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bash scripts/ci/check-pr.sh "$BASE_SHA" "$HEAD_SHA"
 
       - name: issue-manager CLI tests
@@ -173,6 +184,65 @@ jobs:
             exit 1
           fi
           echo "no hardcoded marketplace keys"
+
+      - name: Every other gate passed
+        # title is skipped off pull requests (the release PR's dispatch run); every other job must pass.
+        env:
+          EVENT: ${{ github.event_name }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          fail=0
+          [ "$(jq length <<<"$NEEDS")" -eq 4 ] || { echo "::error::expected 4 gates in needs"; fail=1; }
+          while read -r job result; do
+            case "$job:$result" in
+              *:success) echo "  ok    $job" ;;
+              title:skipped)
+                if [ "$EVENT" = pull_request ]; then echo "::error::title was skipped on a pull request"; fail=1
+                else echo "  skip  title ($EVENT)"; fi ;;
+              *) echo "::error::$job: $result"; fail=1 ;;
+            esac
+          done < <(jq -r 'to_entries[] | "\(.key) \(.value.result)"' <<<"$NEEDS")
+          exit "$fail"
+
+  title:
+    name: conventional title
+    # The squash subject sets the release level. GitHub squashes a single-commit PR under that
+    # commit's subject, so it is checked too. chore(release): belongs to this repo's release/next.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Title (and a lone commit's subject) is a conventional commit
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          COMMITS: ${{ github.event.pull_request.commits }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          engine=scripts/ci/release/version-stamp.js
+          release_pr=no
+          [ "$HEAD_REF" = release/next ] && [ "$HEAD_REPO" = "$REPO" ] && release_pr=yes
+          rc=0
+          check_subject() { # check_subject <what> <subject>
+            if ! node "$engine" subject-check --subject "$2"; then
+              echo "::error::$1 is not a conventional commit (type(scope)!: description): $2"; rc=1
+            elif [ "$release_pr" = no ] && node "$engine" release-version --subject "$2" >/dev/null 2>&1; then
+              echo "::error::$1 uses the release subject, which only the release workflow's PR may: $2"; rc=1
+            fi
+          }
+          check_subject "PR title" "$TITLE"
+          if [ "$COMMITS" = 1 ]; then
+            check_subject "the PR's only commit (the squash subject)" "$(git log -1 --format=%s HEAD)"
+          fi
+          [ "$rc" -eq 0 ] && echo "release level: $(node "$engine" level --subject "$TITLE")"
+          exit "$rc"
 
   shellcheck:
     name: shellcheck

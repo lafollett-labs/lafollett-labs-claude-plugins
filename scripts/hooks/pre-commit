@@ -1,17 +1,42 @@
 #!/usr/bin/env bash
-# Pre-commit: refuse a staged secret (gitleaks, when installed) or a hit from the maintainer's private
-# denylist scanner (when configured). Enable once per clone:
+# Pre-commit: refuse a staged secret (gitleaks v8.19+, when installed) or a hit from the maintainer's
+# private denylist scanner (when configured) in the staged paths and added lines. The gitleaks scan
+# matches CI's: inline gitleaks:allow comments are ignored and a .gitleaksignore file is refused.
+# commit-msg scans the message. Enable once per clone:
 #   git config core.hooksPath scripts/hooks
 #   git config labs.denylistScan /path/to/private/scan.sh   # optional; never commit that file
 set -u
 rc=0
+hint="gitleaks git --pre-commit --staged --redact --ignore-gitleaks-allow ."
 if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks git --pre-commit --staged --redact --no-banner --config .gitleaks.toml . >/dev/null 2>&1 \
-    || { echo "pre-commit: gitleaks found a secret in the staged diff (run: gitleaks git --pre-commit --staged --redact .)" >&2; rc=1; }
+  ignore="$(find . -name .gitleaksignore -not -path './.git/*' 2>/dev/null)"
+  if [ -n "$ignore" ]; then
+    echo "pre-commit: remove .gitleaksignore (CI refuses it; allow-list in .gitleaks.toml instead): $ignore" >&2
+    rc=1
+  else
+    gitleaks git --pre-commit --staged --redact --no-banner --ignore-gitleaks-allow --exit-code 3 \
+      --config .gitleaks.toml . >/dev/null 2>&1
+    case $? in
+      0) ;;
+      3) echo "pre-commit: gitleaks found a secret in the staged diff (run: $hint)" >&2; rc=1 ;;
+      *) echo "pre-commit: gitleaks failed to run; it needs v8.19+ (run: $hint)" >&2; rc=1 ;;
+    esac
+  fi
+else
+  echo "pre-commit: gitleaks not on PATH; secret scan skipped (CI still scans)" >&2
 fi
-scan="$(git config --get labs.denylistScan || true)"
+
+scan="$(git config --type=path --get labs.denylistScan || true)"
 if [ -n "$scan" ]; then
-  [ -x "$scan" ] || { echo "pre-commit: labs.denylistScan is set but $scan is not executable" >&2; exit 1; }
-  "$scan" >&2 || { echo "pre-commit: private denylist hit in the staged diff" >&2; rc=1; }
+  [ -x "$scan" ] || { echo "pre-commit: labs.denylistScan is set but $scan is missing or not executable" >&2; exit 1; }
+  staged="$(mktemp)"
+  trap 'rm -f "$staged"' EXIT
+  { git diff --cached --name-only --no-renames --diff-filter=d
+    git diff --cached -U0 --no-color --no-ext-diff --no-renames \
+      | awk '/^diff --git /{h=1} /^@@/{h=0; next} !h && /^\+/{print substr($0, 2)}'
+  } > "$staged"
+  # /dev/null makes the scanner print file:line rather than the matched text.
+  "$scan" "$staged" /dev/null >/dev/null \
+    || { echo "pre-commit: private denylist hit in the staged paths or added lines (inspect: git diff --cached)" >&2; rc=1; }
 fi
 exit "$rc"

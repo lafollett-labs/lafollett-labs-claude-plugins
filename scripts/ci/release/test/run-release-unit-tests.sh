@@ -119,12 +119,21 @@ commit 1 "chore: drop beta" "" plugins/beta/a.md .claude-plugin/marketplace.json
 assert_stdout "plan: removal without the marker -> marketplace patch" "marketplace patch" \
   plan --log "$WORK/log7" --before "$FIX/marketplace-base.json" --after "$FIX/marketplace-removed.json"
 
+# The release commit is the only one touching beta: if it were counted, beta would bump.
+RELEASE_BODY="**Plugins:** beta 2.0.1
+
+Base: $(printf '%040d' 7)"
 { commit 1 "fix(alpha): x" "" plugins/alpha/a.md
-  commit 2 "chore(release): v1.29.6 (#9)" "" plugins/alpha/.claude-plugin/plugin.json .claude-plugin/marketplace.json CHANGELOG.md
-  commit 3 "fix(beta): y" "" plugins/beta/b.md; } > "$WORK/log8"
+  commit 2 "chore(release): v1.29.6 (#9)" "$RELEASE_BODY" plugins/beta/.claude-plugin/plugin.json .claude-plugin/marketplace.json CHANGELOG.md
+  commit 3 "fix(alpha): y" "" plugins/alpha/b.md; } > "$WORK/log8"
 assert_stdout "plan: release commits in range are ignored" "plugin alpha patch
-plugin beta patch
 marketplace patch" plan --log "$WORK/log8" --before "$FIX/marketplace-base.json" --after "$FIX/marketplace-base.json"
+
+{ commit 1 "fix(alpha): x" "" plugins/alpha/a.md
+  commit 2 "chore(release): v9.9.9" "" plugins/beta/b.md; } > "$WORK/log8b"
+assert_stdout "plan: a release-looking subject without the Base: trailer still bumps" "plugin alpha patch
+plugin beta patch
+marketplace patch" plan --log "$WORK/log8b" --before "$FIX/marketplace-base.json" --after "$FIX/marketplace-base.json"
 
 commit 1 "fix: x" "trailer
 

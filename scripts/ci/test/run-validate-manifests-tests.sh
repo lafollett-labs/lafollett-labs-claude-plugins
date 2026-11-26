@@ -1,9 +1,8 @@
 #!/usr/bin/env sh
 # Dependency-free test harness for the manifest + frontmatter validator.
 # Runs validate-manifests.js against fixture repos under fixtures/ and asserts its
-# exit code + a message signature. POSIX sh + node only — no npm packages and no
-# bash: runs under Alpine's busybox `sh` in CI with zero installs (genuinely no
-# network). Exit 0 = all cases pass, 1 = any fail.
+# exit code + a message signature. POSIX sh + node only — no npm packages, no
+# network. Exit 0 = all cases pass, 1 = any fail.
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

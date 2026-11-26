@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PR rules the release workflow depends on. Usage: check-pr.sh <base-sha> <head-sha>
+# PR rules the release workflow depends on. Usage: check-pr.sh <base> <head>   (commit SHAs or refs)
 #   1. A branch never edits an existing version: plugin.json "version" or the marketplace version.
 #      The release workflow stamps them; a hand edit double-bumps. A new plugin.json debuts as authored.
 #   2. A change under plugins/ adds or edits a changelog.d/*.md fragment (README.md excluded).
@@ -13,7 +13,7 @@ ENGINE="$ROOT/scripts/ci/release/version-stamp.js"
 MARKETPLACE=".claude-plugin/marketplace.json"
 
 die() { echo "check-pr: $1" >&2; exit 2; }
-[ -n "$base" ] && [ -n "$head" ] || die "usage: check-pr.sh <base-sha> <head-sha>"
+[ -n "$base" ] && [ -n "$head" ] || die "usage: check-pr.sh <base> <head>"
 git cat-file -e "$base^{commit}" 2>/dev/null || die "base $base is not a commit in this clone"
 git cat-file -e "$head^{commit}" 2>/dev/null || die "head $head is not a commit in this clone"
 

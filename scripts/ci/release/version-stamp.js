@@ -87,6 +87,13 @@ function releaseVersion(subject) {
   return m ? m[1] : null;
 }
 
+// A merged release PR: the release subject AND the Base: trailer only the release workflow writes.
+// A look-alike subject without the trailer is an ordinary commit and bumps what it touches.
+const BASE_TRAILER = /(^|\n)Base: [0-9a-f]{40}(\n|$)/;
+function isReleaseCommit(c) {
+  return releaseVersion(c.subject) !== null && typeof c.body === 'string' && BASE_TRAILER.test(c.body);
+}
+
 // ---- git log dump -------------------------------------------------------------
 function parseLog(text) {
   const commits = [];
@@ -137,7 +144,7 @@ function marketplaceLevel({ breaking, beforeText, afterText }) {
 const MARKETPLACE_PATH = '.claude-plugin/marketplace.json';
 
 function plan({ logText, beforeText, afterText }) {
-  const commits = parseLog(logText).filter((c) => releaseVersion(c.subject) === null);
+  const commits = parseLog(logText).filter((c) => !isReleaseCommit(c));
   const sources = pluginSources(afterText);
   const before = new Set(pluginNames(beforeText));
   const levels = new Map();
@@ -260,7 +267,7 @@ function mergeFragments(texts) {
 }
 
 function summarizeLog(logText) {
-  const commits = logText ? parseLog(logText).filter((c) => releaseVersion(c.subject) === null) : [];
+  const commits = logText ? parseLog(logText).filter((c) => !isReleaseCommit(c)) : [];
   if (commits.length === 0) return '';
   const lines = commits.map((c) => `- ${c.subject.replace(/[\r\n\t]+/g, ' ').trim()} (${c.sha.slice(0, 7)})`);
   return `### Changes\n${lines.join('\n')}\n`;

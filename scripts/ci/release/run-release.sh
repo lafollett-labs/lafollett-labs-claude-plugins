@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Release orchestrator: the only half of version stamping that touches git and gh.
 #
-#   1. reconcile  tag every merged release commit (chore(release): vX) that has no vX tag yet,
-#                 and publish its GitHub Release from the CHANGELOG entry
+#   1. reconcile  tag every merged release commit (chore(release): vX plus a Base: trailer) that has
+#                 no vX tag yet, and publish its GitHub Release from the CHANGELOG entry
 #   2. stamp      plan the bumps for the commits since the newest tag (version-stamp.js plan);
 #                 build ONE stamp commit on the latest main; force-push it to the release branch;
 #                 open or update the release PR; dispatch CI on it; enable squash auto-merge
@@ -21,6 +21,7 @@
 #   RELEASE_MERGE_POLL   seconds between polls (default 20)
 #   RELEASE_DATE         changelog date (default: today, UTC)
 #   RELEASE_BOT_NAME / RELEASE_BOT_EMAIL   stamp commit identity
+#   GH_REPO              owner/repo for gh (default: the remote of the current checkout)
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,17 +67,23 @@ fetch_state() {
 
 newest_tag() { git tag -l "${TAG_PREFIX}[0-9]*" --sort=-v:refname | head -n 1; }
 
+# create_tag <tag> <sha>: through the REST API, then locally. A GITHUB_TOKEN `git push` of a tag onto
+# a commit whose workflow files differ from the default branch's can be refused; the API is not.
+create_tag() {
+  "$GH" api "repos/{owner}/{repo}/git/refs" -f "ref=refs/tags/$1" -f "sha=$2" >/dev/null \
+    || die "failed to create tag $1 at $2"
+  git tag "$1" "$2" || die "failed to create local tag $1"
+}
+
 # First run: seed the baseline at the first parent of the merge that activated this workflow, so
 # that merge's own change is the first thing stamped and history before it is never re-released.
 seed_baseline() {
-  git rev-parse -q --verify "$MAIN_SHA^1" >/dev/null || die "cannot seed: $MAIN has no first parent"
-  git show "$MAIN_SHA^1:$MARKETPLACE" > "$WORK/seed.json" 2>/dev/null || die "no $MARKETPLACE at $MAIN^1"
-  local v; v="$(engine read-version "$WORK/seed.json")" || die "cannot read the seed marketplace version"
-  local tag="$TAG_PREFIX$v"
-  if [ -z "$(git tag -l "$tag")" ]; then
-    git tag "$tag" "$MAIN_SHA^1" || die "failed to create seed tag $tag"
-  fi
-  git push --quiet "$REMOTE" "refs/tags/$tag" || die "failed to push seed tag $tag"
+  local seed v tag
+  seed="$(git rev-parse -q --verify "$MAIN_SHA^1")" || die "cannot seed: $MAIN has no first parent"
+  git show "$seed:$MARKETPLACE" > "$WORK/seed.json" 2>/dev/null || die "no $MARKETPLACE at $MAIN^1"
+  v="$(engine read-version "$WORK/seed.json")" || die "cannot read the seed marketplace version"
+  tag="$TAG_PREFIX$v"
+  create_tag "$tag" "$seed"
   log "first run: seeded baseline $tag at $MAIN^1"
 }
 
@@ -96,27 +103,31 @@ publish_release() {
 }
 
 reconcile() {
-  local base sha subject v at tag
+  local base sha subject v at tag built_on
   base="$(newest_tag)"
   [ -n "$base" ] || return 0
   git log --reverse --format='%H %s' "$base..$MAIN_SHA" > "$WORK/since.txt" || die "cannot list commits since $base"
   while read -r sha subject; do
     v="$(engine release-version --subject "$subject" 2>/dev/null)" || continue
+    # Only the release workflow's squash carries the Base: trailer; a look-alike subject is a plain commit.
+    built_on="$(git log -1 --format=%b "$sha" | sed -n 's/^Base: \([0-9a-f]\{40\}\)$/\1/p' | head -n 1)"
+    if [ -z "$built_on" ]; then
+      echo "::warning::$sha is titled like a release but has no Base: trailer, so it is not tagged"
+      continue
+    fi
     git show "$sha:$MARKETPLACE" > "$WORK/at.json" 2>/dev/null || die "no $MARKETPLACE at $sha"
     at="$(engine read-version "$WORK/at.json")" || die "cannot read the marketplace version at $sha"
     [ "$at" = "$v" ] || die "release commit $sha says v$v but its marketplace version is $at"
     tag="$TAG_PREFIX$v"
     # Strict up-to-date checks make the stamp's base its merge parent; anything else means commits
     # merged in between shipped inside this release without a bump of their own.
-    built_on="$(git log -1 --format=%b "$sha" | sed -n 's/^Base: \([0-9a-f]\{40\}\)$/\1/p' | head -n 1)"
-    if [ -n "$built_on" ] && [ "$built_on" != "$(git rev-parse "$sha^1")" ]; then
+    if [ "$built_on" != "$(git rev-parse "$sha^1")" ]; then
       echo "::warning::$tag was stamped on $built_on but merged onto $(git rev-parse "$sha^1"): commits in between were not bumped"
     fi
     if [ -n "$(git tag -l "$tag")" ]; then
       [ "$(git rev-parse "$tag^{commit}")" = "$sha" ] || die "tag $tag exists on another commit"
     else
-      git tag "$tag" "$sha" || die "failed to tag $tag"
-      git push --quiet "$REMOTE" "refs/tags/$tag" || die "failed to push $tag"
+      create_tag "$tag" "$sha"
       log "tagged $tag at $sha"
     fi
     publish_release "$tag" "$sha" "$v"
@@ -203,7 +214,7 @@ plugins_line="$(grep -m1 '^\*\*Plugins:\*\*' "$WORK/entry.md")"
 git commit --quiet -m "$TITLE" -m "$plugins_line" -m "Base: $MAIN_SHA" || die "stamp commit failed"
 STAMP="$(git rev-parse HEAD)"
 
-# Re-pushing an identical stamp would restart CI and auto-merge for nothing.
+# Re-pushing an identical stamp would only give the PR a new head SHA and restart its checks.
 pushed=yes
 if git fetch --quiet "$REMOTE" "refs/heads/$BRANCH" 2>/dev/null; then
   remote_sha="$(git rev-parse FETCH_HEAD)"
@@ -231,7 +242,8 @@ PR="$(open_pr "$TITLE" "$WORK/body.md")" || exit 1
 log "release PR #$PR"
 
 # PRs opened with GITHUB_TOKEN trigger no pull_request run, so the required checks are dispatched.
-if [ "$pushed" = yes ] && [ -n "$CI_WORKFLOW" ]; then
+# Every run dispatches, pushed or not: a re-run after a failed dispatch must still give the head its checks.
+if [ -n "$CI_WORKFLOW" ]; then
   "$GH" workflow run "$CI_WORKFLOW" --ref "$BRANCH" >/dev/null || die "cannot dispatch $CI_WORKFLOW on $BRANCH"
   log "dispatched $CI_WORKFLOW on $BRANCH"
 fi
@@ -239,7 +251,7 @@ fi
 "$GH" pr merge "$PR" --auto --squash --subject "$TITLE" --body "$plugins_line
 
 Base: $MAIN_SHA" >/dev/null \
-  || log "warn: could not enable auto-merge on #$PR; merge it by hand"
+  || echo "::warning::could not enable auto-merge on release PR #$PR (is 'Allow auto-merge' on?); merge it by hand"
 
 [ "$WAIT" -gt 0 ] || exit 0
 waited=0
@@ -257,5 +269,5 @@ while [ "$waited" -lt "$WAIT" ]; do
   sleep "$POLL"
   waited=$((waited + POLL))
 done
-log "release PR #$PR not merged after ${WAIT}s; the next release run tags it"
+echo "::warning::release PR #$PR not merged after ${WAIT}s; the next release run tags it"
 exit 0

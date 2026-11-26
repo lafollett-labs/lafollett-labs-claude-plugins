@@ -13,12 +13,14 @@ Thanks for your interest in improving the LaFollett Labs Claude Code plugins.
 4. If you changed anything under `plugins/`, add a changelog fragment: `changelog.d/<branch-slug>.md` ([format](changelog.d/README.md))
 5. Open a PR whose title is a conventional commit, with a short description of the change and its motivation
 
-Never edit a `version` field. After a PR merges, the release workflow bumps each changed plugin
-by its squash subject (`feat` minor, `fix`/`chore`/… patch, `!` major), bumps the marketplace,
-folds the fragments into `CHANGELOG.md`, and tags the release. CI fails a PR that edits a version
-or changes a plugin without a fragment.
+Never edit an existing `version` field or `CHANGELOG.md`; a new plugin's `plugin.json` is the one
+version a branch writes. After a PR merges, the release workflow bumps each plugin the PR touched by
+its squash subject (`feat` minor, `fix`/`chore`/… patch, `!` or a `BREAKING CHANGE:` footer in a
+commit message major), bumps the marketplace, folds the fragments into `CHANGELOG.md`, and tags the
+release. CI fails a PR that edits a version, changes a plugin without a fragment, or has a
+non-conventional title. Check before pushing: `bash scripts/ci/check-pr.sh origin/main HEAD`.
 
-Optional local hooks (gitleaks on the staged diff): `git config core.hooksPath scripts/hooks`.
+Optional local hooks (gitleaks v8.19+ on the staged diff): `git config core.hooksPath scripts/hooks`.
 
 ## Plugin & Skill Authoring Style
 

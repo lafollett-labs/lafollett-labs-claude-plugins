@@ -190,12 +190,30 @@ shape_case "a multi-line paths array is refused" "2:not-run" "$(printf '%s\n' "$
 shape_case "a legacy [allowlist] table is refused" "2:not-run" "$(printf '[allowlist]\npaths = ['"'''"'fixtures'"'''"']\n')"
 shape_case "a per-rule allow-list is refused" "2:not-run" "$(printf '[[rules]]\nid = "x"\nregex = '"'''"'x'"'''"'\n[[rules.allowlists]]\npaths = ['"'''"'fixtures'"'''"']\n')"
 shape_case "disabling a default rule is refused" "2:not-run" "$(printf 'disabledRules = ["github-pat"]\n%s\n' "$good_entry")"
+T3="'''"
+shape_case "a legacy per-rule [rules.allowlist] table is refused" "2:not-run" \
+  "$(printf '[[rules]]\nid = "x"\nregex = %sx%s\n[rules.allowlist]\npaths = [%sfixtures%s]\n' "$T3" "$T3" "$T3" "$T3")"
+shape_case "a dotted allowlist key is refused" "2:not-run" "allowlist.paths = [${T3}.*${T3}]"
+shape_case "an inline allowlists array is refused" "2:not-run" "allowlists = [{ description = \"x\", paths = [${T3}.*${T3}] }]"
+shape_case "a match-anything regex is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}.*${T3}]/")"
+shape_case "an anchored match-anything regex is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^.+\$${T3}]/")"
+shape_case "an unanchored regex is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}TOKEN=ghp_${T3}]/")"
+shape_case "two regexes in one entry are refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^a${T3}, ${T3}^b${T3}]/")"
+shape_case "an escaped dot in an anchored regex is accepted" "0:ran" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^TOKEN\\\\.ghp_${T3}]/")"
 
 # --- workflow wiring -----------------------------------------------------------------------------
 # A cancelled run on main would leave that push's commits unscanned: the next push scans only its own.
 CI_YML="$ROOT/.github/workflows/ci.yml"
 check "ci.yml cancels in-progress runs only for pull requests" \
   "$(grep -cF "cancel-in-progress: \${{ github.event_name == 'pull_request' }}" "$CI_YML")" 1
+# The required check (job `check`) gates the merge only if it waits on every other job, this scan included.
+jobs="$(awk '/^jobs:/{j=1; next} j && /^  [A-Za-z0-9_-]+:[[:space:]]*$/{sub(/:.*/, ""); sub(/^  /, ""); print}' "$CI_YML" \
+  | grep -vx check | sort | tr '\n' ' ')"
+needs="$(awk '/^  check:/{c=1; next} c && /^  [^ ]/{c=0} c && /^    needs:/{print}' "$CI_YML" \
+  | sed 's/.*\[//; s/\].*//' | tr ',' '\n' | tr -d ' ' | sort | tr '\n' ' ')"
+check "ci.yml's required check needs every other job" "$needs" "$jobs"
+# shellcheck disable=SC2016 # a literal GitHub expression, not a shell one
+check "ci.yml's required check runs when a need fails" "$(grep -cF 'if: ${{ !cancelled() }}' "$CI_YML")" 1
 
 echo "=============================================="
 echo "$total checks, $fails failed"

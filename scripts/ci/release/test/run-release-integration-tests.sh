@@ -47,7 +47,14 @@ case "$1 $2" in
     echo "https://github.com/example/repo/pull/$n" ;;
   "pr edit")
     arg --title "$@" > "$STATE/pr-title" ;;
-  "workflow run") : ;;
+  "workflow run")
+    [ "${STUB_DISPATCH_FAIL:-0}" = 1 ] && { echo "HTTP 502" >&2; exit 1; }
+    : ;;
+  "api repos/{owner}/{repo}/git/refs")
+    ref=; sha=
+    for a in "$@"; do case "$a" in ref=*) ref="${a#ref=}" ;; sha=*) sha="${a#sha=}" ;; esac; done
+    git --git-dir="$ORIGIN" rev-parse -q --verify "$ref" >/dev/null && { echo "Reference already exists (HTTP 422)" >&2; exit 1; }
+    git --git-dir="$ORIGIN" update-ref "$ref" "$sha" ;;
   "pr merge")
     arg --subject "$@" > "$STATE/merge-subject"
     arg --body "$@" > "$STATE/merge-body"
@@ -144,6 +151,7 @@ check "seed: exits 0" "$code" 0
 check "seed: v1.0.0 tags the activation merge's first parent" "$(tag_sha v1.0.0)" "$C0"
 check "seed: nothing to release" "$(grep -c 'nothing to release' "$W/out")" 1
 check "seed: no PR" "$(calls 'pr create')" 0
+check "seed: tag created through the API" "$(calls 'api repos/{owner}/{repo}/git/refs -f ref=refs/tags/v1.0.0 -f sha=')" 1
 
 # 2. A feat merge on alpha opens the release PR.
 echo "more" >> "$DEV/plugins/alpha/README.md"
@@ -167,12 +175,14 @@ check "stamp: auto-merge pins the subject" "$(cat "$STATE/merge-subject")" "chor
 check "stamp: merge body carries the base" "$(grep -c "^Base: $(git --git-dir="$ORIGIN" rev-parse main)$" "$STATE/merge-body")" 1
 check "stamp: main untouched" "$(version_at main .claude-plugin/marketplace.json)" 1.0.0
 
-# 3. A rerun with nothing new reuses the stamp: no push, no dispatch, PR edited in place.
+# 3. The CI dispatch fails; the rerun reuses the stamp (no push, PR edited in place) and dispatches.
+code="$(release STUB_DISPATCH_FAIL=1)"
+check "dispatch-fail: exits 1" "$code" 1
 before="$(git --git-dir="$ORIGIN" rev-parse release/next)"
 code="$(release)"
 check "rerun: exits 0" "$code" 0
 check "rerun: branch not re-pushed" "$(git --git-dir="$ORIGIN" rev-parse release/next)" "$before"
-check "rerun: no dispatch" "$(calls 'workflow run')" 0
+check "rerun: CI dispatched on the unchanged stamp" "$(calls 'workflow run ci.yml --ref release/next')" 1
 check "rerun: PR edited, not re-created" "$(calls 'pr create'):$(calls 'pr edit')" "0:1"
 
 # 4. Another merge before the release lands regenerates one stamp over both.
@@ -236,17 +246,29 @@ code="$(release STUB_CREATE_FAIL=1)"
 check "no-create: exits 1" "$code" 1
 check "no-create: names the setting" "$(grep -c 'Allow GitHub Actions to create and approve pull requests' "$W/out")" 1
 
-# 11. A release commit whose version disagrees with its marketplace fails closed.
+# 11. Bad tunables fail before any git or gh call.
+refs_before="$(git --git-dir="$ORIGIN" for-each-ref)"
+code="$(release RELEASE_MERGE_WAIT=soon)"
+check "tunables: a non-numeric wait exits 1" "$code" 1
+check "tunables: says why" "$(grep -c 'must be whole seconds' "$W/out")" 1
+check "tunables: no gh call, origin untouched" \
+  "$(calls '.'):$([ "$(git --git-dir="$ORIGIN" for-each-ref)" = "$refs_before" ] && echo same)" "0:same"
+
+# 12. A release-looking subject without the Base: trailer is not tagged and does not wedge the run.
+echo "z" >> "$DEV/README.txt"
+merge "chore(release): v9.9.8"
+code="$(release)"
+check "look-alike: exits 0" "$code" 0
+check "look-alike: warns" "$(grep -c 'has no Base: trailer' "$W/out")" 1
+check "look-alike: not tagged" "$(tag_sha v9.9.8 || echo none)" none
+
+# 13 (last: it leaves main wedged). A release commit whose version disagrees with its marketplace fails closed.
 echo "y" >> "$DEV/README.txt"
-merge "chore(release): v9.9.9"
+merge "chore(release): v9.9.9" "Base: $(git --git-dir="$ORIGIN" rev-parse main)"
 code="$(release)"
 check "mismatch: exits 1" "$code" 1
 check "mismatch: says why" "$(grep -c 'says v9.9.9 but its marketplace version is' "$W/out")" 1
 check "mismatch: no v9.9.9 tag" "$(tag_sha v9.9.9 || echo none)" none
-
-# 12. Bad tunables fail before any git mutation.
-code="$(release RELEASE_MERGE_WAIT=soon)"
-check "tunables: a non-numeric wait exits 1" "$code" 1
 
 echo "=============================================="
 echo "$total checks, $fails failed"

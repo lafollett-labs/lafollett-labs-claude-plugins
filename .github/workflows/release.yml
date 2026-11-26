@@ -4,7 +4,8 @@ name: Release
 # since the newest tag onto the release/next PR and auto-merge it. All logic lives in
 # scripts/ci/release/ (version-stamp.js decides, run-release.sh does the git and gh I/O).
 #
-# Needs: Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
+# Needs: Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests",
+# and Settings → General → "Allow auto-merge".
 # A release PR the run's wait misses is merged as github-actions[bot], which triggers no workflow,
 # so its tag lands on the next run; dispatch this workflow to tag it sooner.
 on:
@@ -26,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      contents: write        # push release/next, push tags
+      contents: write        # push release/next, create tags
       pull-requests: write   # open, edit and auto-merge the release PR
       actions: write         # dispatch ci.yml on release/next
     steps:
@@ -41,4 +42,5 @@ jobs:
       - name: Tag merged releases; stamp and open the release PR
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: bash scripts/ci/release/run-release.sh

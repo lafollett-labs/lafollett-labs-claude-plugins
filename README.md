@@ -79,7 +79,7 @@ changelog.d/                    # One fragment per unreleased PR
 scripts/
   ci/                           # Validators, secret scan, release engine + their suites
   hooks/                        # Optional git hooks
-.github/workflows/              # CI, PR title, release
+.github/workflows/              # CI (with the title gate), release
 ```
 
 `code-reviewer` also ships seven PE sub-agents under `agents/`, and `ux-designer`
@@ -104,10 +104,10 @@ naming, commit format, and authoring style guide.
 Versions are stamped on release, never by hand. After each merge the release
 workflow bumps every changed plugin by the squash commit's conventional type
 (`feat` minor, `fix`/`chore`/… patch, `!` major), bumps the marketplace's
-`metadata.version` (which is what `/plugin marketplace update` compares), folds
-the `changelog.d/` fragments into [CHANGELOG.md](./CHANGELOG.md), and opens a
-release PR that auto-merges and is tagged `v<marketplace version>`. A new plugin
-debuts at the version its `plugin.json` declares.
+`metadata.version`, folds the `changelog.d/` fragments into
+[CHANGELOG.md](./CHANGELOG.md), and opens a release PR that auto-merges and is
+tagged `v<marketplace version>`. A new plugin debuts at the version its
+`plugin.json` declares.
 
 ## License
 
