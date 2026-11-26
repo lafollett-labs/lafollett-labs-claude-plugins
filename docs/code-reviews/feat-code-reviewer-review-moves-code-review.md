@@ -1,6 +1,6 @@
 # Code Review: feat-code-reviewer-review-moves
 
-**Verdict:** ⚠️ CHANGES REQUESTED (round 3 of 3; its fixes are in `dc48b6b`, which has not been re-reviewed)
+**Verdict:** ✅ APPROVED (round 4)
 
 | | |
 | - | - |
@@ -174,8 +174,8 @@ Eleven reference docs that SKILL.md files load at runtime matched no PE.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `3ae7cb4761c476c57cc1abe51d2c8246a1a5181a` (round 3)
-**Status:** ⚠️ Not mergeable as reviewed. Round 3 requested changes, and they landed in `dc48b6b`. ROUND_CAP is reached, so the operator decides on a round 4 before merge.
+**Locked to SHA:** `e58255bc6a7747d3d4d213b6625022abf530f901` (round 4)
+**Status:** ✅ Mergeable. Round 4 approved; only LOW and INFO remain.
 
 ---
 
@@ -325,7 +325,26 @@ The rule "a section ends at the next heading or bold-only line" applied to `#` h
 
 #### Consider
 - [x] LOW-001 – LOW-004, INFO-001
-- [ ] Round 4 on `dc48b6b`: the operator decides (ROUND_CAP reached)
+- [x] Round 4 on `dc48b6b`: APPROVED
+
+---
+
+## Review Round 4
+
+**Verdict:** ✅ APPROVED
+**Reviewed SHA:** `e58255bc6a7747d3d4d213b6625022abf530f901` · **Fix diff:** `3ae7cb4..e58255b`
+**Reviewers:** pe-governance (installed 2.12.0 definition, applying this branch's review moves from HEAD), plus the primary's read of the fix diff. Round 4 was approved by the operator past ROUND_CAP.
+
+**Prior findings:** MEDIUM-001 (AC section-end rule), LOW-001 to LOW-004 and INFO-001 from round 3 are all resolved. The fix was simulated on 12 section shapes, and the `[xX]` regexes were run under git grep and BSD grep.
+
+| ID | Severity | Move | Issue | Disposition |
+| - | - | - | - | - |
+| LOW-001 | 🟢 LOW | M3 | `extract_section` doesn't state three inputs: no heading match, a bold-only line inside a `#` section, and fenced code | Follow-up. None of these shapes occurs in the template or in a 29-story corpus |
+| INFO-001 | ℹ️ INFO | M4 | The bold-only end rule trades one false-positive shape for another | Awareness |
+| INFO-002 | ℹ️ INFO | M1 | The "Phase 5" label remains in 6 PEs after the pointer was removed, and the line wrap is ragged | Follow-up, as a synced edit across all 6 |
+| INFO-003 | ℹ️ INFO | M2 | Round 4 ran the installed pe-governance definition, not the branch's | Awareness, as in round 1 INFO-004 |
+
+**Moves coverage:** M1 to M7 applied.
 
 ---
 
