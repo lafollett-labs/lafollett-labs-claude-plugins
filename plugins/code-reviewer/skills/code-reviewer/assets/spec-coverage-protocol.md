@@ -21,12 +21,12 @@ Catch a change that ships a narrow fix but skips acceptance criteria its linked 
 ac_source = Read(STORY_FILE)
 
 ac_section = extract_section(ac_source,
-  headings: ["Acceptance Criteria", "Acceptance criteria"])
+  heading: /^(#+\s*)?(\*\*)?Acceptance Criteria(\*\*)?:?\s*$/i)
 
 acs = []
 n = 1
 for line in ac_section.lines:
-  if line matches r"^\s*-\s*\[[ x]\]\s*(.+)$":
+  if line matches r"^\s*-\s*\[[ xX]\]\s*(.+)$":
     acs.append({id: "AC-" + n, text: capture[1], shape: "checkbox"})
     n += 1
   elif line matches r"^\s*\d+\.\s*(.+)$":
@@ -37,14 +37,14 @@ if acs is empty:
   flag CHANGES_REQUESTED:
     severity: MEDIUM
     id: "SPEC-NO-AC"
-    title: "Story file has no parseable Acceptance Criteria section"
+    title: "Linked issue or story has no parseable Acceptance Criteria section"
     location: <STORY_FILE>
     description: |
-      Could not extract any acceptance criteria from the linked story.
+      Could not extract any acceptance criteria from the linked issue or story.
       Either the story is missing an "Acceptance Criteria" section, or the
       section uses an unsupported shape (not checkbox / not numbered).
     recommendation: |
-      Update the story file to include an "## Acceptance Criteria" section
+      Update the story file, or for a GitHub issue its body, to include an "## Acceptance Criteria" section
       with either `- [ ]` checklist items or numbered (`1. ...`) items.
 ```
 
@@ -99,7 +99,7 @@ for ac in acs:
       severity: HIGH
       id: "SPEC-MISSING-" + ac.id
       in_scope: true
-      title: "Story AC " + ac.id + " not addressed in " + claims_loc
+      title: "Linked AC " + ac.id + " not addressed in " + claims_loc
       location: <STORY_FILE>
       description: |
         Linked story declares acceptance criterion {ac.id}:
@@ -281,8 +281,8 @@ findings:
   - id: "SPEC-MISSING-AC-3"
     severity: HIGH
     in_scope: true
-    title: "Story AC-3 not addressed in PR description checklist"
-    location: "docs/epics/020-crew-system-architecture/07-Story-...-Hardening.md"
+    title: "Linked AC-3 not addressed in PR description checklist"
+    location: "docs/epics/01-example-epic/03-Story-example.md"
     description: |
       Linked story declares acceptance criterion AC-3: "Pseudocode for the
       composition algorithm present in the ADR, deterministic, with inputs
@@ -295,7 +295,7 @@ findings:
 ## Severity Discipline (Spec Coverage)
 
 | Finding ID prefix | Severity | Verdict impact |
-| --- | --- | --- |
+| - | - | - |
 | `SPEC-MISSING-*` | HIGH | BLOCKING |
 | `SPEC-EVIDENCE-MISSING-*` | HIGH | BLOCKING |
 | `SPEC-DEFER-INVALID-*` | HIGH | BLOCKING |
@@ -303,7 +303,7 @@ findings:
 | `SPEC-DEFER-UNVERIFIED-*` | INFO | Awareness (does NOT block) |
 | `SPEC-WEAK-EVIDENCE-*` | MEDIUM | CHANGES REQUESTED |
 | `SPEC-FORMAT-*` | LOW | Awareness (does NOT block) |
-| `SPEC-NO-AC` | MEDIUM | CHANGES REQUESTED (story file issue) |
+| `SPEC-NO-AC` | MEDIUM | CHANGES REQUESTED (linked issue or story) |
 
 ## Constraints
 

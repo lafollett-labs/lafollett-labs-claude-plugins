@@ -49,6 +49,8 @@ The § Test Budget `match` block is identical across `pe-go.md`, `pe-vue.md`, `p
 
 All seven PE files, `pe-devtools.md` included, carry an identical § Review Moves paragraph; only its Probes table varies by stack. The move procedures live once, in `skills/code-reviewer/assets/review-moves.md`, which the skill passes to each PE as an absolute `REVIEW_MOVES` path. Edit the paragraph in all seven files together, and keep the M1–M7 names in the asset, the probe tables, `SKILL.md` and the report template identical.
 
+`server_side(f)` is identical in `skills/code-reviewer/SKILL.md` § PE Routing and `skills/init-project/SKILL.md` § 5a.1. Edit both together.
+
 ## Reporting Issues
 
 Open a GitHub Issue with:

@@ -1,6 +1,6 @@
 # Review Moves
 
-Seven moves, applied by every PE and by the generic review. A **unit** is anything the diff adds or changes: a function, branch, rule, config key, schema field, doc claim, test or guard. Apply each move whose trigger matches a unit in your domain, starting from your PE's § Review Moves probes. Moves decide where you look; your Severity Definitions and Calibration Anchor still decide how hard you flag.
+Seven moves, applied by every PE and by the generic review. A **unit** is anything the diff adds or changes: a function, branch, rule, config key, schema field, doc claim, test or guard. Apply each move whose trigger matches a unit in your domain, starting from your PE's § Review Moves probes. Moves decide where you look; your Severity Definitions and calibration rules (Calibration Anchor, or pe-devtools' Convergence Calibration), round-over-round discipline included, still decide whether and how hard you flag.
 
 | Move | Trigger — a unit that is or contains | Catches |
 | - | - | - |
@@ -84,14 +84,14 @@ M7 Fact check:
     if unverifiable: severity LOW, title prefixed "UNVERIFIED — "
 ```
 
-If `FIX DIFF` is set, every hunk in it is a fix: apply M1's sibling grep and M4 to each.
+If `FIX DIFF` is set, every hunk in it outside docs/code-reviews/** is a fix: apply M1's sibling grep and M4 to each.
 
 ## Output
 
 ```yaml
 findings:
   - id: "HIGH-001"
-    move: M4                 # M1..M7 that surfaced it, or none
+    move: M4                 # M1..M7 whose trigger the finding falls under, or none
     # ...the PE's usual finding keys
 moves_coverage:              # M1..M7, each exactly once
   - move: M1
@@ -102,6 +102,7 @@ moves_coverage:              # M1..M7, each exactly once
     status: n/a
     checked: ""
     note: "no test added or changed"
+  # ...M2–M5 and M7, one entry each
 ```
 
 `checked` names what was examined and how many; it is required when `status: applied`. `note` is required when `status: n/a`. A result whose `moves_coverage` is missing, empty or short of a move is recorded MISSING.

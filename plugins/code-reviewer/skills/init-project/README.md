@@ -31,7 +31,7 @@ Claude: [Scans repo, writes Stack Map to AGENTS.md or CLAUDE.md, prints summary]
 Go, Vue/Nuxt, React, Svelte, Angular, Astro, Next.js, AWS CDK, CDKTF,
 Terraform, Rust, Python, Java, C#/.NET, Docker, GitHub Actions, GitLab CI.
 
-Unsupported stacks fall back to generic three-pass review without
+Unsupported stacks fall back to the generic review without
 stack-specific test commands.
 
 ---

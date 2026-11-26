@@ -19,12 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - M7 Fact check: claims verified against the primary source, unverifiable ones reported `UNVERIFIED`.
   - The skill passes the asset to every PE as an absolute `REVIEW_MOVES` path. Asset paths now come from the skill's base directory, since `$CLAUDE_PLUGIN_ROOT` is often unset in Bash calls.
   - Each PE gains a § Review Moves probe table for its stack and applies the moves between Pass 4 and Pass 5.
-  - Every finding carries `move:`. Every PE result must carry `moves_coverage` with each move `applied` (and what was checked) or `n/a` (and why). A result without it, in single- or multi-PE dispatch, is re-pinged once and then recorded MISSING, which makes the verdict INCOMPLETE. The report gains a Moves Coverage table.
-  - The generic review runs the moves too. Besides `domain_only` files, it now covers files no PE matches (docs, specs) and server-side files routed to `pe-vue`.
-  - Phase 4.5 covers any linked issue with an acceptance-criteria checklist, not only story-labeled ones. A local `# Task:` or `# Bug:` file now links when it has acceptance criteria.
+  - Every finding carries `move:`. Every PE result must carry `moves_coverage` with each move `applied` (and what was checked) or `n/a` (and why). A result without it, or with a placeholder `checked`, in single- or multi-PE dispatch, is re-pinged once and then recorded MISSING with the failed check, which makes the verdict INCOMPLETE. The generic review's own coverage passes the same check. The report gains a Moves Coverage table.
+  - The generic review runs the moves too. Besides `domain_only` files, it now covers files no PE matches (docs, specs) and server-side files routed to `pe-vue` (Nuxt `server/` stays with `pe-vue`). When no PE matches, it also runs Spec Coverage itself.
+  - Phase 4.5 covers any linked issue with an acceptance-criteria checklist, not only story-labeled ones, using the protocol's own AC parser (now case-insensitive, with an optional colon or bold heading). A local `# Task:` or `# Bug:` file now links when it has acceptance criteria. Issue labels are compared by name, and a failed issue fetch reports `SPEC-LINK-UNVERIFIED` instead of skipping silently.
   - Review docs never quote private user data or user content verbatim.
-  - init-project warns when a Stack Map row routes server-side code to `pe-vue`, and proposes a `Generic` row.
-  - `pe-governance` also reviews `**/skills/*/assets/*.md`, the protocols and templates a skill hands to agents at runtime. They previously matched no PE.
+  - init-project warns when a Stack Map row routes server-side code to `pe-vue`, and proposes a `Generic` row for its test command.
+  - `pe-governance` also reviews `**/skills/*/assets/*.md` and `**/skills/*/references/*.md`, the protocols, templates and reference docs a skill hands to agents at runtime. They previously matched no PE.
+  - PE intros and Constraints say five passes plus § Review Moves, and table separators in the touched files use `| - |`.
 - **code-reviewer reviews Rust, WebAssembly and real-time audio, covers Vite-built PWAs, and checks story coverage without GitHub (`code-reviewer` v2.12.0, marketplace 1.32.0).** Rust fell through to the generic three-pass review, nothing checked real-time audio or DSP correctness, and pe-vue assumed Nuxt. Spec Coverage needed a story-labeled GitHub issue and an open PR, so unpublished repos and stories that exist only as local markdown never got it.
   - New `pe-rust` stack PE covers:
     - Cargo workspaces and features, error handling, `unsafe` and FFI;

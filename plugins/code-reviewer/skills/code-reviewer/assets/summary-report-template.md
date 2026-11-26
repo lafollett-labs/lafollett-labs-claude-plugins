@@ -33,7 +33,7 @@
 
 ## Moves Coverage
 
-| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Guard | M5 Failure | M6 Test | M7 Fact |
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
 | - | - | - | - | - | - | - | - |
 | {PE or Primary} | {checked, or "n/a — note", or MISSING} | … | … | … | … | … | … |
 
@@ -42,7 +42,7 @@
 ## Findings Overview
 
 | Severity | In Scope | Out of Scope |
-| -------- | -------- | ------------ |
+| - | - | - |
 | 🔴 CRITICAL | 0 | 0 |
 | 🟠 HIGH | 0 | 0 |
 | 🟡 MEDIUM | 0 | 0 |
@@ -93,7 +93,7 @@
 -Pre-existing issues not introduced by this PR - log to backlog, don't block-
 
 | Severity | Issue | Location |
-| -------- | ----- | -------- |
+| - | - | - |
 | 🟡 MEDIUM | {Pre-existing issue description} | `{file}:{line}` |
 | 🟢 LOW | {Pre-existing issue description} | `{file}:{line}` |
 
@@ -119,7 +119,7 @@
 ## Files Reviewed
 
 | File | Findings |
-| ---- | -------- |
+| - | - |
 | `{path/to/file}` | {count} |
 | `{path/to/file}` | {count} |
 
@@ -163,14 +163,14 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 
 ### Moves Coverage
 
-| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Guard | M5 Failure | M6 Test | M7 Fact |
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
 | - | - | - | - | - | - | - | - |
 | {PE or Primary} | {checked, or "n/a — note", or MISSING} | … | … | … | … | … | … |
 
 ### Findings Overview
 
 | Severity | In Scope | Out of Scope |
-| -------- | -------- | ------------ |
+| - | - | - |
 | 🔴 CRITICAL | 0 | 0 |
 | 🟠 HIGH | 0 | 0 |
 | 🟡 MEDIUM | 0 | 0 |

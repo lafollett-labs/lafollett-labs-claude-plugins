@@ -2,7 +2,7 @@
 
 Code reviews that dispatch a principal engineer for the stack you actually
 touched, then consolidate what they found. Seven PE sub-agents ship with the
-plugin; anything they do not cover falls back to a generic three-pass review.
+plugin; anything they do not cover falls back to a generic review.
 Every PE and the generic review apply the same seven **review moves**, and each
 reports what it checked for every move.
 

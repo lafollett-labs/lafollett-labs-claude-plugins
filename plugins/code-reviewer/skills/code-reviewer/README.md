@@ -15,7 +15,7 @@ Lean, pragmatic code reviews with scope discipline. Uses right-sized approach �
 - **PR comment + approval** — Prompts reviewer to post summary comment and approve/request changes
 - **Spec coverage for any linked issue** — a linked story, or a task, bug or issue with an acceptance-criteria checklist, gets Phase 4.5
 - **Story coverage without GitHub** — a local story code in the branch (`feat/LT-02-…`) resolves the story from `docs/epics/`; with no PR, acceptance-criteria claims come from commit messages
-- **Generic fallback** — Stacks not covered by a built-in PE (Python, Java, C#, etc.), plus docs, specs and other files no PE fits, get a generic three-pass review with the review moves, using the project's Stack Map test commands
+- **Generic fallback** — Stacks not covered by a built-in PE (Python, Java, C#, etc.), plus docs, specs and other files no PE fits, get a generic review (three passes plus the review moves), using the project's Stack Map test commands
 
 ## Triggers
 
@@ -28,7 +28,7 @@ This skill auto-activates when you mention:
 ## Review Types
 
 | Request | What Gets Reviewed |
-| ------- | ------------------ |
+| - | - |
 | "Review my branch" | `git diff main...HEAD` |
 | PR URL or "Review PR #17" | Fetch source branch, diff against target |
 | "Review staged changes" | `git diff --cached` |
@@ -37,7 +37,7 @@ This skill auto-activates when you mention:
 
 ## Built-in PE Sub-Agents
 
-Seven PE agents ship with the plugin. Each runs the full four-pass protocol (Architecture → Quality+Tests → Security → mandatory Adversarial Re-read) within its domain and returns findings as YAML for the parent skill to consolidate.
+Seven PE agents ship with the plugin. Each runs the full five-pass protocol (Architecture → Quality+Tests → Security → mandatory Adversarial Re-read → Self-Adversarial) plus the review moves within its domain, and returns findings and per-move coverage as YAML for the parent skill to consolidate.
 
 | Agent | Domain | Test commands |
 | - | - | - |
@@ -67,7 +67,7 @@ The parent skill picks which PE(s) to dispatch from the project's Stack Map — 
 ## Severity Levels
 
 | Level | Criteria | Action |
-| ----- | -------- | ------ |
+| - | - | - |
 | 🔴 CRITICAL | Security vulnerabilities, data loss | Must fix |
 | 🟠 HIGH | Bugs, significant design issues | Should fix |
 | 🟡 MEDIUM | Code quality, maintainability | Consider |

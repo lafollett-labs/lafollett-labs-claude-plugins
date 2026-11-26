@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-rust, pe-aws-infra, pe-governance, pe-devtools) plus the pe-audio domain PE on real-time audio/DSP paths. Five-pass protocol with mandatory adversarial re-read, plus seven language-agnostic review moves (ripple, lifecycle, inputs, attack the guard, failure path, falsify the test, fact check) that every PE and the generic review apply and report per-move coverage for, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop with hard 3-round cap until APPROVED (LOW + INFO are awareness-only and do NOT block). pe-devtools calibrated for single-operator local threat model. Changes linked to an issue or story with acceptance criteria — a GitHub issue, or a local code such as feat/LT-02-live-tuner resolved from docs/epics, no GitHub required — additionally run Phase 4.5 Spec Coverage, asserting every acceptance criterion is genuinely discharged or explicitly deferred.
+description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-rust, pe-aws-infra, pe-governance, pe-devtools) plus the pe-audio domain PE on real-time audio/DSP paths. Five-pass protocol with mandatory adversarial re-read plus seven review moves with per-move coverage, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop with hard 3-round cap until APPROVED (LOW + INFO are awareness-only and do NOT block). pe-devtools calibrated for single-operator local threat model. Changes linked to an issue or story with acceptance criteria — a GitHub issue, or a local code such as feat/LT-02-live-tuner resolved from docs/epics, no GitHub required — additionally run Phase 4.5 Spec Coverage, asserting every acceptance criterion is genuinely discharged or explicitly deferred.
 ---
 
 # Expert Code Review
@@ -14,7 +14,7 @@ Lean, pragmatic code reviews with scope discipline. Stack-specific PE sub-agents
 Determine review type from the user's request:
 
 | User Request | Review Type | What to Review |
-| --- | --- | --- |
+| - | - | - |
 | "Review my branch" / "Review this PR" | Branch Diff | `git diff main...HEAD` |
 | GitHub PR URL or "Review PR #N" | PR Review | `git diff <target>...<source>` (auto-checkouts source branch) |
 | "Review staged changes" | Staged Diff | `git diff --cached` |
@@ -99,13 +99,19 @@ for pe in domain PEs (§ PE Agent Selection, Kind = domain):
   if domain_files[pe]:
     matching_pes += pe                     # rides beside the file's stack PE, never replaces it
 domain_only = diff files matched by a domain PE and by no stack PE
-misfit      = diff files routed to pe-vue that are server-side: under server/, api/, backend/, functions/
-              or lambda/, or importing node:http|https|net|child_process|fs, express, fastify, koa, hono,
-              @nestjs/*, pg, mysql2, prisma or mongoose — *.config.* files excepted
-unmatched   = diff files matched by no PE and no `(skip)` Stack Map row, minus docs/code-reviews/**
+misfit      = diff files routed to pe-vue where server_side(f)
+unmatched   = diff files matched by no PE and no `(skip)` Stack Map row, minus docs/code-reviews/**,
+              binaries and snapshots                # a lockfile: review only the dependency set it changes
 generic_files = domain_only ∪ misfit ∪ unmatched
-if generic_files and matching_pes is non-empty:
-  primary also runs the generic review (§ Five-Pass Protocol) on generic_files   # e.g., docs, specs, backend TS
+if generic_files:
+  primary runs the generic review (§ Five-Pass Protocol) on generic_files
+  # the whole review when matching_pes is empty; otherwise docs, specs, backend TS beside the PEs
+
+server_side(f) = f is not *.config.*, *.spec.*, *.test.*, or under server/ beside a nuxt.config.* (Nitro is pe-vue's)
+                 and (a path segment of f is backend/, functions/, lambda/ or server/
+                      or f imports http, https, net, child_process or fs (bare or node:), express, fastify, koa,
+                         hono, @nestjs/*, pg, mysql2, prisma, @prisma/*, mongoose, knex, drizzle-orm, typeorm,
+                         sequelize, ioredis, ws, or any other HTTP-server framework, database or cache driver, or ORM)
 
 if matching_pes is empty:
   approach = "generic"     # primary runs the generic review (no PE expertise available)
@@ -129,13 +135,13 @@ The plugin ships seven built-in PE sub-agents. A **stack** PE owns the files it 
 | `code-reviewer:pe-vue` | stack | Vue 3 (Nuxt 3 or Vite SPA/PWA) / TS / Tailwind / Storybook | `*.vue`, `*.tsx`, `*.jsx`, `tailwind.config.*`, `nuxt.config.*`, `vite.config.*`, `*.stories.*`, `*.webmanifest` |
 | `code-reviewer:pe-rust` | stack | Rust workspaces / unsafe + FFI / WebAssembly (wasm-bindgen) | `*.rs`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo/config.toml` |
 | `code-reviewer:pe-aws-infra` | stack | AWS CDK / Cloudflare CDKTF / Terraform / Docker / GH Actions | `cdk.json`, `*.tf`, `*.tfvars`, `Dockerfile*`, `docker-compose*`, `.github/workflows/*.yml` |
-| `code-reviewer:pe-governance` | stack | Agent definitions, skills, plugin instructions, CLAUDE.md, AGENTS.md | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md`, `**/skills/*/assets/*.md` |
+| `code-reviewer:pe-governance` | stack | Agent definitions, skills, plugin instructions, CLAUDE.md, AGENTS.md | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md`, `**/skills/*/assets/*.md`, `**/skills/*/references/*.md` |
 | `code-reviewer:pe-devtools` | stack | Local dev tooling (single-operator threat model) — bash scripts, hooks, code-review wrappers | `scripts/dev/**`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` |
 | `code-reviewer:pe-audio` | domain | Real-time audio / DSP — audio-thread rules, analysis windows, sample rate, signal hygiene, scheduling, mic capture, pitch/cents accuracy, fixture coverage | `**/{audio,dsp,pitch}/**/*.{rs,ts,js,mjs,vue}`, `**/*[Ww]orklet*.{ts,js,mjs}` — always applied, plus Stack Map rows naming `pe-audio` |
 
 Each agent has its own tools and self-contained five-pass protocol (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial) — they do NOT need a reference file at runtime.
 
-`pe-governance` reviews documents whose audience is the model (agent governance markdown). It does NOT review documents whose audience is humans (ADRs at `docs/architecture/*.md`, runbooks at `docs/runbooks/*.md`, review docs at `docs/code-reviews/*.md`, READMEs). Those fall to generic three-pass review.
+`pe-governance` reviews documents whose audience is the model (agent governance markdown). It does NOT review documents whose audience is humans (ADRs at `docs/architecture/*.md`, runbooks at `docs/runbooks/*.md`, review docs at `docs/code-reviews/*.md`, READMEs). Those fall to the generic review (§ Five-Pass Protocol).
 
 `pe-devtools` reviews local dev tooling artifacts WITH A SINGLE-OPERATOR THREAT MODEL. Its adversarial pass asks "would this fail in normal operator use?" not "could a contrived attacker exploit this?" — calibrating against the over-hardening spiral that production-grade PEs (pe-aws-infra) generate when applied to local-only artifacts. Scripts that ARE production CI primitives (e.g., release workflows, multi-tenant ops tools) stay with pe-aws-infra.
 
@@ -185,7 +191,7 @@ PEs apply this rule when assigning `in_scope` to each finding. Calling agent use
 
 ### Five-Pass Protocol
 
-Each PE runs its own five-pass protocol — definitions live in PE files. The calling agent only invokes PEs and consolidates their YAML output. When NO matching PE exists (approach == "generic"), or on `generic_files` (§ PE Routing), the calling agent runs the generic review itself:
+Each PE runs its own five-pass protocol — definitions live in PE files. The calling agent only invokes PEs and consolidates their YAML output. On `generic_files` (§ PE Routing), which is every reviewable file when no PE matches, the calling agent runs the generic review itself:
 
 ```
 generic review (calling agent, expert: Primary):
@@ -197,7 +203,9 @@ generic review (calling agent, expert: Primary):
                             cross-file claim verification: doc-vs-artifact drift
                             on IAM/RBAC/auth claims is a security-grade finding
   Moves  — Read(REVIEW_MOVES) (§ Asset Paths) and apply every move to every unit; tag each
-           finding with `move:` and record moves_coverage like a PE
+           finding with `move:` and record moves_coverage like a PE; it must pass valid() (§ Dispatch)
+  Spec   — if approach == "generic" and Phase 4.5 reaches § Dispatch Input Enrichment:
+           Read(SPEC_COVERAGE_PROTOCOL) and run it with those STORY_FILE and PR_NUMBER values
 
 PE dispatch (approach == single_pe or multi_pe):
   PE runs five passes:
@@ -218,7 +226,7 @@ SPEC_COVERAGE_PROTOCOL = skill_dir + "/assets/spec-coverage-protocol.md"
 if Read(REVIEW_MOVES) fails: stop and report the path; never dispatch without it
 ```
 
-Pass both as literal absolute paths — PEs cannot resolve `${...}` placeholders.
+Pass both as literal absolute paths.
 
 ### Dispatch
 
@@ -226,20 +234,20 @@ Pass both as literal absolute paths — PEs cannot resolve `${...}` placeholders
 SUITE_RUNNING = {pe-go, pe-vue, pe-rust, pe-aws-infra}
 
 valid(result, pe):
-  result is one parseable YAML block with non-empty expert, findings (a list) and moves_coverage
-  and moves_coverage holds M1..M7 exactly once, status ∈ {applied, n/a},
-      checked non-empty when applied, note non-empty when n/a
+  result is one parseable YAML block with non-empty expert, a findings list (empty allowed) and moves_coverage
+  and moves_coverage holds M1..M7 exactly once, status ∈ {applied, n/a}
+  and each applied entry's checked names what was examined with a count, never a "<...>" placeholder
+  and each n/a entry's note says why no unit triggered the move
   and, if pe in SUITE_RUNNING: test_budget ∈ {none, targeted, full} and pass2_evidence is a non-empty list of strings
   # a finding without `move` reads as move: none
 
 for every dispatched PE, after its result arrives:
   if not valid(result, pe):          # silent teammate, prose, malformed YAML, missing evidence or coverage
-    re-ping / re-dispatch that PE once; still not valid → record it MISSING, continue
+    re-ping / re-dispatch that PE once; still not valid → record it MISSING with the failed check, continue
 
 match approach:
   case "generic":
-    # No matching PE — primary runs all three passes directly
-    # using its own judgment + Stack Map's test commands.
+    # No matching PE — primary runs the generic review (§ Five-Pass Protocol) with the Stack Map's test commands
     no sub-agent dispatch
 
   case "single_pe":
@@ -256,7 +264,7 @@ match approach:
     batches[0] += suite_free                            # suite-free PEs ride the first message
     for batch in batches:
       one message, one Agent call per PE — prompt = that PE's dispatch input (own TEST BUDGET)
-      wait for each PE's result
+      wait for each PE's result; finish any re-ping or re-dispatch before the next batch
 ```
 
 ### Test Budget
@@ -408,8 +416,7 @@ if code is None or code.file is None:
           where story_code(tok).file is set
   if len(hits) == 1: code = hits[0]                    # several codes → ambiguous, no link from subjects
 
-has_ac(text) = text has a heading line matching /^#+\s*Acceptance Criteria\s*$/i whose section holds
-               at least one "- [ ]", "- [x]" or "1." item
+has_ac(text) = SPEC_COVERAGE_PROTOCOL § Acceptance Criteria Parsing yields at least one AC from text
 is_task(text) = its first H1 starts "# Task:" or "# Bug:"
 
 story_linked = false; story_file_path = None
@@ -423,8 +430,10 @@ elif code and code.file and (has_ac(Read(code.file)) or not is_task(Read(code.fi
   story_file_path = code.file                                                   #    a task or bug links only with ACs
 else:
   if issue_id:                                                                  # 3. GitHub issue
-    issue = bash: gh issue view <issue_id> --json labels,body
-    if "story" in issue.labels or "epic" in issue.labels or has_ac(issue.body):
+    issue = bash: gh issue view <issue_id> --json labels,body --jq '{labels: [.labels[].name], body: .body}'
+    if the command failed:
+      add INFO finding SPEC-LINK-UNVERIFIED (expert: "Spec Coverage") naming issue #<issue_id> and the error
+    elif "story" in issue.labels or "epic" in issue.labels or has_ac(issue.body):
       story_linked    = true
       story_file_path = § GitHub Story File Resolution
   if not story_linked and code and code.file is None:
@@ -538,7 +547,7 @@ Never publish a CRITICAL/HIGH without a second look.
 
 ### Step 2: Write or Append
 
-Each round's **Test Evidence** section has one row per dispatched PE: suite-running PEs report `test_budget` + `pass2_evidence`; pe-governance and pe-audio rows read `none`, pe-devtools `lint-only`; a MISSING PE reads `MISSING` / `no YAML after re-ping`.
+Each round's **Test Evidence** section has one row per dispatched PE: suite-running PEs report `test_budget` + `pass2_evidence`; pe-governance and pe-audio rows read `none`, pe-devtools `lint-only`; a MISSING PE reads `MISSING` / `<failed check> after re-ping` (no YAML, no moves_coverage, no pass2_evidence).
 
 Each round's **Moves Coverage** section has one row per dispatched PE plus `Primary` when the generic review ran, one cell per move: `checked` when applied, `n/a — <note>` otherwise, `MISSING` for a MISSING PE. A round with no findings still shows what was checked.
 
@@ -662,7 +671,7 @@ diffs or when no external reviews exist.
 ## Severity Definitions
 
 | Level | Criteria | Action |
-| --- | --- | --- |
+| - | - | - |
 | 🔴 CRITICAL | Security vulnerabilities, data loss, breaking changes, test failures | MUST FIX — blocks merge |
 | 🟠 HIGH | Bugs, vet/typecheck warnings, significant design issues | MUST FIX — blocks merge |
 | 🟡 MEDIUM | Code quality concerns, maintainability risks that affect product behavior | Should fix — changes requested |
@@ -718,6 +727,7 @@ expert: PE-Go|PE-Vue|PE-Rust|PE-AWS-Infra|PE-Governance|PE-DevTools|PE-Audio|Pri
 moves_coverage:                  # REVIEW_MOVES § Output — M1..M7, each exactly once
   - {move: M1, status: applied, checked: "1 changed prop → 3 parents, 1 story", note: ""}
   - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7, one entry each
 findings:
   - id: "CRITICAL-001"
     severity: CRITICAL

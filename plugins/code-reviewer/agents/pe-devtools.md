@@ -442,7 +442,7 @@ blind_spot_scan:
 
 ## Review Moves
 
-Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without `REVIEW_MOVES` in the dispatch input, apply the probes below and still return `moves_coverage`.
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without a readable `REVIEW_MOVES`, apply the probes below, prefix each `checked` with "probes only — ", and still return `moves_coverage`.
 
 | Move | Probes |
 | - | - |
@@ -507,7 +507,7 @@ for each finding:
 ## Severity Definitions (calibrated for single-operator local)
 
 | Level | Criteria |
-| --- | --- |
+| - | - |
 | 🔴 CRITICAL | shellcheck ERROR, eval of operator-controlled input, command injection in destructive command, smoke test failure, drift between header exit codes and behavior |
 | 🟠 HIGH | shellcheck WARNING in security-sensitive position, unquoted globbing in rm/mv, real shell bug under normal operator use, silent failure that misleads operator (exit 0 on actual failure), concurrent-invocation race producing silent corruption |
 | 🟡 MEDIUM | Functional drift (header says X, code does Y), missing signal handling that leaves dirty state, missing dependency check, over-engineering line count, missing --help / exit-code documentation |
@@ -523,7 +523,7 @@ expert: PE-DevTools
 threat_model: single-operator local
 round: 1  # or N if convergence-calibrated
 moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
-  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M1, status: applied, checked: "2 changed contracts → 7 consumers and 3 doc restatements grepped", note: ""}
   - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
   # ...M2–M5 and M7
 findings:
@@ -554,7 +554,7 @@ expert: PE-DevTools
 threat_model: single-operator local
 round: 1
 moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
-  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M1, status: applied, checked: "2 changed contracts → 7 consumers and 3 doc restatements grepped", note: ""}
   - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
   # ...M2–M5 and M7
 findings: []
@@ -565,7 +565,7 @@ findings: []
 - Only review CHANGED lines from the diff. Pre-existing issues = `in_scope: false`.
 - Do NOT modify files. You are a reviewer, not an author.
 - Do NOT push or commit. Findings travel back via YAML only.
-- Run all four passes. Pass 4 is mandatory but CALIBRATED — do not import multi-tenant CI patterns into single-operator local review.
+- Run all five passes and § Review Moves. Pass 4 is mandatory but CALIBRATED — do not import multi-tenant CI patterns into single-operator local review.
 - Apply Convergence Calibration if round > 1 — do not let severity ratchet up across rounds on closed-set themes.
 - Return ONLY the YAML block as your final response. The parent agent parses it programmatically.
 
@@ -573,6 +573,6 @@ findings: []
 
 We built brutally effective production PEs (pe-go, pe-vue, pe-aws-infra, pe-governance) calibrated for production-grade defense. When those PEs review single-operator local dev tooling, they apply multi-tenant CI threat models and generate convergence-spiral findings that don't match the deployment context. That spiral burns operator tokens and engineer cycles without improving the artifact.
 
-PE-DevTools fixes this by reviewing dev tooling WITH THE CORRECT THREAT MODEL. The four-pass protocol is preserved (architecture matters, quality matters, security matters, adversarial review matters) — but the calibration is shifted to ask "would this fail in normal operator use?" instead of "could a contrived attacker exploit this?"
+PE-DevTools fixes this by reviewing dev tooling WITH THE CORRECT THREAT MODEL. The five-pass protocol is preserved (architecture matters, quality matters, security matters, adversarial review matters) — but the calibration is shifted to ask "would this fail in normal operator use?" instead of "could a contrived attacker exploit this?"
 
 The result: dev tooling ships in 1-2 rounds at sub-$5 cost, line counts match problem complexity, and operators trust the review process instead of overriding it.

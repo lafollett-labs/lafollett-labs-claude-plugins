@@ -13,8 +13,8 @@ The seven built-in PE sub-agents — stack PEs `code-reviewer:pe-go`,
 `code-reviewer:pe-governance`, `code-reviewer:pe-devtools`, and the domain PE
 `code-reviewer:pe-audio` — ship with the plugin as proper agents. This skill
 does NOT regenerate them. For stacks not covered by a built-in PE (Python,
-Java, C#, etc.), the code-reviewer skill falls back to a generic three-pass
-review using the Stack Map's test commands.
+Java, C#, etc.), the code-reviewer skill falls back to a generic review
+(three passes plus the review moves) using the Stack Map's test commands.
 
 ---
 
@@ -24,7 +24,7 @@ Scan the repository for language markers, build files, and framework configs.
 
 ### Language Detection
 
-The "Built-in PE" column maps a detected stack to a plugin-shipped stack PE. "Generic" means no built-in agent matches — code-reviewer falls back to a generic three-pass review for that stack. Domain PEs (`pe-audio`) come from § Audio Path Detection, not this table.
+The "Built-in PE" column maps a detected stack to a plugin-shipped stack PE. "Generic" means no built-in agent matches — code-reviewer falls back to the generic review for that stack. Domain PEs (`pe-audio`) come from § Audio Path Detection, not this table.
 
 | Marker | Stack | Built-in PE |
 | - | - | - |
@@ -42,7 +42,7 @@ The "Built-in PE" column maps a detected stack to a plugin-shipped stack PE. "Ge
 | `pyproject.toml`, `requirements.txt`, `*.py` | Python | Generic |
 | `*.java`, `pom.xml`, `build.gradle` | Java | Generic |
 | `*.cs`, `*.csproj`, `*.sln` | C# / .NET | Generic |
-| `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md`, `**/skills/*/assets/*.md` | Agent governance markdown | `pe-governance` |
+| `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md`, `**/skills/*/assets/*.md`, `**/skills/*/references/*.md` | Agent governance markdown | `pe-governance` |
 | `scripts/dev/**/*.sh`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` | Local dev tooling (single-operator threat model) | `pe-devtools` |
 
 ### Framework Detection
@@ -180,7 +180,7 @@ Generate a Stack Map table and prompt the user to add it to `target`:
 | engine/crates/dsp/**, web/src/audio/**, fixtures/audio/** | Real-time audio / DSP (domain) | `pe-audio` | n/a (stack PE runs suites) |
 | cdk/** | CDK TypeScript | `pe-aws-infra` | `cd cdk && npm test && npx cdk synth --all` |
 | api/** | Python | Generic | `cd api && pytest` |
-| .claude/agents/**, **/SKILL.md, plugins/**/agents/*.md, **/CLAUDE.md, **/AGENTS.md, .claude/rules/*.md, docs/rules/*.md, **/skills/*/assets/*.md | Agent governance markdown | `pe-governance` | n/a (lint-shaped checks built into PE) |
+| .claude/agents/**, **/SKILL.md, plugins/**/agents/*.md, **/CLAUDE.md, **/AGENTS.md, .claude/rules/*.md, docs/rules/*.md, **/skills/*/assets/*.md, **/skills/*/references/*.md | Agent governance markdown | `pe-governance` | n/a (lint-shaped checks built into PE) |
 | docs/architecture/** | ADRs (humans) | Generic | n/a (architectural-consistency review) |
 | docs/code-reviews/**, docs/runbooks/**, README.md | Human-targeted docs | (skip) | n/a |
 ```
@@ -190,14 +190,17 @@ Generate a Stack Map table and prompt the user to add it to `target`:
 Run on every row, new or existing, before showing the Stack Map:
 
 ```
-server_side = files under server/, api/, backend/, functions/ or lambda/, or importing node:http|https|net|child_process|fs,
-              express, fastify, koa, hono, @nestjs/*, pg, mysql2, prisma or mongoose — *.config.* files excepted
+server_side(f) = f is not *.config.*, *.spec.*, *.test.*, or under server/ beside a nuxt.config.* (Nitro is pe-vue's)
+                 and (a path segment of f is backend/, functions/, lambda/ or server/
+                      or f imports http, https, net, child_process or fs (bare or node:), express, fastify, koa,
+                         hono, @nestjs/*, pg, mysql2, prisma, @prisma/*, mongoose, knex, drizzle-orm, typeorm,
+                         sequelize, ioredis, ws, or any other HTTP-server framework, database or cache driver, or ORM)
 for each row whose Built-in PE is pe-vue:
-  hits = server_side files under the row's paths (minus skip dirs)
+  hits = files under the row's paths (minus skip dirs) where server_side(f)
   if hits:
-    propose a row for the hits' directories with their own stack (`Generic` for Node/TS backend code)
-    print in the summary: "WARNING: <row paths> routes <n> server-side files (e.g. <file>) to pe-vue,
-      which does not review backend code — proposed row: <dirs> → Generic"
+    propose a row for the hits' directories with their own stack and test command (`Generic` for Node/TS backend code)
+    print in the summary: "WARNING: <row paths> routes <n> server-side files (e.g. <file>) to pe-vue —
+      /code-reviewer adds a generic review for them; narrow the row to exclude <dirs>, or add <dirs> → Generic for their tests"
 ```
 
 The "Built-in PE" column drives `code-reviewer` dispatch. `Generic` rows are reviewed by the parent skill directly using the listed test command (no PE sub-agent dispatch). `(skip)` rows are not reviewed. A domain row (`pe-audio`) overlaps stack rows on purpose: each file gets its stack PE plus every domain PE whose row matches.
@@ -234,7 +237,7 @@ Built-in PE sub-agents that will be dispatched:
   - code-reviewer:pe-audio        (ships with plugin — domain PE, rides beside pe-rust / pe-vue)
 
 Stacks NOT covered by a built-in PE:
-  - {if any} Python (api/) → generic three-pass review
+  - {if any} Python (api/) → generic review
 
 Routing warnings:
   - {if any} § 5a.1 warnings, one per line
@@ -251,7 +254,7 @@ Run /code-reviewer to start reviewing!
   PEs capped by `max_parallel_pes`, default 2).
 - **Stack not covered by a built-in PE** (Python, Java, C#, etc.): record
   the stack + test command in the Stack Map. The code-reviewer skill falls back
-  to a generic three-pass review using those test commands. Do NOT generate a
+  to the generic review using those test commands. Do NOT generate a
   per-project PE file — the plugin's built-in agents are the only PEs.
 - **Cargo workspace below the repo root** (e.g., `engine/`): the Rust row's path
   is `<dir>/**` and every command starts `cd <dir> &&`. Emit one wasm32 build per
