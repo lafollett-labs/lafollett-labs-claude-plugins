@@ -1,6 +1,6 @@
 ---
 name: init-project
-description: Scan the project and write a Stack Map to AGENTS.md or CLAUDE.md for /code-reviewer. Detects languages, frameworks, test commands. PEs (pe-go, pe-vue, pe-aws-infra, pe-governance, pe-devtools) ship with the plugin.
+description: Scan the project and write a Stack Map to AGENTS.md or CLAUDE.md for /code-reviewer. Detects languages, frameworks, Cargo workspaces and wasm32 crates, Vite-only Vue apps, audio/DSP paths, and test commands. PEs (pe-go, pe-vue, pe-rust, pe-aws-infra, pe-governance, pe-devtools, and the pe-audio domain PE) ship with the plugin.
 ---
 
 # Initialize Project for Code Review
@@ -8,13 +8,13 @@ description: Scan the project and write a Stack Map to AGENTS.md or CLAUDE.md fo
 Bootstraps the `/code-reviewer` skill into any project by scanning the repo
 and writing a Stack Map into the project's `AGENTS.md` or `CLAUDE.md` (or `.code-reviewer.yml`).
 
-The five built-in PE sub-agents — `code-reviewer:pe-go`,
-`code-reviewer:pe-vue`, `code-reviewer:pe-aws-infra`,
-`code-reviewer:pe-governance`, `code-reviewer:pe-devtools` — ship with
-the plugin as proper agents. This skill does NOT regenerate them. For
-stacks not covered by a built-in PE (Rust, Python, Java, C#, etc.), the
-code-reviewer skill falls back to a generic three-pass review using the
-Stack Map's test commands.
+The seven built-in PE sub-agents — stack PEs `code-reviewer:pe-go`,
+`code-reviewer:pe-vue`, `code-reviewer:pe-rust`, `code-reviewer:pe-aws-infra`,
+`code-reviewer:pe-governance`, `code-reviewer:pe-devtools`, and the domain PE
+`code-reviewer:pe-audio` — ship with the plugin as proper agents. This skill
+does NOT regenerate them. For stacks not covered by a built-in PE (Python,
+Java, C#, etc.), the code-reviewer skill falls back to a generic three-pass
+review using the Stack Map's test commands.
 
 ---
 
@@ -24,12 +24,12 @@ Scan the repository for language markers, build files, and framework configs.
 
 ### Language Detection
 
-The "Built-in PE" column maps a detected stack to one of the five plugin-shipped agents (`pe-go`, `pe-vue`, `pe-aws-infra`, `pe-governance`, `pe-devtools`). "Generic" means no built-in agent matches — code-reviewer falls back to a generic three-pass review for that stack.
+The "Built-in PE" column maps a detected stack to a plugin-shipped stack PE. "Generic" means no built-in agent matches — code-reviewer falls back to a generic three-pass review for that stack. Domain PEs (`pe-audio`) come from § Audio Path Detection, not this table.
 
 | Marker | Stack | Built-in PE |
 | - | - | - |
 | `go.mod`, `*.go` | Go | `pe-go` |
-| `package.json` + `*.vue` | Vue/Nuxt | `pe-vue` |
+| `package.json` + `*.vue` | Vue/Nuxt — Vue 3 + Vite (SPA/PWA) when `vite.config.*` exists without `nuxt.config.*` | `pe-vue` |
 | `package.json` + `*.tsx`/`*.jsx` | React | `pe-vue` |
 | `package.json` + `*.svelte` | Svelte | `pe-vue` |
 | `cdk.json`, `*.ts` in `cdk/` or `infra/` | AWS CDK | `pe-aws-infra` |
@@ -38,7 +38,7 @@ The "Built-in PE" column maps a detected stack to one of the five plugin-shipped
 | `Dockerfile*`, `docker-compose*` | Docker | `pe-aws-infra` |
 | `.github/workflows/*.yml` | GitHub Actions CI/CD | `pe-aws-infra` |
 | `.gitlab-ci.yml` | GitLab CI/CD | `pe-aws-infra` |
-| `Cargo.toml`, `*.rs` | Rust | Generic |
+| `Cargo.toml`, `*.rs` | Rust | `pe-rust` |
 | `pyproject.toml`, `requirements.txt`, `*.py` | Python | Generic |
 | `*.java`, `pom.xml`, `build.gradle` | Java | Generic |
 | `*.cs`, `*.csproj`, `*.sln` | C# / .NET | Generic |
@@ -52,6 +52,11 @@ Dig deeper into detected stacks to identify frameworks:
 | Indicator | Framework |
 | - | - |
 | `nuxt.config.*` | Nuxt 3 |
+| `vite.config.*` + `*.vue`, no `nuxt.config.*` | Vue 3 + Vite SPA |
+| `vite-plugin-pwa` / `workbox-*` in `package.json`, or `*.webmanifest` | PWA (service worker + manifest) |
+| `[workspace]` in a `Cargo.toml` | Cargo workspace — its directory is the Rust stack root |
+| `crate-type` containing `"cdylib"` + a `wasm-bindgen` dependency in a member `Cargo.toml` | WebAssembly crate (wasm32 target build) |
+| `wasm-pack` / `vite-plugin-wasm` in `package.json`, or a `pkg/` import of a wasm-bindgen crate | WASM consumed by the web app |
 | `next.config.*` | Next.js |
 | `astro.config.*` | Astro |
 | `vite.config.*` | Vite |
@@ -64,6 +69,29 @@ Dig deeper into detected stacks to identify frameworks:
 | `testcontainers` in go.mod | Testcontainers (Go) |
 | `pytest.ini`, `conftest.py` | Pytest |
 | `Makefile` | Make build system |
+
+### Audio Path Detection
+
+```
+skip    = node_modules/, target/, dist/, .git/, vendor/, wasm-pack output (any dir holding *_bg.wasm)
+signals = grep -rlE 'AudioContext|AudioWorkletProcessor|registerProcessor|getUserMedia|createMediaStreamSource|createOscillator|cpal::|rustfft|realfft|hound::' \
+            --include='*.rs' --include='*.ts' --include='*.js' --include='*.mjs' --include='*.vue' . (minus skip)
+covered = signals matching pe-audio's default globs: **/{audio,dsp,pitch}/**/*.{rs,ts,js,mjs,vue}, **/*[Ww]orklet*.{ts,js,mjs}
+fixtures = directories holding *.wav or *.flac whose path contains "fixture" or "testdata",
+           plus any accuracy-baseline file a test reads (grep tests for "baseline")
+extra   = signals − covered
+
+audio_paths = []
+for dir in parent directories of extra:
+  if at least half of dir's source files are in signals: audio_paths += "<dir>/**"
+  else:                                                   audio_paths += each file of extra in dir
+audio_paths += fixtures
+
+if audio_paths:
+  emit Stack Map row: | <audio_paths, comma-separated> | Real-time audio / DSP (domain) | `pe-audio` | n/a (stack PE runs suites) |
+elif covered:
+  emit no row — the default globs already route those files; list them under pe-audio in the summary
+```
 
 ---
 
@@ -93,11 +121,14 @@ For each detected stack, identify the test commands:
 | - | - | - |
 | Go | `go.mod` | `go vet ./... && go test ./... -count=1 -race` |
 | Vue/Nuxt | `package.json` scripts | `npm run typecheck && npm test` |
+| Vue 3 + Vite (PWA or WASM consumer) | `package.json` scripts | `npm run typecheck && npm test && npm run build` |
 | React | `package.json` scripts | `npm test` |
 | CDK | `package.json` in cdk dir | `cd <dir> && npm test && npx cdk synth --all` |
 | CDKTF | `package.json` in cdktf dir | `cd <dir> && npm test && npx cdktf synth` |
 | Terraform | `*.tf` | `terraform validate` |
-| Rust | `Cargo.toml` | `cargo test` |
+| Rust | `Cargo.toml` (workspace root) | `cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace` |
+| Rust → wasm32 | each WebAssembly crate | `cargo build -p <crate> --target wasm32-unknown-unknown --release` (append to the Rust row) |
+| Audio / DSP (domain) | — | n/a — the stack PE for the same files runs the suites |
 | Python | `pyproject.toml` / `requirements.txt` | `pytest` |
 | Java (Maven) | `pom.xml` | `mvn test` |
 | Java (Gradle) | `build.gradle` | `./gradlew test` |
@@ -145,6 +176,8 @@ Generate a Stack Map table and prompt the user to add it to `target`:
 | - | - | - | - |
 | lambdas/**, pkg/** | Go | `pe-go` | `go vet ./... && go test ./... -count=1 -race` |
 | frontend/** | Vue/Nuxt | `pe-vue` | `cd frontend && npm run typecheck && npm test` |
+| engine/** | Rust (Cargo workspace, wasm32) | `pe-rust` | `cd engine && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && cargo build -p engine-wasm --target wasm32-unknown-unknown --release` |
+| engine/crates/dsp/**, web/src/audio/**, fixtures/audio/** | Real-time audio / DSP (domain) | `pe-audio` | n/a (stack PE runs suites) |
 | cdk/** | CDK TypeScript | `pe-aws-infra` | `cd cdk && npm test && npx cdk synth --all` |
 | api/** | Python | Generic | `cd api && pytest` |
 | .claude/agents/**, **/SKILL.md, plugins/**/agents/*.md, **/CLAUDE.md, **/AGENTS.md, .claude/rules/*.md, docs/rules/*.md | Agent governance markdown | `pe-governance` | n/a (lint-shaped checks built into PE) |
@@ -152,7 +185,7 @@ Generate a Stack Map table and prompt the user to add it to `target`:
 | docs/code-reviews/**, docs/runbooks/**, README.md | Human-targeted docs | (skip) | n/a |
 ```
 
-The "Built-in PE" column drives `code-reviewer` dispatch. `Generic` rows are reviewed by the parent skill directly using the listed test command (no PE sub-agent dispatch). `(skip)` rows are not reviewed.
+The "Built-in PE" column drives `code-reviewer` dispatch. `Generic` rows are reviewed by the parent skill directly using the listed test command (no PE sub-agent dispatch). `(skip)` rows are not reviewed. A domain row (`pe-audio`) overlaps stack rows on purpose: each file gets its stack PE plus every domain PE whose row matches.
 
 **Audience-boundary rule for markdown:**
 - Files whose audience is the model (agent definitions, skills, plugin instructions, CLAUDE.md, AGENTS.md) → `pe-governance` enforces pseudocode + schemas + literal commands + tool-permission consistency
@@ -172,17 +205,21 @@ Stacks detected:
   - CDK TypeScript (pe-aws-infra):    cdk/
   - CDKTF TypeScript (pe-aws-infra):  cdktf/
   - GitHub Actions (pe-aws-infra):    .github/workflows/
+  - Rust workspace (pe-rust):         engine/   (wasm32 crate: engine-wasm)
+  - Audio / DSP domain (pe-audio):    engine/crates/dsp/, web/src/audio/, fixtures/audio/  (+ default globs)
 
 Stack Map written to: {target} (or .code-reviewer.yml if preferred)
 
 Built-in PE sub-agents that will be dispatched:
   - code-reviewer:pe-go           (ships with plugin)
   - code-reviewer:pe-vue          (ships with plugin)
+  - code-reviewer:pe-rust         (ships with plugin)
   - code-reviewer:pe-aws-infra   (ships with plugin)
   - code-reviewer:pe-governance  (ships with plugin)
+  - code-reviewer:pe-audio        (ships with plugin — domain PE, rides beside pe-rust / pe-vue)
 
 Stacks NOT covered by a built-in PE:
-  - {if any} Python (api/), Rust (engine/) → generic three-pass review
+  - {if any} Python (api/) → generic three-pass review
 
 Run /code-reviewer to start reviewing!
 ```
@@ -194,10 +231,15 @@ Run /code-reviewer to start reviewing!
 - **Monorepo with many stacks:** map every directory in the Stack Map. The
   code-reviewer skill dispatches one PE sub-agent per matched stack (suite-running
   PEs capped by `max_parallel_pes`, default 2).
-- **Stack not covered by a built-in PE** (Rust, Python, Java, C#, etc.): record
+- **Stack not covered by a built-in PE** (Python, Java, C#, etc.): record
   the stack + test command in the Stack Map. The code-reviewer skill falls back
   to a generic three-pass review using those test commands. Do NOT generate a
-  per-project PE file — the plugin's three built-in agents are the only PEs.
+  per-project PE file — the plugin's built-in agents are the only PEs.
+- **Cargo workspace below the repo root** (e.g., `engine/`): the Rust row's path
+  is `<dir>/**` and every command starts `cd <dir> &&`. Emit one wasm32 build per
+  WebAssembly crate.
+- **Audio code inside a stack root:** keep the stack row as is and add the
+  `pe-audio` domain row from § Audio Path Detection — never split the stack row.
 - **No tests found:** flag it in the summary — "No test command detected for
   <stack>. Consider adding tests." Add a `# TODO` line in the Stack Map's test
   command column rather than guessing.

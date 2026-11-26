@@ -263,7 +263,7 @@ tdd_and_hygiene:
     grep -nE "\"database/sql\"" <file>
     → flag MEDIUM per match "use pgx v5 native, not database/sql adapter"
 
-  if PR body missing "Closes #NNN": flag LOW "missing issue linkage"
+  if neither the PR body ("Closes #NNN") nor the branch links an issue or story code: flag LOW "missing issue linkage"
 
   verification commands:
     grep -nE "log\.(Print|Fatal|Panic)|fmt\.Print" <file>

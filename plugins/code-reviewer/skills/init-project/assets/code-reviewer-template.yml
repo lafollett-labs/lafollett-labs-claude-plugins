@@ -18,16 +18,37 @@ project:
 stacks:
   # - paths: glob patterns for directories/files belonging to this stack
   #   stack: human-readable stack name
-  #   pe: PE reference file to load (references/pe-<type>.md)
-  #   test_commands: commands to run during Quality pass
+  #   pe: built-in PE — stack: pe-go | pe-vue | pe-rust | pe-aws-infra | pe-governance | pe-devtools
+  #                       domain: pe-audio (overlaps stack entries; dispatched beside the stack PE)
+  #   test_commands: commands to run during Quality pass ([] for domain PEs)
   #
-  # Example:
+  # Examples:
   # - paths: ["lambdas/**", "pkg/**", "cmd/**"]
   #   stack: Go
   #   pe: pe-go
   #   test_commands:
   #     - "go vet ./..."
   #     - "go test ./... -count=1 -race"
+  #
+  # - paths: ["engine/**"]
+  #   stack: Rust (Cargo workspace, wasm32)
+  #   pe: pe-rust
+  #   test_commands:
+  #     - "cd engine && cargo fmt --all --check"
+  #     - "cd engine && cargo clippy --workspace --all-targets -- -D warnings"
+  #     - "cd engine && cargo test --workspace"
+  #     - "cd engine && cargo build -p engine-wasm --target wasm32-unknown-unknown --release"
+  #
+  # - paths: ["web/**"]
+  #   stack: Vue 3 + Vite (PWA)
+  #   pe: pe-vue
+  #   test_commands:
+  #     - "cd web && npm run typecheck && npm test && npm run build"
+  #
+  # - paths: ["engine/crates/dsp/**", "web/src/audio/**", "fixtures/audio/**"]
+  #   stack: Real-time audio / DSP (domain)
+  #   pe: pe-audio
+  #   test_commands: []
 
   - paths: ["{PATHS}"]
     stack: "{STACK}"
@@ -43,7 +64,7 @@ settings:
   # Output directory for review documents
   output_dir: "docs/code-reviews"
 
-  # Max concurrent suite-running PEs (pe-go, pe-vue, pe-aws-infra); default 2
+  # Max concurrent suite-running PEs (pe-go, pe-vue, pe-rust, pe-aws-infra); default 2
   max_parallel_pes: 2
 
   # Verdict strictness

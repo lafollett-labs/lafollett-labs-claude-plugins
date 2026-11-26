@@ -1,14 +1,15 @@
 # code-reviewer
 
 Code reviews that dispatch a principal engineer for the stack you actually
-touched, then consolidate what they found. Five PE sub-agents ship with the
+touched, then consolidate what they found. Seven PE sub-agents ship with the
 plugin; anything they do not cover falls back to a generic three-pass review.
 
 ```
 /plugin install code-reviewer
 ```
 
-Needs `gh` on PATH for PR reviews. Nothing else.
+Needs `gh` on PATH for PR reviews. Branch reviews, including story coverage
+against local `docs/epics/` stories, work without it.
 
 ## Skills
 
@@ -44,15 +45,19 @@ the working branch — never to `main`.
 | Agent | Domain |
 | - | - |
 | `pe-go` | Go / PostgreSQL / AWS Lambda |
-| `pe-vue` | Vue 3 / Nuxt 3 / TypeScript / Tailwind / Storybook |
+| `pe-vue` | Vue 3 on Nuxt 3 or a Vite SPA/PWA / TypeScript / Tailwind / Storybook — service workers, offline, storage durability, WASM consumption |
+| `pe-rust` | Rust workspaces / unsafe + FFI / WebAssembly via wasm-bindgen |
 | `pe-aws-infra` | AWS CDK / Cloudflare CDKTF / Terraform / Docker / GitHub Actions |
 | `pe-governance` | agent definitions, skills, `CLAUDE.md`, `AGENTS.md` — markdown whose audience is the model |
 | `pe-devtools` | local dev tooling, reviewed on a single-operator threat model |
+| `pe-audio` | real-time audio and DSP — a *domain* PE dispatched beside `pe-rust` or `pe-vue` on audio paths |
 
 A diff spanning several stacks dispatches every matching PE (suite-running PEs
 at most `max_parallel_pes` at a time, default 2), and
 findings are de-duplicated and cross-verified — a handler claiming an env var
-the CDK stack never sets gets flagged by the pair, not by either alone.
+the CDK stack never sets gets flagged by the pair, not by either alone, and a
+Rust export whose TypeScript call site still passes a `number` where it now
+takes a `bigint` gets flagged by `pe-rust` and `pe-vue` together.
 
 ## Tips
 
@@ -65,6 +70,17 @@ reviewer at a local bash helper and you get a page of multi-tenant attack
 findings for a script only you will ever run. This one asks "would this fail in
 normal operator use?" instead. Scripts that genuinely *are* CI primitives should
 stay with `pe-aws-infra`.
+
+**`pe-audio` rides along; it does not replace.** It runs on files under
+`audio/`, `dsp/`, `pitch/` or named `*worklet*`, plus any path a Stack Map row
+assigns to `pe-audio`. The Rust or Vue PE still reviews the same files and runs
+the tests; `pe-audio` runs none, so it costs no test budget.
+
+**Story coverage works without GitHub.** Name the branch after a local story
+code (`feat/LT-02-live-tuner`) whose file under `docs/epics/` carries a
+`**Code:** LT-02` line, and the review checks every acceptance criterion. With
+no PR, put the `- [x] AC-N — … — evidence: …` checklist in a commit message
+under an `Acceptance Criteria:` line.
 
 **CRITICAL / HIGH / MEDIUM block. LOW and INFO are awareness only** — they do
 not gate the merge, so do not treat a clean-except-LOW report as blocked.

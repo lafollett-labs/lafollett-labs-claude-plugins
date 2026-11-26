@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **code-reviewer reviews Rust, WebAssembly and real-time audio, covers Vite-built PWAs, and checks story coverage without GitHub (`code-reviewer` v2.12.0, marketplace 1.32.0).** Rust fell through to the generic three-pass review, nothing checked real-time audio or DSP correctness, and pe-vue assumed Nuxt. Spec Coverage needed a story-labeled GitHub issue and an open PR, so unpublished repos and stories that exist only as local markdown never got it.
+  - New `pe-rust` stack PE covers:
+    - Cargo workspaces and features, error handling, `unsafe` and FFI;
+    - the wasm-bindgen boundary: export shape, async init, payload size;
+    - determinism across native and wasm32, float and cast safety, and hot-path allocation.
+  - `pe-rust`'s Pass 2 runs `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` and the wasm32 build. It is suite-running, so it counts against `max_parallel_pes`.
+  - New `pe-audio` **domain** PE, dispatched beside `pe-rust` or `pe-vue` on the same files rather than instead of them. It checks:
+    - audio-thread rules and the actual block length;
+    - window sizing against the project's declared lowest fundamental (e.g. 27.5 Hz for contrabassoon), and sample-rate independence;
+    - denormals, click-free fades and drone loop seams;
+    - audio-clock scheduling;
+    - mic capture, including voice-processing constraints on analysis streams, interruptions and iOS Safari pitfalls;
+    - cents, just-intonation and transposition math, and octave errors;
+    - ground-truth fixture coverage and accuracy-baseline regressions.
+  - `pe-audio` is routed by its default globs (`**/{audio,dsp,pitch}/**`, `**/*worklet*`) plus any Stack Map row naming it, and receives the matched files as literal paths. It runs no suites (`TEST BUDGET: none`) and is uncapped.
+  - `pe-vue` now covers Vite-only Vue 3 SPAs and PWAs:
+    - service-worker updates that never reload mid-session;
+    - precache, manifest and installability, including a `.wasm` that Workbox's default `globPatterns` or 2 MiB cap leaves out;
+    - IndexedDB durability: `persist()`, migrations from every prior version, writes confirmed on transaction completion, atomic restore;
+    - Wake Lock re-acquisition and permission UX;
+    - WASM init, load-failure UI and `.free()`.
+  - Nuxt-only checks are gated on `nuxt.config.*`; Nuxt coverage is otherwise unchanged.
+  - Cross-PE verification adds three pairs: `pe-rust` ↔ `pe-vue` at the WASM boundary, `pe-rust` ↔ `pe-audio` for real-time rules inside Rust DSP, and `pe-vue` ↔ `pe-audio` for the AudioWorklet and TypeScript audio graph.
+  - init-project detects Cargo workspaces, wasm32 crates, Vue + Vite without Nuxt, PWAs, and audio paths (by content signals and fixture directories). It emits `pe-rust` test commands and a `pe-audio` domain row, and the YAML template gains matching examples.
+  - Phase 4.5 resolves the story in this order:
+    1. an explicit story file or code in the invocation;
+    2. a story code from the branch — or the one resolving code named by `feat` PR titles and commit subjects — matched to a `**Code:** <CODE>` line under `docs/epics/`. A code beats a bare issue number; any file except a `# Task:` or `# Bug:` links, unless the story is already checked off at the target;
+    3. the GitHub issue path, unchanged.
+  - Without `gh`, a remote or a PR, the GitHub paths are skipped silently. Acceptance-criteria claims then come from the newest branch commit message carrying the checklist.
+  - Deferrals may name a story code or a file under `docs/epics/`. It must resolve to a story with a `**Code:**` line, other than the one under review, that is not checked off in its epic. Deferral and evidence paths are limited to a safe character set and checked without a shell.
+  - Every stack PE's issue-linkage check accepts a branch story code in place of a PR body `Closes #NNN`.
+  - Reviews of `<type>/<CODE>-<desc>` branches are named by `CODE`.
 - **The code-reviewer PEs follow a test budget, and the skill caps concurrent suite-running PEs (`code-reviewer` v2.11.0, marketplace 1.31.0).** Every PE re-ran its full Pass 2 — `go test ./... -race`, `npm ci && npm test`, `cdk synth` for every stack — at a SHA whose pre-push hook had already run those suites. The skill also dispatched every matching PE at once. On a 14-core, 36 GB laptop, parallel reviews alongside agent pushes helped drive the machine out of memory (corebizy #2179).
   - The skill derives `TEST BUDGET: none | targeted | full` for each PE from author receipts. `targeted` requires a passing receipt, at the reviewed SHA, for every test command of that stack; a failing receipt forces `full`.
   - Round 2 and later rounds pass a `FIX DIFF` and default to `targeted`.
