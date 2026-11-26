@@ -9,14 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **code-reviewer stops remediation-round churn: findings list their siblings, later rounds say which fix caused each finding, and remediation runs a ripple pre-flight (`code-reviewer` v2.14.0, marketplace 1.34.0).** This came from a multi-round docs review where every MEDIUM in rounds 3–5 was caused by the previous fix. Each finding named one location. The fix changed only that location, so every other restatement of the rule stayed stale, and each fix's new edge cases went unchecked.
-  - Every finding carries `siblings:`. When its fix would change a rule, contract, definition or repeated value, that is every other `path:line` stating it, found by M1's grep; otherwise it is `[]`. Action Items render "fix <location> + N siblings".
+  - Every finding carries `siblings:`. When its fix would change a rule, contract, definition or repeated value, or the same defect recurs elsewhere, that is every other `path:line` stating or repeating it; otherwise it is `[]`. Action Items render "fix <location> + N siblings".
   - From round 2, every finding carries `introduced_by:`:
-    - `<prior finding id>` when that finding's fix caused it;
+    - `<prior finding id>` when a fix from the latest prior round caused it;
+    - `still-present` when it re-flags an unfixed prior finding;
+    - `new` when its lines did not exist at the prior SHA;
     - `missed` when it was present at the prior SHA but unreported;
     - `pre-existing` when it is out of scope.
   - Each round reports a **Fix cascade** (introduced-by-a-prior-fix count over in-scope findings) and its **Ripple receipts**.
-  - A round that ends CHANGES REQUESTED or BLOCKED prints a remediation pre-flight: fix every sibling, ripple and edge-check each changed rule, and record one `RIPPLE RECEIPT` per rule. From round 2 the caller passes `RIPPLE RECEIPTS:` like `AUTHOR RECEIPTS`, and reviewers spot-check them under M1. Without receipts, M1 runs exhaustive over every rule the fix diff touches, and the report says so.
-  - `valid()` requires `siblings` on every finding and, from round 2, an `introduced_by` naming a prior finding, `missed` or `pre-existing`.
+  - A round that ends CHANGES REQUESTED or BLOCKED prints a remediation pre-flight: fix each in-scope CRITICAL, HIGH or MEDIUM finding and its siblings, ripple and edge-check each changed rule, commit, and record one `RIPPLE RECEIPT` per rule (`<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>`). From round 2 the caller passes `RIPPLE RECEIPTS:` like `AUTHOR RECEIPTS`, bound to the reviewed SHA, and reviewers spot-check them under M1. Without receipts, M1 runs exhaustive over every rule the fix diff touches, and the report says so.
+  - `valid()` requires `siblings` on every finding except Spec Coverage `SPEC-*`, and from round 2 an `introduced_by` from the enum above. Findings the calling agent raises carry both keys too.
   - The halt message at the round cap shows the last round's fix cascade, so the operator can tell churn from progress.
   - Spec Coverage `extract_section` now states three edge cases: no heading match returns empty, a line inside a code fence is never a heading or an item, and a bold-only line does not end a `#` section.
   - The six synced PEs replace "THE PHASE 5 VALIDATION BAR" with an inline checklist.

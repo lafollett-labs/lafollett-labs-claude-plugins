@@ -184,7 +184,7 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 
 ### In Scope Findings
 
-{Same format as primary findings, plus `**Introduced by:** {prior finding id | missed | pre-existing}` under each Location}
+{Same format as primary findings, plus `**Introduced by:** {prior finding id | still-present | new | missed | pre-existing}` under each Location}
 
 ### Action Items
 

@@ -279,6 +279,8 @@ findings:
   - id: "HIGH-001"
     severity: HIGH
     in_scope: true
+    move: M2
+    siblings: []
     title: "Goroutine leak — no completion signal"
     location: "pkg/runtime/agent_loop.go:142"
     description: |

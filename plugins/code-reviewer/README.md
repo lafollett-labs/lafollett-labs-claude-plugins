@@ -97,10 +97,10 @@ or backend code under a frontend PE's paths, get the moves from the generic
 review.
 
 **Fix the rule, not the line.** Every finding lists its siblings: the other
-places that state the same rule. A round that requests changes prints a
-pre-flight. Fix each finding and its siblings, re-check every rule your fix
-touched, and pass one `RIPPLE RECEIPTS` line per rule (`<rule> → N restatements
-checked`) with the next `/code-reviewer` run. From round 2, each finding says
+places that state the same rule or repeat the same defect. A round that requests changes prints a
+pre-flight. Fix each blocking finding and its siblings, re-check every rule your
+fix touched, commit, and pass one `RIPPLE RECEIPTS` line per rule
+(`<rule> → N restatements checked @ <sha>`) with the next `/code-reviewer` run. From round 2, each finding says
 which earlier fix caused it, and the report's fix cascade shows whether the
 rounds are converging or churning.
 

@@ -7,7 +7,7 @@ Lean, pragmatic code reviews with scope discipline. Uses right-sized approach �
 - **Right-sized reviews** — < 200 lines: primary agent; ≥ 200 lines: stack-specific PE sub-agents
 - **Built-in PE sub-agents** — `pe-go` (Go/SQL/Lambda), `pe-vue` (Vue on Nuxt or Vite SPA/PWA/TS), `pe-rust` (Rust/unsafe/WASM), `pe-aws-infra` (CDK/CDKTF/IaC), `pe-governance` (agent definitions/skills/CLAUDE.md/AGENTS.md), `pe-devtools` (local dev tooling, single-operator threat model), and the domain PE `pe-audio` (real-time audio/DSP, dispatched beside the stack PE), each with a self-contained protocol
 - **Review moves** — seven language-agnostic moves (ripple, lifecycle, inputs, attack the guard, failure path, falsify the test, fact check) in `assets/review-moves.md`, applied by every PE through stack-specific probes and by the generic review; each result reports per-move coverage, and a result without it is MISSING
-- **Remediation ripple** — every finding lists its `siblings` (each other `path:line` stating the rule its fix changes); from round 2 each finding names the prior fix that `introduced_by` it, each round reports its fix cascade, and a round that requests changes prints a pre-flight whose `RIPPLE RECEIPTS` the next round spot-checks
+- **Remediation ripple** — every finding lists its `siblings` (each other `path:line` that states the rule its fix changes or repeats the same defect); from round 2 each finding names the prior fix that `introduced_by` it, each round reports its fix cascade, and a round that requests changes prints a pre-flight whose `RIPPLE RECEIPTS` the next round spot-checks
 - **Scope discipline** — In Scope (blocks PR) vs Out of Scope (tech debt)
 - **Finding validation** — All CRITICAL/HIGH/MEDIUM verified before publishing
 - **Multiple review types** — Branch diff, PR review, staged changes, specific files, ad-hoc
@@ -92,11 +92,12 @@ each /code-reviewer invocation = one round
 while verdict != "✅ APPROVED":
   engineer runs /code-reviewer on current branch HEAD
   if verdict == "🚫 BLOCKED" / "⚠️ CHANGES REQUESTED":
-    remediate in-scope CRITICAL / HIGH / MEDIUM (LOW + INFO are awareness)
-    commit remediation
-    re-invoke /code-reviewer
+    follow the printed pre-flight: fix each in-scope CRITICAL / HIGH / MEDIUM and its siblings
+      (LOW + INFO are awareness), ripple every rule the fix changes
+    commit remediation, record one RIPPLE RECEIPT per changed rule
+    re-invoke /code-reviewer with the receipts
   if round > ROUND_CAP:
-    skill HALTS to operator — proceed | abort | escalate
+    skill HALTS to operator with the last fix cascade — proceed | abort | escalate
 ```
 
 ### Round-to-round continuity
@@ -106,7 +107,7 @@ The committed review doc IS the continuity mechanism. Round N writes/appends to 
 - prior finding still present in current diff → re-flag as `STILL_PRESENT` (severity unchanged unless context shifts)
 - prior finding's pattern no longer in code → mark `RESOLVED`, do NOT re-raise
 - new finding from Pass 4 → flag as `NEW`
-- every round-2+ finding carries `introduced_by`: the prior finding whose fix caused it, `missed`, or `pre-existing`; the round's **Fix cascade** counts the first kind
+- every round-2+ finding carries `introduced_by`: the prior finding whose fix caused it, `still-present`, `new`, `missed`, or `pre-existing`; the round's **Fix cascade** counts the first kind
 
 PEs that re-flag closed-set findings on a remediated diff are over-firing — the convergence-spiral failure mode. The Pass 4 Calibration Anchor in each PE definition governs this.
 
