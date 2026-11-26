@@ -18,11 +18,15 @@ Catch a change that ships a narrow fix but skips acceptance criteria its linked 
 ## Acceptance Criteria Parsing
 
 ```
+extract_section(text, heading):          # every call below
+  start after the first line matching heading
+  if that line starts with "#": end at the next heading with the same or fewer "#", else at end of text
+  else:                         end at the next "#" heading or bold-only line, else at end of text
+
 ac_source = Read(STORY_FILE)
 
 ac_section = extract_section(ac_source,
   heading: /^(#+\s*)?(\*\*)?Acceptance Criteria:?(\*\*)?:?\s*$/i)
-  # a section ends at the next heading, the next bold-only line, or end of text
 
 acs = []
 n = 1
@@ -224,7 +228,7 @@ verify_local(ac, followup, file):
   if file is None:                                     invalid(ac, followup, "resolves to no story file")
   elif realpath(file) == realpath(STORY_FILE):         invalid(ac, followup, "is the story under review")
   elif code is None:                                   invalid(ac, followup, "is not a story — it has no `**Code:** <CODE>` line")
-  elif `grep -rqE '^\s*-\s*\[x\]\s*(\*\*|\[)?<code>\b' docs/epics --include='*.md'` succeeds:
+  elif `grep -rqE '^\s*-\s*\[[xX]\]\s*(\*\*|\[)?<code>\b' docs/epics --include='*.md'` succeeds:
     closed(ac, followup, "is checked off as done in its epic")
 
 invalid(ac, target, why):

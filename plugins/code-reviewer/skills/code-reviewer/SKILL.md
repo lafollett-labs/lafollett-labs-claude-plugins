@@ -81,7 +81,7 @@ story_code(text):                          # → {code, file} | None
   return declared                          # anything else ("fix-12", "UTF-8") is part of the slug
 
 safe_path(p)       = p matches ^[A-Za-z0-9._/-]+$ and contains no ".."
-done_at_target(c)  = `git grep -qE '^[[:space:]]*-[[:space:]]*\[x\][[:space:]]*(\*\*|\[)?<c>([^0-9]|$)' <target> -- docs/epics` succeeds
+done_at_target(c)  = `git grep -qE '^[[:space:]]*-[[:space:]]*\[[xX]\][[:space:]]*(\*\*|\[)?<c>([^0-9]|$)' <target> -- docs/epics` succeeds
 ```
 
 ### PE Routing
@@ -238,7 +238,7 @@ SUITE_RUNNING = {pe-go, pe-vue, pe-rust, pe-aws-infra}
 valid(result, pe):
   result is one parseable YAML block with non-empty expert, a findings list (empty allowed) and moves_coverage
   and moves_coverage holds M1..M7 exactly once, status ∈ {applied, n/a}
-  and each applied entry's checked names what was examined with a count, never a "<...>" placeholder or an Output Format example copied verbatim
+  and each applied entry's checked names what was examined with a count, never a "<...>" placeholder or a copied example ("2 changed contracts → 7 consumers and 3 doc restatements grepped", or one from this file or REVIEW_MOVES)
   and each n/a entry's note says why no unit triggered the move
   and, if pe in SUITE_RUNNING: test_budget ∈ {none, targeted, full} and pass2_evidence is a non-empty list of strings
   # a finding without `move` reads as move: none
@@ -485,7 +485,7 @@ if story_file_path is None or not safe_path(story_file_path):
     recommendation: |
       Pass STORY_FILE explicitly (path chars [A-Za-z0-9._/-] only), OR add a `**Code:** <CODE>` line
       to the story under docs/epics/, OR add the issue to a docs/epics/*/.github-state.json
-      mapping, OR verify `gh issue view <issue_id>` works (auth + network).
+      mapping, OR add acceptance criteria to the issue body.
   return  # do not proceed to Dispatch Input Enrichment
 ```
 

@@ -624,7 +624,7 @@ CLOSED-SET CONVERGENCE:
 
 THE PHASE 5 VALIDATION BAR APPLIES:
   Every Pass 4 finding must pass Phase 5 Finding Validation before
-  publishing. Re-read SKILL.md § Phase 5: Finding Validation. Pass 4
+  publishing. Pass 4
   findings that fail the validation checklist (actually exploitable?
   real risk not theoretical? would a senior agree blocks PR?) get
   downgraded or omitted.
