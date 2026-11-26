@@ -27,7 +27,7 @@
 
 | PE | Budget | Pass 2 evidence |
 | - | - | - |
-| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "no YAML after re-ping"} |
+| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "<failed check> after re-ping"} |
 
 ---
 
@@ -159,7 +159,7 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 
 | PE | Budget | Pass 2 evidence |
 | - | - | - |
-| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "no YAML after re-ping"} |
+| {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "<failed check> after re-ping"} |
 
 ### Moves Coverage
 
