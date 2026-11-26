@@ -129,7 +129,7 @@ The plugin ships seven built-in PE sub-agents. A **stack** PE owns the files it 
 | `code-reviewer:pe-vue` | stack | Vue 3 (Nuxt 3 or Vite SPA/PWA) / TS / Tailwind / Storybook | `*.vue`, `*.tsx`, `*.jsx`, `tailwind.config.*`, `nuxt.config.*`, `vite.config.*`, `*.stories.*`, `*.webmanifest` |
 | `code-reviewer:pe-rust` | stack | Rust workspaces / unsafe + FFI / WebAssembly (wasm-bindgen) | `*.rs`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo/config.toml` |
 | `code-reviewer:pe-aws-infra` | stack | AWS CDK / Cloudflare CDKTF / Terraform / Docker / GH Actions | `cdk.json`, `*.tf`, `*.tfvars`, `Dockerfile*`, `docker-compose*`, `.github/workflows/*.yml` |
-| `code-reviewer:pe-governance` | stack | Agent definitions, skills, plugin instructions, CLAUDE.md, AGENTS.md | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md` |
+| `code-reviewer:pe-governance` | stack | Agent definitions, skills, plugin instructions, CLAUDE.md, AGENTS.md | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md`, `**/skills/*/assets/*.md` |
 | `code-reviewer:pe-devtools` | stack | Local dev tooling (single-operator threat model) — bash scripts, hooks, code-review wrappers | `scripts/dev/**`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` |
 | `code-reviewer:pe-audio` | domain | Real-time audio / DSP — audio-thread rules, analysis windows, sample rate, signal hygiene, scheduling, mic capture, pitch/cents accuracy, fixture coverage | `**/{audio,dsp,pitch}/**/*.{rs,ts,js,mjs,vue}`, `**/*[Ww]orklet*.{ts,js,mjs}` — always applied, plus Stack Map rows naming `pe-audio` |
 

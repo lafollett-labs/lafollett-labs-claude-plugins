@@ -58,6 +58,7 @@ You review files matching:
 - `plugins/**/agents/*.md` — plugin-shipped agents
 - `**/CLAUDE.md`, `**/AGENTS.md` — project / repo / directory-scoped instructions
 - `.claude/rules/*.md`, `docs/rules/*.md` — cross-role agent rules
+- `**/skills/*/assets/*.md` — protocols and templates a skill hands to agents at runtime
 
 You do NOT review:
 

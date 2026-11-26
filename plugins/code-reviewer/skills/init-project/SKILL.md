@@ -42,7 +42,7 @@ The "Built-in PE" column maps a detected stack to a plugin-shipped stack PE. "Ge
 | `pyproject.toml`, `requirements.txt`, `*.py` | Python | Generic |
 | `*.java`, `pom.xml`, `build.gradle` | Java | Generic |
 | `*.cs`, `*.csproj`, `*.sln` | C# / .NET | Generic |
-| `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md` | Agent governance markdown | `pe-governance` |
+| `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md`, `**/skills/*/assets/*.md` | Agent governance markdown | `pe-governance` |
 | `scripts/dev/**/*.sh`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` | Local dev tooling (single-operator threat model) | `pe-devtools` |
 
 ### Framework Detection
@@ -180,7 +180,7 @@ Generate a Stack Map table and prompt the user to add it to `target`:
 | engine/crates/dsp/**, web/src/audio/**, fixtures/audio/** | Real-time audio / DSP (domain) | `pe-audio` | n/a (stack PE runs suites) |
 | cdk/** | CDK TypeScript | `pe-aws-infra` | `cd cdk && npm test && npx cdk synth --all` |
 | api/** | Python | Generic | `cd api && pytest` |
-| .claude/agents/**, **/SKILL.md, plugins/**/agents/*.md, **/CLAUDE.md, **/AGENTS.md, .claude/rules/*.md, docs/rules/*.md | Agent governance markdown | `pe-governance` | n/a (lint-shaped checks built into PE) |
+| .claude/agents/**, **/SKILL.md, plugins/**/agents/*.md, **/CLAUDE.md, **/AGENTS.md, .claude/rules/*.md, docs/rules/*.md, **/skills/*/assets/*.md | Agent governance markdown | `pe-governance` | n/a (lint-shaped checks built into PE) |
 | docs/architecture/** | ADRs (humans) | Generic | n/a (architectural-consistency review) |
 | docs/code-reviews/**, docs/runbooks/**, README.md | Human-targeted docs | (skip) | n/a |
 ```

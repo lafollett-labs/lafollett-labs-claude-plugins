@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 4.5 covers any linked issue with an acceptance-criteria checklist, not only story-labeled ones. A local `# Task:` or `# Bug:` file now links when it has acceptance criteria.
   - Review docs never quote private user data or user content verbatim.
   - init-project warns when a Stack Map row routes server-side code to `pe-vue`, and proposes a `Generic` row.
+  - `pe-governance` also reviews `**/skills/*/assets/*.md`, the protocols and templates a skill hands to agents at runtime. They previously matched no PE.
 - **code-reviewer reviews Rust, WebAssembly and real-time audio, covers Vite-built PWAs, and checks story coverage without GitHub (`code-reviewer` v2.12.0, marketplace 1.32.0).** Rust fell through to the generic three-pass review, nothing checked real-time audio or DSP correctness, and pe-vue assumed Nuxt. Spec Coverage needed a story-labeled GitHub issue and an open PR, so unpublished repos and stories that exist only as local markdown never got it.
   - New `pe-rust` stack PE covers:
     - Cargo workspaces and features, error handling, `unsafe` and FFI;
