@@ -52,14 +52,11 @@ if acs is empty:
 
 ```
 headings = /^(#+\s*)?(Acceptance Criteria|Acceptance Checklist):?\s*$/i
-  # commit messages may carry the heading without "#": `git commit` opened in an editor strips "#" lines
 
 if PR_NUMBER is set:
   claims_text = bash: gh pr view <PR_NUMBER> --json body --jq '.body'
   claims_loc  = "PR #<PR_NUMBER> description"
 else:
-  # No PR: the branch's newest commit message carrying the checklist stands in for the PR body
-  # (squash merges copy the PR body into the commit body, so the format is the same)
   claims_text = ""; claims_loc = "branch commit messages (no checklist found)"
   for sha in bash: git log --format=%H <target>..<source>          # newest first
     body = bash: git log -1 --format=%B <sha>
@@ -77,7 +74,7 @@ for line in pr_section.lines:
       claim: "addressed",
       evidence: capture[3]
     })
-  elif line matches r"^\s*-\s*\[\s*\]\s*(AC-\d+)\s*[—-]\s*(.+?)\s*[—-]\s*deferred to\s*(#\d+|[A-Z]{2,5}-\d+|\S+\.md)$":
+  elif line matches r"^\s*-\s*\[\s*\]\s*(AC-\d+)\s*[—-]\s*(.+?)\s*[—-]\s*deferred to\s*(#\d+|[A-Z]{2,5}-\d+|[A-Za-z0-9._/-]+\.md)$":
     pr_claims.append({
       id: capture[1],
       claim: "deferred",
@@ -159,7 +156,7 @@ verify_evidence(evidence_str, ac):
           point at a file:line that lives in the diff.
     return
 
-  if evidence_str matches r"^([^:]+):(\d+)$":  # file:line
+  if evidence_str matches r"^([A-Za-z0-9._/-]+):(\d+)$" and capture[1] has no "..":  # file:line — safe charset only
     file_path = capture[1]
     line_num = capture[2]
     diff = bash: git diff <target>..<source> -- <file_path>
@@ -217,7 +214,8 @@ verify_deferral(followup, ac):
       file = first line of: grep -rlE "^\*\*Code:\*\* +<CODE> *$" docs/epics --include='*.md'
       verify_local(ac, followup, file)
     "<path>.md":                                       # local story file
-      file = <path> if it exists (relative to the repo root) else None
+      if path contains ".." or starts with "/": file = None
+      else: file = <path> if Glob(<path>) matches it (repo root) else None   # Glob/Read, never Bash
       verify_local(ac, followup, file)
 
 verify_local(ac, followup, file):
@@ -225,7 +223,7 @@ verify_local(ac, followup, file):
   elif realpath(file) == realpath(STORY_FILE):         invalid(ac, followup, "is the story under review")
   else:
     code = the `**Code:** <CODE>` value in file, if any
-    if code and `grep -rqE "^\s*-\s*\[x\]\s*<code>\b" docs/epics --include='*.md'` succeeds:
+    if code and `grep -rqE "^\s*-\s*\[x\]\s*(\*\*|\[)?<code>\b" docs/epics --include='*.md'` succeeds:
       closed(ac, followup, "is checked off as done in its epic")
 
 invalid(ac, target, why):

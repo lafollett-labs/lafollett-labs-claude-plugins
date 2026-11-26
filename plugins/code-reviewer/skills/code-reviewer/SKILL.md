@@ -74,9 +74,11 @@ story_code(text):                          # → {code, file} | None
     code = upper(tok)
     file = first line of: grep -rlE "^\*\*Code:\*\* +<code> *$" docs/epics --include='*.md'
     if file:                    return {code, file}
-    if tok == code and not declared:
-      declared = {code, file: None}        # written uppercase but no story file — still a declared code
-  return declared                          # lowercase tokens that resolve nothing ("fix-12") are slugs
+    prefix = code before "-"
+    if tok == code and not declared
+       and `grep -rqE "^\*\*Code:\*\* +<prefix>-[0-9]+" docs/epics --include='*.md'` succeeds:
+      declared = {code, file: None}        # a known story prefix with no file for this number
+  return declared                          # anything else ("fix-12", "UTF-8") is part of the slug
 ```
 
 ### PE Routing
@@ -90,7 +92,8 @@ git diff <target>...<source> --stat | tail -1  # PR reviews (informational)
 matching_pes = stack PEs whose Stack Map paths intersect with files in the diff   # § Selection Priority
 for pe in domain PEs (§ PE Agent Selection, Kind = domain):
   domain_paths = pe's default globs ∪ every Stack Map row naming pe
-  if any diff file matches domain_paths:
+  domain_files[pe] = diff files matching domain_paths
+  if domain_files[pe]:
     matching_pes += pe                     # rides beside the file's stack PE, never replaces it
 domain_only = diff files matched by a domain PE and by no stack PE
 if domain_only:
@@ -265,7 +268,7 @@ diff content into the prompt. The calling agent provides metadata only:
 You are reviewing changes for {ISSUE_ID}.
 
 DIFF COMMAND (run this yourself — do NOT ask the caller to paste it):
-  git diff {target}...{source} -- {file patterns for your domain; for a domain PE, its domain_paths}
+  git diff {target}...{source} -- {file patterns for your domain; for a domain PE, its domain_files as literal paths — git pathspecs have no {a,b}}
 
 KEY FILES CHANGED:
   {bullet list of changed files relevant to this PE's domain, from --stat output}
@@ -324,42 +327,28 @@ cross_pe_verification (when multiple PEs dispatched):
       flag HIGH "missing IAM grant — handler calls <api> but CDK doesn't grant it"
 
   pe-rust ↔ pe-vue (WASM boundary):
-    for each #[wasm_bindgen] export PE-Rust reports added/changed:
-      grep its name across *.ts / *.vue / generated *.d.ts
-      if a call site's arity, nullability (Option → undefined) or numeric type (u64/i64 → bigint) disagrees:
+    exports = names on the line after each added/changed `#[wasm_bindgen]` in
+              git diff <target>...<source> -- '*.rs'          # calling agent computes this
+    for each export: grep its call sites across *.ts / *.vue / generated *.d.ts
+      if arity, nullability (Option → undefined) or numeric type (u64/i64 → bigint) disagrees:
         flag HIGH "WASM boundary mismatch — <export> in <rust file> vs <ts call site>"
-    if PE-Rust says an export returns Result/throws but PE-Vue found the call site without
-      try/catch or error UI:
-      flag MEDIUM "engine error unhandled at <call site>"
-    if PE-Rust reports a new exported struct and PE-Vue found no .free() / FinalizationRegistry
-      on the owning component's teardown:
-      flag MEDIUM "wasm handle leak — <struct> never freed"
-    if PE-Vue says the engine initialises once but PE-Rust's #[wasm_bindgen(start)] does heavy work,
-      or the reverse (PE-Rust exposes init(), PE-Vue never awaits it):
-      flag the discrepancy — one PE may have missed something
+    if a PE-Rust finding and a PE-Vue finding name the same export or wasm handle
+      (unhandled error, missing .free(), init order):
+      merge into ONE finding, severity = max, domains [Rust, Vue]
 
   pe-rust ↔ pe-audio (real-time constraints in Rust DSP):
-    if PE-Audio classifies a Rust fn as audio_rt and PE-Rust flags a panic path, allocation,
-      lock, or log call in that fn or its callees:
-      merge into ONE finding, severity = max(both, HIGH), domains [Real-time, Rust]
-    if PE-Rust's determinism/float findings touch a fn PE-Audio relies on for pitch, cents, or level:
-      keep the higher severity — numeric drift there is a user-visible wrong reading
-    if PE-Audio says "no allocation in the callback" but PE-Rust's Pass 2b shows a callee outside
-      the diff allocates:
-      flag HIGH "audio-thread allocation via <callee>"
+    if a PE-Rust finding (panic path, allocation, lock, log, nondeterminism) and a PE-Audio
+      finding share a fn or location:
+      merge into ONE finding, domains [Real-time, Rust]
+      severity = max(both), raised to HIGH when PE-Audio places that fn on the audio thread
 
   pe-vue ↔ pe-audio (AudioWorklet / TS audio graph):
-    if PE-Audio flags a mic stream or AudioContext and PE-Vue found the owning component or
-      composable has no teardown (track.stop(), context.close() in onBeforeUnmount/onScopeDispose):
-      flag HIGH "audio graph outlives its component — mic stays open"
-    if PE-Audio requires resume() from a user gesture and PE-Vue traces the start path to
-      onMounted / watch / a timer:
-      flag HIGH "audio started outside a user gesture — context stays suspended"
-    if PE-Vue reports an SW update or route change that reloads/remounts, and PE-Audio
-      reports a live session on that view:
-      flag HIGH "reload or remount tears down a live audio session"
-    if PE-Audio flags hash-route permission re-prompts and PE-Vue confirms createWebHashHistory:
-      merge into ONE finding, domains [Audio, Vue]
+    if a PE-Vue finding and a PE-Audio finding share a component, composable, or location
+      (teardown, user-gesture start, hash routing, permission UX):
+      merge into ONE finding, severity = max, domains [Audio, Vue]
+    if PE-Vue flags a reload-mid-session or remount (service_worker_updates, stale_deploy)
+      and domain_files[pe-audio] is non-empty:
+      keep it at HIGH — a reload tears down live audio capture or playback
 ```
 
 ---
@@ -375,6 +364,7 @@ gh_ok     = `gh repo view --json name` exits 0      # gh installed + authenticat
 pr_number = PR number (PR Review)
             | (gh_ok and `gh pr view <source_branch> --json number --jq .number` succeeds)
             | None
+pr        = pr_number and `gh pr view <pr_number> --json title,body`    # else title/body empty
 issue_id  = gh_ok and extract_issue_id(pr.title, pr.body, current_branch_name)
   # "Closes #NNN", "fix(#NNN)", "feat(#NNN)", or branch prefix <type>/<NNN>-<...>
 code      = story_code(current_branch_name)          # § Story Code
@@ -387,17 +377,16 @@ story_linked = false; story_file_path = None
 if the invocation names a story file path or story code:                       # 1. explicit
   story_linked    = true
   story_file_path = that path if the file exists, else story_code(<code>).file
-elif code and code.file and the first H1 of code.file starts "# Story:" or "# Epic:":
-  story_linked    = true                                                        # 3. a story code beats a bare number
+elif code and code.file and the first H1 of code.file does not start "# Task:" or "# Bug:":
+  story_linked    = true                                                        # 2. local story code — beats a bare number
   story_file_path = code.file
 else:
-  if issue_id:                                                                  # 2. GitHub — unchanged
+  if issue_id:                                                                  # 3. GitHub issue
     labels = bash: gh issue view <issue_id> --json labels --jq '.labels[].name'
     if "story" in labels or "epic" in labels:
       story_linked    = true
       story_file_path = § GitHub Story File Resolution
-  if not story_linked and code and code.file is None
-     and `grep -rqE '^\*\*Code:\*\* ' docs/epics --include='*.md'` succeeds:
+  if not story_linked and code and code.file is None:
     story_linked = true                                                         # declared code, no story file → gate
 
 if not story_linked:
@@ -408,8 +397,8 @@ if not story_linked:
 ### GitHub Story File Resolution
 
 ```
-# 2a. local epic file via docs/epics/*/.github-state.json mapping
-# 2b. GH issue body directly
+# 3a. local epic file via docs/epics/*/.github-state.json mapping
+# 3b. GH issue body directly
 story_file_path = None
 state_files = bash: find docs/epics -maxdepth 3 -name .github-state.json
 for state_file in state_files:
@@ -466,7 +455,7 @@ Append these fields to each PE's dispatch input:
 
 ```
 STORY_LINKED: true
-STORY_FILE: <absolute path resolved in § Trigger>
+STORY_FILE: <realpath(story_file_path) from § Trigger — absolute>
 SPEC_COVERAGE_PROTOCOL: <spec_coverage_protocol_path — absolute, no ${...} placeholders>
 PR_NUMBER: <pr_number — omit when None; the protocol then reads AC claims from branch commit messages>
 ```
@@ -475,7 +464,7 @@ The calling agent owns plugin-path resolution because it (the skill orchestrator
 
 ### PE Output for Spec Coverage Findings
 
-PEs that detect AC-coverage failures emit findings with `expert: "PE-Spec-Coverage"` (sub-domain of their stack expertise) and append them to their YAML alongside stack findings. Phase 4 De-duplication consolidates these across PEs as it does any other finding category. Spec-Coverage findings carry the same severity discipline (BLOCKING for SPEC-MISSING / SPEC-EVIDENCE-MISSING / SPEC-DEFER-INVALID; CHANGES_REQUESTED for SPEC-WEAK-EVIDENCE / SPEC-FORMAT-MALFORMED).
+PEs that detect AC-coverage failures emit findings with `expert: "PE-Spec-Coverage"` (sub-domain of their stack expertise) and append them to their YAML alongside stack findings. Phase 4 De-duplication consolidates these across PEs as it does any other finding category. Severity per the protocol's § Severity Discipline table.
 
 The asset at `assets/spec-coverage-protocol.md` is the authoritative protocol — its parsing rules, evidence verification logic, finding shapes, and severity table govern PE execution.
 

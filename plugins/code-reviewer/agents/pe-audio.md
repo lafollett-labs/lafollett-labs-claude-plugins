@@ -28,7 +28,8 @@ The parent provides metadata — you pull your own diff and read full files:
 2. Read FULL FILES (not just diff hunks) for every changed file.
    Real-time bugs hide in callees: follow each changed fn to everything it calls.
 3. cd <worktree> for all Bash operations.
-4. Build the thread map before any pass (see § Pass 1 thread_topology).
+4. Before any pass: build the thread map (§ Pass 1 thread_topology) and resolve
+   range = (fmin, fmax) the project declares — instrument/voice table, config, story ACs; None if undeclared.
 5. Round-to-round continuity check (skip if round 1):
      if ./docs/code-reviews/{name}-code-review.md exists:
        read latest round's findings
@@ -53,8 +54,8 @@ The parent provides metadata — you pull your own diff and read full files:
 
 | Quantity | Value |
 | - | - |
-| Lowest woodwind fundamental (contrabassoon / contrabass clarinet) | 27.5 Hz |
-| Window floor (≥ 2 periods of fmin) | `2 · fs / fmin` → 3491 samples at 48 kHz, 3208 at 44.1 kHz (next pow2: 4096; 8192 adds margin) |
+| Supported range | `range` from the Workflow; e.g. contrabassoon fmin = 27.5 Hz, piccolo fmax ≈ 4.5 kHz |
+| Window floor (≥ 2 periods of fmin) | `2 · fs / fmin` → for fmin = 27.5 Hz: 3491 samples at 48 kHz, 3208 at 44.1 kHz (next pow2: 4096; 8192 adds margin) |
 | Lowest fmin a window resolves | `2 · fs / N` → 46.9 Hz for N = 2048 at 48 kHz, 23.4 Hz for N = 4096 |
 | Inherent detection delay | ≈ N / fs (≈ 1 / fmin minimum) |
 | Cents | `1200 · log2(f / f_ref)` |
@@ -119,7 +120,7 @@ latency_budget:
 realtime_thread_rules:
   for each fn classified audio_rt:
     TS / JS (process() and callees):
-      grep -nE "new [A-Z]|\[\]|\{\}|\.map\(|\.filter\(|\.slice\(|\.concat\(|Array\.from|\.\.\.|=> |`" <fn body>
+      grep -nE 'new [A-Z]|\[\]|\{\}|\.map\(|\.filter\(|\.slice\(|\.concat\(|Array\.from|\.\.\.|=> |`' <fn body>
       → flag HIGH per allocation "allocation in process() — GC churn causes dropouts; preallocate in the constructor"
       grep -nE "console\.|await |Promise|setTimeout" <fn body>
       → flag HIGH per match "blocking/async/log call on the audio thread"
@@ -145,11 +146,11 @@ realtime_thread_rules:
 
 analysis_windows:
   for each window/frame size constant or computation in diff:
-    fmin = lowest fundamental the code claims to detect (instrument range, config, or doc)
+    fmin = range.fmin, else the lowest fundamental the code itself claims to detect; neither → skip this check
     required = 2 · fs / fmin
     if window < required:
       flag HIGH "window <N> cannot resolve <fmin> Hz — needs ≥ <required> samples at <fs> Hz"
-    if window is a single global constant while supported instruments span fmin 27.5–260 Hz:
+    if window is a single global constant while profile fmins in range span more than an octave:
       flag MEDIUM "one window for every instrument — wastes latency on high instruments; size from the active range"
     if window is in samples but was derived assuming 48 kHz (literal 2048/4096/8192 with no fs term):
       flag MEDIUM "window fixed in samples — at 44.1 kHz it covers less time; derive from fs"
@@ -226,7 +227,8 @@ scheduling:
 
 mic_capture:
   for each getUserMedia call in diff:
-    if audio constraints do not set echoCancellation, noiseSuppression, autoGainControl to false:
+    if the stream feeds pitch, level, or timbre analysis or music recording (not speech, RTC, or dictation)
+       and audio constraints do not set echoCancellation, noiseSuppression, autoGainControl to false:
       flag HIGH "voice processing on — noise suppression erodes sustained tones, AGC flattens dynamics,
                  echo cancellation is on by default on iOS Safari"
     if constraints use { exact: ... } with no OverconstrainedError fallback: flag MEDIUM "exact constraint can fail the whole request"
@@ -507,8 +509,9 @@ unison_bleed:
   if the detector can report the drone's pitch as the player's:
     flag MEDIUM "drone bleed yields false in-tune readings"
 
-extreme_instrument:
-  Re-run the change for the lowest (27.5 Hz) and highest (~4.5 kHz) supported fundamentals:
+extreme_range:
+  if range is None: skip
+  Re-run the change at range.fmin and range.fmax:
     window floor, lag range, interpolation precision, Nyquist margin, octave-error risk, latency
   if either extreme breaks:
     flag HIGH "<extreme> fails: <why>"
@@ -593,7 +596,7 @@ The asset is the single source of truth — including the `discharges_ac` annota
 - Allocation, logging, locks, and per-block postMessage on the audio thread
 - AudioParam arrays of length 1 indexed as if 128 long
 - Hardcoded 128-frame quanta, 44.1/48 kHz rates, and sample-count windows that assume one rate
-- Windows too short for the lowest supported note, and integer-lag pitch estimates off by ~16 cents
+- Windows too short for the lowest declared note, and integer-lag pitch estimates off by ~16 cents
 - Octave logic that fails on odd-harmonic timbres
 - Ramps without anchor events, exponential ramps to zero, hard stops, and loop-seam clicks
 - f32 phase/time accumulators that degrade over a long drone

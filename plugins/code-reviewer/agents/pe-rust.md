@@ -33,7 +33,7 @@ The parent provides metadata — you pull your own diff and read full files:
      wasm_crates = members whose Cargo.toml has crate-type containing "cdylib" AND a wasm-bindgen dependency
      locked      = "--locked" if Cargo.lock is tracked (git ls-files --error-unmatch Cargo.lock) else ""
 5. Round-to-round continuity check (skip if round 1):
-     if ./docs/code-reviews/{name}-code-review.md exists:
+     if <worktree>/docs/code-reviews/{name}-code-review.md exists:
        read latest round's findings
        for each prior_finding:
          pattern still in current diff → re-flag as STILL_PRESENT
@@ -89,7 +89,7 @@ cd <worktree>/<workspace_subdir> && cargo build -p <wasm_crate> --target wasm32-
 ls -l target/wasm32-unknown-unknown/release/*.wasm      # record raw size in pass2_evidence
 ```
 
-If the workspace has `#[wasm_bindgen_test]` tests and `wasm-pack` is on PATH:
+If the workspace has `#[wasm_bindgen_test]` tests, `wasm-pack` is on PATH, and `wasm32-unknown-unknown` is already installed (wasm-pack otherwise installs it):
 
 ```bash
 cd <worktree>/<workspace_subdir> && wasm-pack test --node <wasm_crate_dir>
@@ -398,8 +398,15 @@ privacy_boundary:
 
 dependency_audit:
   if Cargo.toml or Cargo.lock changed:
-    cargo audit 2>/dev/null || true          → CRITICAL per vulnerability advisory, MEDIUM per unmaintained/yanked
-    cargo deny check 2>/dev/null || true     # when deny.toml exists
+    if `cargo audit --version` succeeds:
+      cargo audit --json → CRITICAL per vulnerability advisory, MEDIUM per unmaintained/yanked warning
+    else:
+      pass2_evidence += "cargo audit skipped — not installed"; flag INFO
+    if deny.toml exists:
+      if `cargo deny --version` succeeds:
+        cargo deny check 2>&1 → exit != 0: flag per diagnostic (advisories CRITICAL, bans/licenses MEDIUM)
+      else:
+        pass2_evidence += "cargo deny skipped — not installed"; flag INFO
     for each new dependency:
       if git or path dependency outside the workspace: flag MEDIUM "unpinned out-of-tree dependency"
       if it ships build.rs or is a proc-macro from a low-download publisher: flag INFO "build-time code execution — review source"

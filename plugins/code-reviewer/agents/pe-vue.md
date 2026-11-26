@@ -33,7 +33,7 @@ The parent provides metadata — you pull your own diff and read full files:
      wasm      = a *.wasm import, a wasm-pack/wasm-bindgen package dependency, or vite-plugin-wasm in package.json
    Checks marked (nuxt), (pwa), or (wasm) apply only when that flag holds.
 4. Round-to-round continuity check (skip if round 1):
-     if ./docs/code-reviews/{name}-code-review.md exists:
+     if <worktree>/docs/code-reviews/{name}-code-review.md exists:
        read latest round's findings
        for each prior_finding:
          pattern still in current diff → re-flag as STILL_PRESENT
@@ -261,11 +261,13 @@ nuxt_patterns (nuxt; the route-param and :key checks also apply to vite-spa Rout
 
 service_worker_updates (pwa):
   for each SW registration / update flow in diff (vite-plugin-pwa registerSW / useRegisterSW, workbox-window, navigator.serviceWorker):
-    - registerType 'autoUpdate', or skipWaiting() + clientsClaim() with a reload on 'controllerchange':
-      flag HIGH "SW update reloads the page mid-session — use registerType 'prompt' and apply only when idle"
-    - updateServiceWorker(true) / location.reload() called from needRefresh without checking for an
-      active session, recording, or unsaved state:
-      flag HIGH "update applied mid-session — defer until the session ends"
+    live_state = the app has in-progress state a reload destroys (audio/video capture or playback,
+                 a running timer or session, unsaved form or editor input)
+    if live_state:
+      - registerType 'autoUpdate', or skipWaiting() + clientsClaim() with a reload on 'controllerchange':
+        flag HIGH "SW update reloads the page mid-session — use registerType 'prompt' and apply only when idle"
+      - updateServiceWorker(true) / location.reload() called from needRefresh without checking that state:
+        flag HIGH "update applied mid-session — defer until the session ends"
     - skipWaiting without a reload, while cleanupOutdatedCaches is on:
       if no 'vite:preloadError' (or dynamic-import failure) handler:
         flag HIGH "old page lazy-loads chunks the new SW deleted — 'Failed to fetch dynamically imported module'"
@@ -287,7 +289,12 @@ offline_and_installability (pwa):
       if (wasm) and globPatterns omit wasm: flag HIGH "engine .wasm not precached — offline launch cannot start the engine"
       if any precached asset (wasm, fonts, audio) exceeds maximumFileSizeToCacheInBytes (default 2 MiB):
         flag HIGH "asset over 2 MiB silently skipped from precache — raise the limit"
-    if navigateFallback is unset for an SPA with client routes: flag HIGH "deep link offline → browser error page"
+    if the SPA has client routes:
+      vite-plugin-pwa generateSW (defaults navigateFallback to index.html):
+        if navigateFallback is set to null/undefined, or navigateFallbackDenylist matches app routes:
+          flag HIGH "deep link offline → browser error page"
+      injectManifest / hand-written SW / raw workbox-build:
+        if no navigation route falls back to the app shell: flag HIGH "deep link offline → browser error page"
     if runtime assets load from a third-party CDN (fonts, icons) with no precache/runtime cache:
       flag MEDIUM "offline launch depends on a CDN"
   if SW or manifest changed and no e2e test runs offline (context.setOffline(true) / route.abort):
@@ -418,9 +425,10 @@ tdd_and_hygiene:
     grep -nE "as any|: any" <file>
     → flag MEDIUM per match "any cast hiding type bug — use proper type or unknown"
 
-  for each component with setInterval/setTimeout/addEventListener in diff:
-    grep -nE "setInterval|setTimeout|addEventListener" <file>
-    if no corresponding clear/remove in onBeforeUnmount:
+  for each component or composable with setInterval/setTimeout/addEventListener/getUserMedia/
+  new AudioContext/wakeLock.request in diff:
+    grep -nE "setInterval|setTimeout|addEventListener|getUserMedia|new AudioContext|wakeLock\.request" <file>
+    if no corresponding clear/remove/track.stop()/close()/release() in onBeforeUnmount/onScopeDispose:
       flag HIGH "lifecycle leak — cleanup missing in onBeforeUnmount"
 
   for each page/component with async data in diff:
@@ -431,12 +439,12 @@ tdd_and_hygiene:
   for each mock data source in diff:
     if no // SCAFFOLD or // MOCK marker: flag LOW "mock data should be marked // SCAFFOLD"
 
-  if PR body missing "Closes #NNN": flag LOW "missing issue linkage"
+  if neither the PR body ("Closes #NNN") nor the branch links an issue or story code: flag LOW "missing issue linkage"
 
   verification commands:
     grep -nE "as any|: any" <file>
     grep -nE "setInterval|setTimeout|addEventListener" <file>
-    grep -nE "onBeforeUnmount|onUnmounted" <file>
+    grep -nE "onBeforeUnmount|onUnmounted|onScopeDispose" <file>
 ```
 
 ## Pass 2b: Impact Propagation (trace flows, imagine breakage)

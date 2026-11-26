@@ -252,7 +252,7 @@ tdd_and_hygiene:
     elif <cdk_subdir>/cdk.out/<StackName>.template.json is missing: flag HIGH "stack in diff absent from synth output"
     elif template has < 2 resources: flag HIGH "near-empty synth output — stub stack or misconfigured construct"
 
-  if PR body missing "Closes #NNN": flag LOW "missing issue linkage"
+  if neither the PR body ("Closes #NNN") nor the branch links an issue or story code: flag LOW "missing issue linkage"
 
   verification commands:
     grep -rn "Template.fromStack\|assertions" <infra_subdir>/test --include="*.ts"
