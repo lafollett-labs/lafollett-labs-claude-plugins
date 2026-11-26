@@ -1,6 +1,6 @@
 # Code Review: feat-code-reviewer-rust-audio-pes
 
-**Verdict:** ⚠️ CHANGES REQUESTED
+**Verdict:** ⚠️ CHANGES REQUESTED (Round 2)
 
 | | |
 | - | - |
@@ -110,8 +110,68 @@ The branch adds `pe-rust` (stack) and `pe-audio` (domain) agents, extends `pe-vu
 
 ## Merge Eligibility
 
-**Locked to SHA:** `272dfde1e417f787f81344840313a2e9d60d79b8`
+**Locked to SHA:** `298bbf8` (Round 2)
 **Status:** ⚠️ Not mergeable — CHANGES REQUESTED.
+
+---
+
+## Review Round 2
+
+**Verdict:** ⚠️ CHANGES REQUESTED
+
+| | |
+| - | - |
+| **Reviewer** | @Cali LaFollett (pe-governance dispatched) |
+| **Reviewed SHA** | `298bbf8` |
+| **Fix diff** | `272dfde..298bbf8` |
+| **Date** | 2026-11-26 |
+
+### Summary
+
+All six round-1 MEDIUMs and LOW-001…LOW-007, LOW-009 are RESOLVED, as is the out-of-scope linkage LOW. LOW-008 is PARTIAL: `never ./...` stays because it sits in the § Test Budget block that CONTRIBUTING requires to be identical across the four suite-running PEs. Two new MEDIUMs: commit-subject story codes can link an unrelated or shipped story and BLOCK a fix/chore branch, and two repo-derived strings (a `**Code:**` value in a contributor-added file, and `story_file_path` before `realpath`) still reach Bash unvalidated.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| pe-governance | none | lint-shaped checks; all named § refs resolve; frontmatter tools ⊇ body tool calls; BSD grep confirms the widened epic done-check matches bold/link forms and not `LT-020` |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 2 | 0 |
+| 🟢 LOW | 5 | 0 |
+| ℹ️ INFO | 0 | 1 |
+
+### In Scope Findings
+
+| ID | Location | Finding | Recommendation |
+| - | - | - | - |
+| 🟡 MEDIUM-001 | `plugins/code-reviewer/skills/code-reviewer/SKILL.md:372` | Any commit subject naming a resolving code (`fix(LT-01): …`, `docs: tick LT-01`) links that story, including shipped ones, and every AC becomes a blocking SPEC-MISSING. | Accept subject codes only from `feat` subjects naming one distinct code; never link a story already checked off at `<target>`. |
+| 🟡 MEDIUM-002 | `plugins/code-reviewer/skills/code-reviewer/assets/spec-coverage-protocol.md:225` | `verify_local` interpolates a `**Code:**` value from a contributor-added file into a double-quoted grep; the Trigger `realpath`s a repo-derived filename. | Validate code as `^[A-Z]{2,5}-[0-9]+$` and paths as `^[A-Za-z0-9._/-]+$` without `..`; single-quote in Bash. |
+| 🟢 LOW-001 | `plugins/code-reviewer/agents/pe-vue.md:428` | Lifecycle rule flags shared module-level AudioContext singletons HIGH and out-ranks pe-vue's own wake-lock rule. | Per-instance resources only; leave wake lock to its own rule; extend the verification grep. |
+| 🟢 LOW-002 | `plugins/code-reviewer/skills/code-reviewer/SKILL.md:330` | Cross-PE export list misses signature changes under an unchanged attribute, methods in `#[wasm_bindgen] impl`, and `js_name`. | Build it from changed fn signatures under `#[wasm_bindgen]` (direct or impl); grep `js_name` when set. |
+| 🟢 LOW-003 | `plugins/code-reviewer/agents/pe-audio.md:153` | `range` is one pair, but two checks read per-profile data. | Resolve `profiles` and derive `range`. |
+| 🟢 LOW-004 | `plugins/code-reviewer/agents/pe-audio.md:296` | Fixture matrix still applies extremes with no range, odd-harmonic timbre universally, and detector cases to synthesis. | Gate each case. |
+| 🟢 LOW-005 | `plugins/code-reviewer/agents/pe-rust.md:65` | PARTIAL LOW-008: `never ./...` wording; `wasm-pack test` can download wasm-bindgen-cli. | Gate wasm-pack on a matching installed `wasm-bindgen`; wording kept for the sync convention. |
+
+### Out of Scope
+
+| Severity | Issue | Location |
+| - | - | - |
+| ℹ️ INFO | STILL_PRESENT: SKILL.md says each agent pins `claude-opus-4-7`; no agent sets `model:`. | `plugins/code-reviewer/skills/code-reviewer/SKILL.md:128` |
+
+### Action Items
+
+#### Should Fix
+- [ ] MEDIUM-001 — restrict commit-subject story links; skip shipped stories
+- [ ] MEDIUM-002 — validate repo-derived code and path strings before Bash
+
+#### Consider
+- [ ] LOW-001 … LOW-005
 
 ---
 
