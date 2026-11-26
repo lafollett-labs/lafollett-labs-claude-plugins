@@ -31,6 +31,14 @@
 
 ---
 
+## Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Guard | M5 Failure | M6 Test | M7 Fact |
+| - | - | - | - | - | - | - | - |
+| {PE or Primary} | {checked, or "n/a — note", or MISSING} | … | … | … | … | … | … |
+
+---
+
 ## Findings Overview
 
 | Severity | In Scope | Out of Scope |
@@ -49,7 +57,7 @@
 
 ### 🔴 CRITICAL-001: {Title}
 
-**Domains:** [Security]
+**Domains:** [Security] · **Move:** {M1..M7 | none}
 **Location:** `{src/full/path/from/repo/root}:{line}`
 
 {Description of the issue}
@@ -61,7 +69,7 @@
 
 ### 🟠 HIGH-001: {Title}
 
-**Domains:** [Architecture, Code Quality]
+**Domains:** [Architecture, Code Quality] · **Move:** {M1..M7 | none}
 **Location:** `{src/full/path/from/repo/root}:{line}`
 
 {Description}
@@ -73,7 +81,7 @@
 
 ### 🟡 MEDIUM-001: {Title}
 
-**Domains:** [{Domain}]
+**Domains:** [{Domain}] · **Move:** {M1..M7 | none}
 **Location:** `{src/full/path/from/repo/root}:{line}`
 
 {Description and recommendation}
@@ -152,6 +160,12 @@ heading with: "🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval chang
 | PE | Budget | Pass 2 evidence |
 | - | - | - |
 | {PE} | {none / targeted / full / MISSING} | {pass2_evidence lines, or "no YAML after re-ping"} |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Guard | M5 Failure | M6 Test | M7 Fact |
+| - | - | - | - | - | - | - | - |
+| {PE or Primary} | {checked, or "n/a — note", or MISSING} | … | … | … | … | … | … |
 
 ### Findings Overview
 

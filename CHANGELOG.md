@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **code-reviewer applies seven review moves in every PE and in the generic review, and every result shows what it checked (`code-reviewer` v2.13.0, marketplace 1.33.0).** Reviews approved changes that an external reviewer then caught. The misses clustered: a fix that covered only the cited case, a guard reviewed only against the inputs it targets, consumers left out of step with a changed contract, files routed to a PE that does not fit them, and reports that said "clean" without saying what was checked.
+  - New `skills/code-reviewer/assets/review-moves.md` defines the moves, each with a trigger and a procedure:
+    - M1 Ripple: every producer, consumer, restatement and sibling of a change, the repo's hard rules applied literally, and every other instance of a pattern a fix fixes;
+    - M2 Lifecycle: state through every entry point, retry, rollback, interruption and deploy order, with a second actor between check and use;
+    - M3 Inputs: empty, one, many, duplicate, malformed and wrong-typed values, limits and the last element;
+    - M4 Attack the guard: a valid input each check rejects and an invalid one it accepts, canonicalised as the sink sees it;
+    - M5 Failure path: every dependency failed and what the caller then sees;
+    - M6 Falsify the test: the defect that would make each test fail;
+    - M7 Fact check: claims verified against the primary source, unverifiable ones reported `UNVERIFIED`.
+  - The skill passes the asset to every PE as an absolute `REVIEW_MOVES` path. Asset paths now come from the skill's base directory, since `$CLAUDE_PLUGIN_ROOT` is often unset in Bash calls.
+  - Each PE gains a § Review Moves probe table for its stack and applies the moves between Pass 4 and Pass 5.
+  - Every finding carries `move:`. Every PE result must carry `moves_coverage` with each move `applied` (and what was checked) or `n/a` (and why). A result without it, in single- or multi-PE dispatch, is re-pinged once and then recorded MISSING, which makes the verdict INCOMPLETE. The report gains a Moves Coverage table.
+  - The generic review runs the moves too. Besides `domain_only` files, it now covers files no PE matches (docs, specs) and server-side files routed to `pe-vue`.
+  - Phase 4.5 covers any linked issue with an acceptance-criteria checklist, not only story-labeled ones. A local `# Task:` or `# Bug:` file now links when it has acceptance criteria.
+  - Review docs never quote private user data or user content verbatim.
+  - init-project warns when a Stack Map row routes server-side code to `pe-vue`, and proposes a `Generic` row.
 - **code-reviewer reviews Rust, WebAssembly and real-time audio, covers Vite-built PWAs, and checks story coverage without GitHub (`code-reviewer` v2.12.0, marketplace 1.32.0).** Rust fell through to the generic three-pass review, nothing checked real-time audio or DSP correctness, and pe-vue assumed Nuxt. Spec Coverage needed a story-labeled GitHub issue and an open PR, so unpublished repos and stories that exist only as local markdown never got it.
   - New `pe-rust` stack PE covers:
     - Cargo workspaces and features, error handling, `unsafe` and FFI;

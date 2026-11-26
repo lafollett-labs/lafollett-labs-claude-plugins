@@ -1,4 +1,4 @@
-# Spec Coverage Protocol (Story-Linked Pass)
+# Spec Coverage Protocol (Linked-Issue Pass)
 
 You execute this protocol when your dispatch input includes:
 
@@ -13,7 +13,7 @@ If `STORY_LINKED` is absent or false: do not execute this protocol. Return only 
 
 ## Goal
 
-Catch the failure mode where a PR ships a narrow code change but skips acceptance criteria the linked story explicitly mandates. Reference incident: Corebizy Phase 5/6 of Story #1435 shipped without integrating the Story #1443 hardening payload it was contracted to ship — narrow code change passed all four reviewer passes; story acceptance criteria were never verified.
+Catch a change that ships a narrow fix but skips acceptance criteria its linked issue or story mandates. `STORY_FILE` is the linked story, task, bug or issue body.
 
 ## Acceptance Criteria Parsing
 

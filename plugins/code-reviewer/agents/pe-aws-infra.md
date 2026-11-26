@@ -18,6 +18,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Worktree path** — repo root for running test commands
 - **Infra subdirs** — paths to relevant subdirs (e.g., `cdk/`, `infra/`, `terraform/`); the parent passes these from the project's Stack Map. Default to repo root.
 - **Prior review** (round 2+) — path to prior review doc
+- **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
 
 ## Workflow
 
@@ -37,6 +38,7 @@ The parent provides metadata — you pull your own diff and read full files:
 5. Run test commands (Pass 2 — scoped by § Test Budget). Capture stdout + exit code.
 6. Run lint-shaped checks (see below). Capture results.
 7. Five serialized passes (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial).
+   § Review Moves runs after Pass 4 and before Pass 5.
    Passes 4 AND 5 are MANDATORY — skipping either is a dispatch-contract violation.
 8. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
    and execute § Spec Coverage (Story-Linked PRs). Append SPEC-* findings to YAML.
@@ -698,6 +700,22 @@ blind_spot_scan:
 
 ---
 
+## Review Moves
+
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without `REVIEW_MOVES` in the dispatch input, apply the probes below and still return `moves_coverage`.
+
+| Move | Probes |
+| - | - |
+| M1 Ripple | env vars, resource names and ARNs ↔ handler reads; stack outputs ↔ importers; IAM grants ↔ API calls; workflow job outputs ↔ consumers; every stage's config variant |
+| M2 Lifecycle | deploy order (stack dependencies, migration before code); rollback and retained resources; logical-ID changes that replace stateful resources; `concurrency` and `cancel-in-progress`; stale cache keys; jobs a publish must `needs` |
+| M3 Inputs | empty `for_each`/`count`; a single AZ; policy-size and rule-count limits; absent context values |
+| M4 Attack the guard | wildcards and inherited permissions expanded to concrete resources and every job that inherits them; security-group CIDRs; workflow `if:` and path filters; OIDC trust subjects — a branch or repo they accept |
+| M5 Failure path | step failure → job status (`continue-on-error`, `|| true`, no `pipefail`); custom-resource failure; failed health check → rollback |
+| M6 Falsify the test | snapshot tests regenerated on every run; template assertions that match any resource; one stage tested on behalf of all |
+| M7 Fact check | AWS service limits and behaviour; GitHub Actions semantics (default `GITHUB_TOKEN` permissions, `pull_request_target`, expression evaluation); Terraform lifecycle |
+
+---
+
 ## Spec Coverage (Story-Linked PRs)
 
 ```
@@ -765,10 +783,15 @@ expert: PE-AWS-Infra
 test_budget: targeted            # none | targeted | full — as dispatched
 pass2_evidence:
   - "npm test && npx cdk synth --all → pass @ <sha> (author receipt)"
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings:
   - id: "CRITICAL-001"
     severity: CRITICAL
     in_scope: true
+    move: M4                     # M1..M7 | none
     title: "IAM wildcard Action grants full S3 access"
     location: "cdk/lib/lambda-stack.ts:127"
     description: |
@@ -794,6 +817,10 @@ expert: PE-AWS-Infra
 test_budget: targeted            # none | targeted | full — as dispatched
 pass2_evidence:
   - "npm test && npx cdk synth --all → pass @ <sha> (author receipt)"
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings: []
 ```
 

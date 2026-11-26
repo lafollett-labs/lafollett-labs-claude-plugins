@@ -19,6 +19,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Issue ID** — for cross-referencing in findings
 - **Worktree path** — repo root for read-only commands
 - **Prior review** (round 2+) — path to prior review doc
+- **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
 
 ## Workflow
 
@@ -41,6 +42,7 @@ The parent provides metadata — you pull your own diff and read full files:
 6. Run lint-shaped checks (Pass 2 — see below). Capture results. Run no test suites:
    TEST BUDGET is always none; the language PE runs them.
 7. Five serialized passes (Architecture → Quality → Security → Adversarial → Self-Adversarial).
+   § Review Moves runs after Pass 4 and before Pass 5.
    Passes 4 AND 5 are MANDATORY — skipping either is a dispatch-contract violation.
 8. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
    and execute § Spec Coverage (Story-Linked PRs). Append SPEC-* findings to YAML.
@@ -589,6 +591,22 @@ blind_spot_scan:
 
 ---
 
+## Review Moves
+
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without `REVIEW_MOVES` in the dispatch input, apply the probes below and still return `moves_coverage`.
+
+| Move | Probes |
+| - | - |
+| M1 Ripple | sample rate, block size and window constants ↔ every Rust and TS consumer; the worklet ↔ main-thread message protocol on both sides; cents and ratio tables ↔ docs; fixture metadata ↔ tests |
+| M2 Lifecycle | context suspend, resume and interruption; device route change; mic track `ended`; worklet teardown; restart after an error; state across start/stop cycles |
+| M3 Inputs | silence; DC; full-scale ±1; blocks other than 128 frames; the lowest and highest declared fundamental; NaN input |
+| M4 Attack the guard | confidence and voicing gates — a real note they reject and noise they accept; range clamps |
+| M5 Failure path | `getUserMedia` denied, no device or `NotReadableError`; `addModule` failure; WASM init failure inside the worklet; `decodeAudioData` failure |
+| M6 Falsify the test | fixture tests that pass on silence; tolerances wider than the error under test; baselines the test regenerates itself |
+| M7 Fact check | recompute worked numbers (cents, window floors, latency ms); Web Audio spec facts (render quantum, automation semantics); browser support claims |
+
+---
+
 ## Spec Coverage (Story-Linked PRs)
 
 ```
@@ -654,10 +672,15 @@ Return findings ONLY as a YAML block. No prose, no preamble, no closing remarks.
 
 ```yaml
 expert: PE-Audio
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings:
   - id: "HIGH-001"
     severity: HIGH
     in_scope: true
+    move: M3                     # M1..M7 | none
     title: "Analysis window cannot resolve contrabassoon range"
     location: "engine/crates/dsp/src/pitch.rs:31"
     description: |
@@ -673,6 +696,10 @@ If you find no issues at any severity, return:
 
 ```yaml
 expert: PE-Audio
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings: []
 ```
 

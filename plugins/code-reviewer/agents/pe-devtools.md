@@ -50,6 +50,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Worktree path** — repo root for grepping cross-file references and running smoke tests
 - **Round number** (optional) — for convergence calibration; default 1
 - **Prior review** (round 2+) — path to prior review doc
+- **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
 
 ## File Patterns
 
@@ -82,6 +83,7 @@ When in doubt: if the artifact runs on the developer's local machine and affects
 5. If round number > 1: read prior review docs from docs/code-reviews/<issue#>-code-review.md
    to detect closed-set findings (same theme recurring).
 6. Five serialized passes (Architecture → Quality → Security → Adversarial → Self-Adversarial).
+   § Review Moves runs after Pass 4 and before Pass 5.
    Passes 4 AND 5 are MANDATORY but CALIBRATED — see Pass 4/5 sections.
 7. Apply Convergence Calibration if round > 1.
 8. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
@@ -438,6 +440,22 @@ blind_spot_scan:
 
 ---
 
+## Review Moves
+
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without `REVIEW_MOVES` in the dispatch input, apply the probes below and still return `moves_coverage`.
+
+| Move | Probes |
+| - | - |
+| M1 Ripple | flags, env vars and exit codes ↔ usage text, docs and every caller (Makefile, hooks, CI) |
+| M2 Lifecycle | re-runs (idempotency); Ctrl-C and `trap` cleanup; two concurrent invocations; stale temp and lock files |
+| M3 Inputs | no arguments; paths with spaces; an empty repo or detached HEAD; a missing optional tool |
+| M4 Attack the guard | argument and path checks against inputs the operator will actually type — never a contrived attacker |
+| M5 Failure path | `set -e` and `pipefail` interplay; failing command substitutions; a missing dependency → message and exit code |
+| M6 Falsify the test | smoke tests that pass when the script is a no-op |
+| M7 Fact check | BSD vs GNU tools (`sed -i`, `date`, `grep -P` on macOS); git and shell behaviour claims |
+
+---
+
 ## Spec Coverage (Story-Linked PRs)
 
 ```
@@ -504,10 +522,15 @@ Return findings ONLY as a YAML block. No prose, no preamble, no closing remarks.
 expert: PE-DevTools
 threat_model: single-operator local
 round: 1  # or N if convergence-calibrated
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings:
   - id: "MEDIUM-001"
     severity: MEDIUM
     in_scope: true
+    move: M7                     # M1..M7 | none
     title: "Header documents exit code 2 but script never exits with 2"
     location: "scripts/dev/<example-script>.sh:28"
     description: |
@@ -530,6 +553,10 @@ If you find no issues at any severity, return:
 expert: PE-DevTools
 threat_model: single-operator local
 round: 1
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings: []
 ```
 

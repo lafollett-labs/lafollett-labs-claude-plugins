@@ -18,6 +18,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Worktree path** — repo root for running test commands
 - **Frontend project subdir** — if the frontend lives in a subdir (e.g., `frontend/`, `web/`, `app/`), the parent passes it; default to repo root
 - **Prior review** (round 2+) — path to prior review doc
+- **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
 
 ## Workflow
 
@@ -42,6 +43,7 @@ The parent provides metadata — you pull your own diff and read full files:
 5. Run test commands (Pass 2 — scoped by § Test Budget). Capture stdout + exit code.
 6. Run lint-shaped checks (see below). Capture results.
 7. Five serialized passes (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial).
+   § Review Moves runs after Pass 4 and before Pass 5.
    Accessibility checks are integrated into Passes 1-3, not a separate step.
    Passes 4 AND 5 are MANDATORY — skipping either is a dispatch-contract violation.
 8. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
@@ -847,6 +849,22 @@ blind_spot_scan:
 
 ---
 
+## Review Moves
+
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without `REVIEW_MOVES` in the dispatch input, apply the probes below and still return `moves_coverage`.
+
+| Move | Probes |
+| - | - |
+| M1 Ripple | props, emits and TS types ↔ every parent; API response types ↔ the backend; store and persisted shapes ↔ data stored by every prior version; route names ↔ links; i18n keys; SW and manifest config ↔ build output |
+| M2 Lifecycle | unmount and `onScopeDispose` cleanup; SW update mid-session; `KeepAlive` activate/deactivate; a stale response overwriting a newer one; double submit; IndexedDB `onversionchange` |
+| M3 Inputs | empty, loading and error states; `null` optional props; `0` and `''` in `v-if`; very long strings; the last page |
+| M4 Attack the guard | client-only validation with no server check; route guards vs direct URL and back-navigation; `v-html` sanitisers; `postMessage` origin allowlists; CSP |
+| M5 Failure path | fetch failure or timeout → UI state (no endless spinner); unhandled rejections in `setup`/`onMounted`; storage quota errors; SW install and WASM init failure |
+| M6 Falsify the test | snapshot-only tests; assertions on implementation details; a missing `await flushPromises()`/`nextTick` so the assertion runs before the update |
+| M7 Fact check | browser support and API behaviour (Safari, iOS); Vue reactivity caveats; Vite and Workbox defaults; WCAG criterion numbers |
+
+---
+
 ## Spec Coverage (Story-Linked PRs)
 
 ```
@@ -922,10 +940,15 @@ expert: PE-Vue
 test_budget: targeted            # none | targeted | full — as dispatched
 pass2_evidence:
   - "npm test → pass @ <sha> (author receipt)"
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings:
   - id: "CRITICAL-001"
     severity: CRITICAL
     in_scope: true
+    move: M4                     # M1..M7 | none
     title: "XSS via unsanitized HTML injection"
     location: "frontend/components/MyComponent.vue:207"
     description: |
@@ -946,6 +969,10 @@ expert: PE-Vue
 test_budget: targeted            # none | targeted | full — as dispatched
 pass2_evidence:
   - "npm test → pass @ <sha> (author receipt)"
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings: []
 ```
 

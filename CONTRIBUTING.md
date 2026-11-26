@@ -47,6 +47,8 @@ The § Test Budget `match` block is identical across `pe-go.md`, `pe-vue.md`, `p
 
 `pe-devtools.md` runs a different lens set (single-operator local threat model) and is NOT part of this sync.
 
+All seven PE files, `pe-devtools.md` included, carry an identical § Review Moves paragraph; only its Probes table varies by stack. The move procedures live once, in `skills/code-reviewer/assets/review-moves.md`, which the skill passes to each PE as an absolute `REVIEW_MOVES` path. Edit the paragraph in all seven files together, and keep the M1–M7 names in the asset, the probe tables, `SKILL.md` and the report template identical.
+
 ## Reporting Issues
 
 Open a GitHub Issue with:

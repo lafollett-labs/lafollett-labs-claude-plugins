@@ -17,6 +17,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Issue ID** — for cross-referencing in findings (typically extracted from branch name)
 - **Worktree path** — repo root for running test commands
 - **Prior review** (round 2+) — path to prior review doc
+- **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
 
 ## Workflow
 
@@ -36,6 +37,7 @@ The parent provides metadata — you pull your own diff and read full files:
 5. Run test commands (Pass 2 — scoped by § Test Budget). Capture stdout + exit code.
 6. Run lint-shaped checks (see below). Capture results.
 7. Five serialized passes (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial).
+   § Review Moves runs after Pass 4 and before Pass 5.
    Passes 4 AND 5 are MANDATORY — skipping either is a dispatch-contract violation.
 8. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
    and execute § Spec Coverage (Story-Linked PRs). Append SPEC-* findings to YAML.
@@ -660,6 +662,22 @@ blind_spot_scan:
 
 ---
 
+## Review Moves
+
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without `REVIEW_MOVES` in the dispatch input, apply the probes below and still return `moves_coverage`.
+
+| Move | Probes |
+| - | - |
+| M1 Ripple | SQL function and column ↔ every Go caller and query; struct JSON tags ↔ every consumer type; env var names ↔ IaC; sentinel errors ↔ every `errors.Is`; doc and OpenAPI examples |
+| M2 Lifecycle | `ctx` cancellation and deadlines into every goroutine and query; Lambda retries and at-least-once delivery (idempotency key); tx rollback on every early return; read-then-write without `FOR UPDATE`; migration vs code deploy order |
+| M3 Inputs | nil vs empty slice or map; zero-value structs from JSON (`null`, missing field); empty IDs; the last page; integer narrowing |
+| M4 Attack the guard | RLS and tenant predicates — a cross-tenant ID they accept; validators; `filepath.Join` + prefix checks against `..` and symlinks; unanchored regexes; IAM conditions |
+| M5 Failure path | every `err` wrapped with `%w` and returned, never logged-and-continued; deferred `Close`/`Rollback` errors; partial batch failure; a handler returning 200 with an error body |
+| M6 Falsify the test | table cases that never reach the new branch; mocks that return the asserted value; `t.Parallel` tests sharing fixtures; tests that accept any error |
+| M7 Fact check | Postgres semantics (isolation, NULL ordering, `ON CONFLICT`); pgx behaviour; AWS limits (payload size, visibility timeout); Go spec (map order, `defer` argument evaluation) |
+
+---
+
 ## Spec Coverage (Story-Linked PRs)
 
 ```
@@ -725,10 +743,15 @@ expert: PE-Go
 test_budget: targeted            # none | targeted | full — as dispatched
 pass2_evidence:
   - "go test ./... -race → ok @ <sha> (author receipt)"
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings:
   - id: "CRITICAL-001"
     severity: CRITICAL
     in_scope: true
+    move: M5                     # M1..M7 | none
     title: "Brief issue title"
     location: "src/full/path/from/repo/root.go:123"
     description: |
@@ -739,6 +762,7 @@ findings:
   - id: "HIGH-001"
     severity: HIGH
     in_scope: true
+    move: M1                     # M1..M7 | none
     title: "..."
     location: "..."
     description: |
@@ -754,6 +778,10 @@ expert: PE-Go
 test_budget: targeted            # none | targeted | full — as dispatched
 pass2_evidence:
   - "go test ./... -race → ok @ <sha> (author receipt)"
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings: []
 ```
 

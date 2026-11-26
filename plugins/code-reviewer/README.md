@@ -3,6 +3,8 @@
 Code reviews that dispatch a principal engineer for the stack you actually
 touched, then consolidate what they found. Seven PE sub-agents ship with the
 plugin; anything they do not cover falls back to a generic three-pass review.
+Every PE and the generic review apply the same seven **review moves**, and each
+reports what it checked for every move.
 
 ```
 /plugin install code-reviewer
@@ -76,11 +78,23 @@ stay with `pe-aws-infra`.
 assigns to `pe-audio`. The Rust or Vue PE still reviews the same files and runs
 the tests; `pe-audio` runs none, so it costs no test budget.
 
+**Spec coverage follows any linked issue with acceptance criteria**, not only
+stories. A task or bug links when it carries an `Acceptance Criteria` checklist.
+
 **Story coverage works without GitHub.** Name the branch after a local story
 code (`feat/LT-02-live-tuner`) whose file under `docs/epics/` carries a
 `**Code:** LT-02` line, and the review checks every acceptance criterion. With
 no PR, put the `- [x] AC-N — … — evidence: …` checklist in a commit message
 under an `Acceptance Criteria:` line.
+
+**Every review shows its work.** Each PE applies seven language-agnostic moves:
+ripple a change to every consumer, sibling and restatement; trace state through
+the lifecycle; drive edge inputs; attack every guard; fail every dependency;
+falsify every test; fact-check every claim. The report's Moves Coverage table
+records what each PE checked per move. A PE that returns no coverage counts as
+missing, so the review cannot be approved. Files no PE fits, such as docs, specs
+or backend code under a frontend PE's paths, get the moves from the generic
+review.
 
 **CRITICAL / HIGH / MEDIUM block. LOW and INFO are awareness only** — they do
 not gate the merge, so do not treat a clean-except-LOW report as blocked.

@@ -185,6 +185,21 @@ Generate a Stack Map table and prompt the user to add it to `target`:
 | docs/code-reviews/**, docs/runbooks/**, README.md | Human-targeted docs | (skip) | n/a |
 ```
 
+### 5a.1: Frontend Routing Check
+
+Run on every row, new or existing, before showing the Stack Map:
+
+```
+server_side = files under server/, api/, backend/, functions/ or lambda/, or importing node:http|https|net|child_process|fs,
+              express, fastify, koa, hono, @nestjs/*, pg, mysql2, prisma or mongoose — *.config.* files excepted
+for each row whose Built-in PE is pe-vue:
+  hits = server_side files under the row's paths (minus skip dirs)
+  if hits:
+    propose a row for the hits' directories with their own stack (`Generic` for Node/TS backend code)
+    print in the summary: "WARNING: <row paths> routes <n> server-side files (e.g. <file>) to pe-vue,
+      which does not review backend code — proposed row: <dirs> → Generic"
+```
+
 The "Built-in PE" column drives `code-reviewer` dispatch. `Generic` rows are reviewed by the parent skill directly using the listed test command (no PE sub-agent dispatch). `(skip)` rows are not reviewed. A domain row (`pe-audio`) overlaps stack rows on purpose: each file gets its stack PE plus every domain PE whose row matches.
 
 **Audience-boundary rule for markdown:**
@@ -220,6 +235,9 @@ Built-in PE sub-agents that will be dispatched:
 
 Stacks NOT covered by a built-in PE:
   - {if any} Python (api/) → generic three-pass review
+
+Routing warnings:
+  - {if any} § 5a.1 warnings, one per line
 
 Run /code-reviewer to start reviewing!
 ```

@@ -19,6 +19,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Issue ID** — for cross-referencing in findings
 - **Worktree path** — repo root for grepping cross-file references
 - **Prior review** (round 2+) — path to prior review doc
+- **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
 
 ## Workflow
 
@@ -37,6 +38,7 @@ The parent provides metadata — you pull your own diff and read full files:
          pattern no longer present     → mark RESOLVED (do NOT re-raise)
 5. Run lint-shaped checks (Pass 2 — see below). Capture results.
 6. Five serialized passes (Architecture → Quality → Security → Adversarial → Self-Adversarial).
+   § Review Moves runs after Pass 4 and before Pass 5.
    Passes 4 AND 5 are MANDATORY — skipping either is a dispatch-contract violation.
 7. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
    and execute § Spec Coverage (Story-Linked PRs). Append SPEC-* findings to YAML.
@@ -441,6 +443,22 @@ blind_spot_scan:
 
 ---
 
+## Review Moves
+
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without `REVIEW_MOVES` in the dispatch input, apply the probes below and still return `moves_coverage`.
+
+| Move | Probes |
+| - | - |
+| M1 Ripple | a rule ↔ every restatement (other governance files, READMEs, CHANGELOG, templates); a schema field ↔ every producer and consumer; blocks the repo's sync convention keeps identical; allowed-value lists; the repo's hard rules (version bumps) applied literally |
+| M2 Lifecycle | multi-round and handoff state — who writes what, and when; halt, retry and re-ping loops; caps; resuming after an interruption |
+| M3 Inputs | each rule on an empty diff, no PR, a missing file, one item vs many, and names with dashes, case or spaces |
+| M4 Attack the guard | each rule, regex and glob: a valid input it rejects (false positive) and an invalid one it accepts (false negative), under the tool's real semantics (`grep -E` has no `\d`, git pathspecs have no `{a,b}`); shell commands built from repo-derived strings |
+| M5 Failure path | what the agent does when a command fails, `gh` is absent or a file is missing — stated by the rule, or left to improvisation |
+| M6 Falsify the test | examples and fixtures that contradict the rule, or pass whatever it says |
+| M7 Fact check | platform facts inside rules: tool behaviour, CLI flags, model IDs, API semantics, regex dialects; worked numbers |
+
+---
+
 ## Spec Coverage (Story-Linked PRs)
 
 ```
@@ -495,10 +513,15 @@ Return findings ONLY as a YAML block. No prose, no preamble, no closing remarks.
 
 ```yaml
 expert: PE-Governance
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings:
   - id: "MEDIUM-001"
     severity: MEDIUM
     in_scope: true
+    move: M1                     # M1..M7 | none
     title: "Frontmatter tools array missing ScheduleWakeup"
     location: ".claude/agents/cfo.md:5"
     description: |
@@ -515,6 +538,7 @@ findings:
   - id: "MEDIUM-002"
     severity: MEDIUM
     in_scope: true
+    move: M2                     # M2..M7 | none
     title: "Loop variable never set"
     location: ".claude/agents/content-writer.md:80"
     description: |
@@ -535,6 +559,10 @@ If you find no issues at any severity, return:
 
 ```yaml
 expert: PE-Governance
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings: []
 ```
 

@@ -18,6 +18,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Worktree path** — repo root for running test commands
 - **Workspace subdir** — PROJECT SUBDIR when the Cargo workspace root is not the repo root (e.g., `engine/`); default repo root
 - **Prior review** (round 2+) — path to prior review doc
+- **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
 
 ## Workflow
 
@@ -42,6 +43,7 @@ The parent provides metadata — you pull your own diff and read full files:
 6. Run test commands (Pass 2 — scoped by § Test Budget). Capture stdout + exit code.
 7. Run lint-shaped checks (see below). Capture results.
 8. Five serialized passes (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial).
+   § Review Moves runs after Pass 4 and before Pass 5.
    Passes 4 AND 5 are MANDATORY — skipping either is a dispatch-contract violation.
 9. If dispatch_input.STORY_LINKED is true: Read(dispatch_input.SPEC_COVERAGE_PROTOCOL)
    and execute § Spec Coverage (Story-Linked PRs). Append SPEC-* findings to YAML.
@@ -675,6 +677,22 @@ blind_spot_scan:
 
 ---
 
+## Review Moves
+
+Read `REVIEW_MOVES` once and apply it after Pass 4, before Pass 5: every move whose trigger matches a changed unit in your domain, starting from the probes below. Tag every finding with `move:` and return `moves_coverage` in the asset's schema; a result without it is recorded MISSING. Without `REVIEW_MOVES` in the dispatch input, apply the probes below and still return `moves_coverage`.
+
+| Move | Probes |
+| - | - |
+| M1 Ripple | `pub` items ↔ every caller in the workspace; `#[wasm_bindgen]` exports ↔ TS call sites and `.d.ts`; serde renames ↔ JSON consumers; features ↔ every `cfg`; error variants ↔ every `match` |
+| M2 Lifecycle | `Drop` and guards on every `?` and early return; futures dropped mid-`.await`; a lock held across `.await`; a wasm instance after a panic; state across reset |
+| M3 Inputs | empty slices; `len() - 1` underflow; `u64` above 2^53 into JS; NaN and ±inf; non-UTF-8 bytes; maximum sizes |
+| M4 Attack the guard | `unsafe` preconditions — construct the input that violates each; bounds checks; path canonicalisation; parsers on malformed bytes; validation compiled out under a feature |
+| M5 Failure path | `?` converting to the right error; `unwrap`/`expect` outside tests; panics across FFI or the wasm boundary; partial writes |
+| M6 Falsify the test | proptest strategies that never generate the edge; float tolerances looser than the error under test; `#[ignore]`d tests; behaviour reachable only under `cfg(test)` |
+| M7 Fact check | std and crate behaviour (`HashMap` order, float determinism across targets, wasm-bindgen type mapping); Cargo semantics (resolver, feature unification) |
+
+---
+
 ## Spec Coverage (Story-Linked PRs)
 
 ```
@@ -741,10 +759,15 @@ expert: PE-Rust
 test_budget: targeted            # none | targeted | full — as dispatched
 pass2_evidence:
   - "cargo test --workspace --locked → ok @ <sha> (author receipt)"
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings:
   - id: "HIGH-001"
     severity: HIGH
     in_scope: true
+    move: M7                     # M1..M7 | none
     title: "Instant::now() panics on wasm32-unknown-unknown"
     location: "engine/crates/core/src/session.rs:88"
     description: |
@@ -762,6 +785,10 @@ expert: PE-Rust
 test_budget: targeted            # none | targeted | full — as dispatched
 pass2_evidence:
   - "cargo test --workspace --locked → ok @ <sha> (author receipt)"
+moves_coverage:                  # M1..M7, each exactly once — REVIEW_MOVES § Output
+  - {move: M1, status: applied, checked: "<what was checked, and how many>", note: ""}
+  - {move: M6, status: n/a, checked: "", note: "no test added or changed"}
+  # ...M2–M5 and M7
 findings: []
 ```
 
