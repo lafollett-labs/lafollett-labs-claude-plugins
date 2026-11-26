@@ -1,6 +1,6 @@
 # Code Review: feat-github-actions-release
 
-**Verdict:** ✅ APPROVED (round 2)
+**Verdict:** ✅ APPROVED (round 3)
 
 | | |
 | - | - |
@@ -222,8 +222,8 @@ None.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `7840f9dad5dfcf388cf3dc09bff919f8ad9ec882` (round 2)
-**Status:** ✅ Mergeable IF the branch head is `7840f9dad5dfcf388cf3dc09bff919f8ad9ec882` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
+**Locked to SHA:** `e3dc826e76eb67948271c7bada426ee5555c8084` (round 3)
+**Status:** ✅ Mergeable IF the branch head is `e3dc826e76eb67948271c7bada426ee5555c8084` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
 
 ---
 
@@ -326,6 +326,112 @@ None.
 #### Consider
 
 - [ ] LOW-001 … LOW-014 and INFO-001 … INFO-006: each at its location + the siblings listed above
+
+---
+
+## Review Round 3
+
+> 🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval changes
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer` 2.14.1) for Cali LaFollett |
+| **Reviewed SHA** | `e3dc826e76eb67948271c7bada426ee5555c8084` |
+| **Date** | 2026-11-26 |
+| **Fix cascade** | 9 / 12 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 8 spot-checked |
+
+### Summary
+
+Round 2 was approved at `7840f9d`, and its LOW and INFO findings were then fixed. Of round 2's 20 findings:
+- 17 are closed.
+- LOW-003 is closed only for the literal `[extend]` spelling (now LOW-001).
+- INFO-001 is still present (now INFO-003).
+- INFO-003 was a convergence note.
+
+What the fixes did:
+- The required check's gate step and the title gate moved into tested scripts (`scripts/ci/gate-needs.sh`, `scripts/ci/check-title.sh`).
+- The allow-list validator now takes one regex of 8+ literal characters, refuses stopwords, and allows only `useDefault = true` under `[extend]`.
+- The hook edge cases are closed.
+- Each new case fails against the pre-fix code or a mutant of the fix.
+
+Round 3 found no CRITICAL, HIGH or MEDIUM. 9 of the 12 LOW and INFO findings are edge cases of round-2 fixes. Notable ones:
+- The validator recognizes `[extend]` in only one spelling; inline, spaced or quoted forms still load a second config (LOW-001).
+- A `[[rules]]` entry that reuses a default rule's id switches that rule off (LOW-002).
+  Both take a reviewed `.gitleaks.toml` edit.
+- commit-msg strips comment lines that a non-default `commit.cleanup` keeps (LOW-003).
+
+CI was green on all 5 jobs at the reviewed SHA (run 45911712401). This is the last round under the 3-round cap.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-AWS-Infra | none | none — TEST BUDGET none. Read CI run 45911712401: gate-needs 14/14, check-title 17/17, secret-scan 52/52, check-pr 16/16, hooks 27/27. Under M4/M6: 16 scratch configs on real gitleaks 8.30.1, 7 gate-needs / check-title mutants (all killed), actionlint clean |
+| PE-Governance | none | none |
+| PE-DevTools | lint-only | run-hooks-tests.sh 27/27 locally and on Ubuntu CI; 12 mutants: 8 killed, 2 equivalent, 2 survive (LOW-005); shellcheck clean; all 3 files 100755 |
+| Primary | — | CI run 45911712401 at `e3dc826`: all 5 jobs green, 8 suites, every need ok in the gate step, and the title job printed the release level |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-AWS-Infra | 6 of 8 receipts spot-checked, 0 disagree; the new `[extend]` guard vs the spelling-robust allowlist guard (LOW-001); disabledRules vs a same-id rule override (LOW-002); 7 round-2 findings checked | gate and title logic moved into PR-checkout scripts (same trust as inline ci.yml); check-title temp body + EXIT trap; push refusal → red run; reconcile on a trailer-less squash (INFO-003) | gate-needs × 6 event/ref pairs + array and result-less NEEDS; check-title × hyphen footer, footer after a trailer, empty REPO, release subject as a lone commit | 16 configs on real gitleaks: 5 `[extend]` spellings and 2 rule overrides got through (LOW-001, LOW-002); a wildcard path + prefix regex accepted (INFO-001); a stopword under AND only narrows | gate-needs: no jq, non-object, wrong count, unknown result; check-title: no node, git log, level failure; push refusal; check-pr without node | 7 mutants all killed; wiring tests catch a deleted gate step and EXPECT drift; the stopword case survives deleting its own refusal (INFO-002) | squash settings via gh api; gitleaks AND semantics; extend.path vs useDefault; "one exact value in one file" (INFO-001); push recovery still unverified on GitHub; actionlint |
+| PE-Governance | 4 receipts spot-checked, all restatements agree; CONTRIBUTING.md:18 keep holds; LOW-006, INFO-002, INFO-006 closed | squash-message source as the commit count moves 1 ↔ many across force-pushes; a retitle re-runs the gate via `edited` | line 32 × 6 commit shapes; line 33 × 3 clone layouts; line 27 × unset / set / missing scanner — no gap | 4 one-commit shapes through check-title.sh (fix/chore 0, feat!/feat!+footer 0, feat/feat+footer 1, fix/non-conventional 1) | check-pr without an upstream ref or node → exit 2 with a message; check-title errors name both levels; hook config errors block with a message | n/a — no test in the CLAUDE.md diff | 5 claims: level-mismatch failure, squash under the commit message, conditional denylist scan, `upstream` remote, footer regex vs CLAUDE.md:48; `\| - \|` separators |
+| PE-DevTools | 2 receipts spot-checked, all restatements agree; 5 unreceipted fix rules grepped (LOW-003, LOW-004, INFO-004); 9 round-2 findings closed; suite header vs the new term (LOW-006) | temp files on hit, clean and the new 128 exit; `--amend --no-edit` vs `GIT_EDITOR=: --amend`; concurrent commits | 14 message and config shapes on git 2.54: -m with `#` lines, -F, `--cleanup=`, `commit.cleanup=scissors`, commentChar `;` / `auto` / `//`, commentString, inherited `GIT_EDITOR=:`, empty key, `~nosuchuser`, non-ASCII path, subdirectory commit | 5 guards, each on a valid and an invalid input: `GIT_EDITOR=:`, single-char guard, sed escaping, the 0/1/other exit case, quotePath=false | `~user` exit 128 blocks in both hooks; real gitleaks exits 1 on a broken config and the hook says so; the locate hint from root, subdirectory and a path-only hit (LOW-004) | 7 new checks; 12 mutants: 8 killed, 2 equivalent, 2 survive (LOW-005) | 10 claims, 2 false: "the hint locates a hit" (LOW-004), "keyed on one synthetic term" (LOW-006) |
+| Primary | 8 receipted rules vs CONTRIBUTING.md, README, changelog.d/README: all agree; CONTRIBUTING.md:18 keep holds | n/a — human docs hold no state | CONTRIBUTING's CI-fails sentence vs 1 / many commits and a non-conventional lone commit (INFO-005) | n/a — no guard in the human docs | n/a — human docs make no call | n/a — no test in the human docs | CONTRIBUTING's CI-fails list vs check-title.sh:32 / :34 and check-pr.sh:17; hooks sentence vs pre-commit:29-48 and commit-msg:7-25 |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 6 | 0 |
+| ℹ️ INFO | 6 | 0 |
+
+### In Scope Findings
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| LOW-001 | M4 | `scripts/ci/security/secret-scan.sh:49` | LOW-003 | The `[extend]` guard matches one spelling; an inline table, `[ extend ]`, `["extend"]` or `'extend'.path` still loads a second config, and an inline `disabledRules` gets past the disabledRules check | `scripts/ci/security/secret-scan.sh:43`, `scripts/ci/security/secret-scan.sh:45`, `scripts/ci/security/secret-scan.sh:48`, `scripts/ci/security/secret-scan.sh:52`, `scripts/ci/security/secret-scan.sh:26`, `.gitleaks.toml:11`, `scripts/ci/security/test/run-secret-scan-tests.sh:209`, `scripts/ci/security/test/run-secret-scan-tests.sh:210` |
+| LOW-002 | M4 | `scripts/ci/security/secret-scan.sh:48` | missed | A `[[rules]]` entry that reuses a default rule's id (e.g. a never-matching regex or entropy 99) switches that rule off, and the validator accepts it | `scripts/ci/security/secret-scan.sh:28`, `.gitleaks.toml:1`, `.gitleaks.toml:11` |
+| LOW-003 | M3 | `scripts/hooks/commit-msg:17` | LOW-008 | In the editor flow, commit-msg strips comment lines even when `commit.cleanup` (`scissors`, `whitespace`, `verbatim`) or `--cleanup=` makes git keep them, so a term on such a line commits unscanned | `scripts/hooks/commit-msg:3`, `scripts/hooks/commit-msg:4`, `scripts/hooks/commit-msg:23`, `scripts/ci/test/run-hooks-tests.sh:133` |
+| LOW-004 | M5 | `scripts/hooks/pre-commit:46` | LOW-011 | The locate hint fails when pasted in a subdirectory (root-relative paths) and finds nothing for a hit in a staged path name | `scripts/hooks/pre-commit:43`, `scripts/hooks/pre-commit:45`, `scripts/ci/test/run-hooks-tests.sh:68` |
+| LOW-005 | M6 | `scripts/ci/test/run-hooks-tests.sh:117` | INFO-004 | The `~user` test still passes with either hook's 128 guard removed, since both print the same message and pre-commit exits first | `scripts/ci/test/run-hooks-tests.sh:126`, `scripts/ci/test/run-hooks-tests.sh:127`, `scripts/hooks/pre-commit:33`, `scripts/hooks/commit-msg:11` |
+| LOW-006 | M7 | `scripts/ci/test/run-hooks-tests.sh:3` | LOW-010 | The suite header says the stub scanner is keyed on one term; it now has two | `scripts/ci/test/run-hooks-tests.sh:28` |
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| INFO-001 | M7 | `.gitleaks.toml:7` | LOW-002 | The accepted shape is a literal prefix in any file matching one path pattern, not "one exact value in one file": `$` is optional and the paths class allows `.` and `\S` | `.gitleaks.toml:3`, `.gitleaks.toml:6`, `.gitleaks.toml:8`, `scripts/ci/security/secret-scan.sh:24`, `scripts/ci/security/secret-scan.sh:26`, `scripts/ci/security/secret-scan.sh:73`, `scripts/ci/security/secret-scan.sh:77`, `scripts/ci/security/test/run-secret-scan-tests.sh:180` |
+| INFO-002 | M6 | `scripts/ci/security/test/run-secret-scan-tests.sh:208` | LOW-002 | "a stopword is refused" replaces the regex, so the entry already fails "no exact value"; the case passes with the stopwords refusal deleted | none |
+| INFO-003 | M2 | `scripts/ci/release/run-release.sh:113` | still-present | Round-2 INFO-001: a release squash whose message loses its `Base:` trailer is warned, not tagged, and the next stamp bumps its plugins again | `scripts/ci/release/version-stamp.js:92`, `scripts/ci/release/version-stamp.js:93`, `scripts/ci/release/run-release.sh:252` |
+| INFO-004 | M3 | `scripts/hooks/commit-msg:21` | LOW-008 | Fails closed: an inherited `GIT_EDITOR=:` on an editor commit, or a multi-char `core.commentChar` / `core.commentString`, scans git's comment lines and blocks a term-removal commit | `scripts/hooks/commit-msg:3`, `scripts/hooks/commit-msg:20`, `scripts/hooks/commit-msg:21` |
+| INFO-005 | M7 | `CONTRIBUTING.md:21` | LOW-006 | The CI-fails list omits a one-commit PR whose commit subject is not conventional (step 3 asks for conventional commits); the two "or" clauses read awkwardly | `CLAUDE.md:32`, `scripts/ci/check-title.sh:32` |
+| INFO-006 | none | `scripts/hooks/commit-msg:1` | new | Convergence signal: severity flat at LOW/INFO, and the round-3 hook findings refine round-2 fixes | none |
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+None.
+
+#### Should Fix
+
+None.
+
+#### Consider
+
+- [ ] LOW-001: fix `scripts/ci/security/secret-scan.sh:49` + 8 siblings (check the TOML structure, e.g. `tomllib`, instead of line spellings)
+- [ ] LOW-002: fix `scripts/ci/security/secret-scan.sh:48` + 3 siblings (refuse `[[rules]]`, or require a repo-owned id prefix)
+- [ ] LOW-003: fix `scripts/hooks/commit-msg:17` + 4 siblings
+- [ ] LOW-004: fix `scripts/hooks/pre-commit:46` + 3 siblings
+- [ ] LOW-005: fix `scripts/ci/test/run-hooks-tests.sh:117` + 4 siblings
+- [ ] LOW-006: fix `scripts/ci/test/run-hooks-tests.sh:3` + 1 sibling
+- [ ] INFO-001 … INFO-005: each at its location + the siblings listed above
 
 ---
 
