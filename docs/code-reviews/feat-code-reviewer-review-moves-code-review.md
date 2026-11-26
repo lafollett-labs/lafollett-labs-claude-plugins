@@ -1,6 +1,6 @@
 # Code Review: feat-code-reviewer-review-moves
 
-**Verdict:** ⚠️ CHANGES REQUESTED
+**Verdict:** ⚠️ CHANGES REQUESTED (round 3 of 3; its fixes are in `dc48b6b`, which has not been re-reviewed)
 
 | | |
 | - | - |
@@ -174,8 +174,8 @@ Eleven reference docs that SKILL.md files load at runtime matched no PE.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `d4a7493716198427316bcdecf66529a77c316bd7`
-**Status:** ⚠️ Not mergeable — CHANGES REQUESTED. Round 2 reviews the remediation.
+**Locked to SHA:** `3ae7cb4761c476c57cc1abe51d2c8246a1a5181a` (round 3)
+**Status:** ⚠️ Not mergeable as reviewed. Round 3 requested changes, and they landed in `dc48b6b`. ROUND_CAP is reached, so the operator decides on a round 4 before merge.
 
 ---
 
@@ -249,6 +249,83 @@ The round found no CRITICAL, HIGH or MEDIUM issues, so the verdict is APPROVED. 
 
 #### Consider
 - [x] LOW-001 – LOW-007, INFO-001 – INFO-003 (all applied in `56a56df`)
+
+---
+
+## Review Round 3
+
+**Verdict:** ⚠️ CHANGES REQUESTED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer`) |
+| **Reviewed SHA** | `3ae7cb4761c476c57cc1abe51d2c8246a1a5181a` |
+| **Date** | 2026-11-26 |
+
+### Summary
+
+All round-2 findings are resolved at `3ae7cb4`. One regression was introduced by a round-2 fix. The new section-end rule ended an `Acceptance Criteria` section at its first sub-heading or bold sub-label. That dropped ACs and could produce false SPEC-NO-AC or SPEC-MISSING findings. It is MEDIUM. Four LOW siblings and 1 INFO were also found.
+
+All six are fixed in `dc48b6b`, and the fixes were checked directly:
+- `extract_section` was simulated under python `re` on 6 AC-section shapes and 1 grouped claims section, and every one parses correctly;
+- the `[[xX]]` check-off grep was run on a sample epic;
+- the six synced Calibration Anchors still hash identical.
+
+This is round 3 of `ROUND_CAP = 3`. `dc48b6b` has not been re-reviewed. A round 4 is the operator's call: proceed, abort or escalate.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-Governance | none | lint-shaped checks; AC and claims regexes run under python `re` on 18 inputs; section-end rule simulated on 5 sections |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-Governance | 6 fix hunks sibling-grepped: checkbox matchers (2 unfixed), Constraints ×7, runtime-read claim vs 7 PEs | Phase 4.5 order vs Asset Paths, Dispatch, generic Spec (0 gaps); `issue.body` lifetime | 5 AC-section shapes (3 drop ACs); 18 headings; empty body | regexes on 18 inputs; end rule on 5 sections (3 false negatives); `valid()` vs 16 examples | 3 paths: fetch → SPEC-LINK-UNVERIFIED, empty body → gate, gate advice (1 unreachable) | 1 changed example vs `valid()`; 14 PE example lines | 5 claims (runtime reads false for 6 PEs) |
+| Primary | n/a — no human doc changed this round | n/a — no state | n/a — no parser in human docs | n/a — no guard | n/a — no call that can fail | n/a — no test added or changed | n/a — no claim added to human docs |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 1 | 0 |
+| 🟢 LOW | 4 | 0 |
+| ℹ️ INFO | 1 | 0 |
+
+### In Scope Findings
+
+#### 🟡 MEDIUM-001: Section-end rule truncated AC and claims sections at their first sub-heading
+
+**Domains:** [Governance] · **Move:** M4
+**Location:** `plugins/code-reviewer/skills/code-reviewer/assets/spec-coverage-protocol.md:25`
+
+The rule "a section ends at the next heading or bold-only line" applied to `#` headings too. A `## Acceptance Criteria` holding `### Functional` / `### Non-functional` parsed zero ACs, and ACs after a `### Edge cases` were dropped. A PR body grouping claims under `### Addressed` / `### Deferred` parsed zero claims.
+
+**Fixed in `dc48b6b`:** a single `extract_section` definition. A `#` section ends at the next heading of the same or fewer `#`. A bold or bare heading's section ends at the next `#` heading or bold-only line.
+
+| ID | Move | Finding | Location | Disposition |
+| - | - | - | - | - |
+| LOW-001 | M4 | `valid()` could not recognise the example string the PE files carry | `SKILL.md:241` | fixed: the literal is named |
+| LOW-002 | M1 | `done_at_target` and `verify_local` accepted only lowercase `[x]` | `SKILL.md:84`, `assets/spec-coverage-protocol.md:227` | fixed |
+| LOW-003 | M1 | Failure Gate advised checking gh auth for a failure that no longer reaches it | `SKILL.md:488` | fixed |
+| LOW-004 | M7 | "PEs read only dispatch assets" was false while six Calibration Anchors said to re-read SKILL.md | `SKILL.md:142`, 6 PE files | fixed: the pointer is dropped from all six synced anchors |
+| INFO-001 | M4 | "none, and no frontmatter" read as a requirement | `agents/pe-governance.md:92` | fixed |
+
+### Action Items
+
+#### Must Fix (blocks merge)
+- [x] none
+
+#### Should Fix
+- [x] MEDIUM-001 (fixed in `dc48b6b`, verified by simulation, not re-reviewed)
+
+#### Consider
+- [x] LOW-001 – LOW-004, INFO-001
+- [ ] Round 4 on `dc48b6b`: the operator decides (ROUND_CAP reached)
 
 ---
 
