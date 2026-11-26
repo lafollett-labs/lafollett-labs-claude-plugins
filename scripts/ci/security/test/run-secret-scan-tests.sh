@@ -200,6 +200,14 @@ shape_case "an anchored match-anything regex is refused" "2:not-run" "$(printf '
 shape_case "an unanchored regex is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}TOKEN=ghp_${T3}]/")"
 shape_case "two regexes in one entry are refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^a${T3}, ${T3}^b${T3}]/")"
 shape_case "an escaped dot in an anchored regex is accepted" "0:ran" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^TOKEN\\\\.ghp_${T3}]/")"
+shape_case "a \\S* regex is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^\\\\S*${T3}]/")"
+shape_case "a [\\s\\S]* regex is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^[\\\\s\\\\S]*${T3}]/")"
+shape_case "a (?:.)* regex is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^(?:.)*${T3}]/")"
+shape_case "a trailing lone backslash is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^TOKEN=ghp_\\\\${T3}]/")"
+shape_case "a short literal prefix is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed "s/^regexes = .*/regexes = [${T3}^ghp_${T3}]/")"
+shape_case "a stopword is refused" "2:not-run" "$(printf '%s\n' "$good_entry" | sed 's/^regexes = .*/stopwords = ["ghp_"]/')"
+shape_case "an [extend] path to a second config is refused" "2:not-run" "path = \"inner.toml\""
+shape_case "a dotted extend key is refused" "2:not-run" "$(printf '[[rules]]\nid = "x"\nregex = %sx%s\n\nextend.path = "inner.toml"\n' "$T3" "$T3")"
 
 # --- workflow wiring -----------------------------------------------------------------------------
 # A cancelled run on main would leave that push's commits unscanned: the next push scans only its own.
@@ -214,6 +222,14 @@ needs="$(awk '/^  check:/{c=1; next} c && /^  [^ ]/{c=0} c && /^    needs:/{prin
 check "ci.yml's required check needs every other job" "$needs" "$jobs"
 # shellcheck disable=SC2016 # a literal GitHub expression, not a shell one
 check "ci.yml's required check runs when a need fails" "$(grep -cF 'if: ${{ !cancelled() }}' "$CI_YML")" 1
+# ...and only if its last step is the gate, fed every need. gate-needs.sh has its own suite.
+check_job="$(awk '/^  check:/{c=1; next} c && /^  [^ ]/{c=0} c' "$CI_YML")"
+check "ci.yml's required check ends with the gate step" \
+  "$(printf '%s\n' "$check_job" | grep -E '^[[:space:]]+run:' | tail -n 1 | sed 's/^[[:space:]]*//')" "run: bash scripts/ci/gate-needs.sh"
+# shellcheck disable=SC2016 # a literal GitHub expression, not a shell one
+check "ci.yml's gate reads toJSON(needs)" "$(printf '%s\n' "$check_job" | grep -cF 'NEEDS: ${{ toJSON(needs) }}')" 1
+check "ci.yml's gate expects as many jobs as it needs" \
+  "$(printf '%s\n' "$check_job" | sed -n 's/^[[:space:]]*EXPECT: \([0-9]*\)$/\1/p')" "$(printf '%s' "$needs" | wc -w | tr -d ' ')"
 
 echo "=============================================="
 echo "$total checks, $fails failed"

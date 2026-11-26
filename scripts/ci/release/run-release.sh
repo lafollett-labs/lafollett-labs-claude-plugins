@@ -225,7 +225,8 @@ if git fetch --quiet "$REMOTE" "refs/heads/$BRANCH" 2>/dev/null; then
   fi
 fi
 if [ "$pushed" = yes ]; then
-  git push --quiet --force "$REMOTE" "$STAMP:refs/heads/$BRANCH" || die "failed to push $BRANCH"
+  git push --quiet --force "$REMOTE" "$STAMP:refs/heads/$BRANCH" \
+    || die "failed to push $BRANCH. If GitHub refused it because the stamp commit's base changes a workflow file, close the release PR, delete $BRANCH, and re-run this workflow"
   log "pushed $STAMP to $BRANCH"
 fi
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Pre-commit: refuse a staged secret (gitleaks v8.19+, when installed) or a hit from the maintainer's
-# private denylist scanner (when configured) in the staged paths and added lines. The gitleaks scan
-# matches CI's: inline gitleaks:allow comments are ignored and a .gitleaksignore file is refused.
-# commit-msg scans the message. Enable once per clone:
+# private denylist scanner (when labs.denylistScan is set) in the staged paths and added lines.
+# gitleaks runs with CI's flags: inline gitleaks:allow comments are ignored and a .gitleaksignore file
+# is refused. Only CI checks the allow-list's shape. commit-msg scans the message. Enable once per clone:
 #   git config core.hooksPath scripts/hooks
 #   git config labs.denylistScan /path/to/private/scan.sh   # optional; never commit that file
 set -u
@@ -19,24 +19,32 @@ if command -v gitleaks >/dev/null 2>&1; then
     case $? in
       0) ;;
       3) echo "pre-commit: gitleaks found a secret in the staged diff (run: $hint)" >&2; rc=1 ;;
-      *) echo "pre-commit: gitleaks failed to run; it needs v8.19+ (run: $hint)" >&2; rc=1 ;;
+      *) echo "pre-commit: gitleaks failed to run; it needs v8.19+ and a valid .gitleaks.toml (run: $hint)" >&2; rc=1 ;;
     esac
   fi
 else
   echo "pre-commit: gitleaks not on PATH; secret scan skipped (CI still scans)" >&2
 fi
 
-scan="$(git config --type=path --get labs.denylistScan || true)"
+scan="$(git config --type=path --get labs.denylistScan)"
+case $? in
+  0) ;;
+  1) scan="" ;;
+  *) echo "pre-commit: cannot read labs.denylistScan (a ~user/ path that does not expand?)" >&2; exit 1 ;;
+esac
 if [ -n "$scan" ]; then
   [ -x "$scan" ] || { echo "pre-commit: labs.denylistScan is set but $scan is missing or not executable" >&2; exit 1; }
   staged="$(mktemp)"
   trap 'rm -f "$staged"' EXIT
-  { git diff --cached --name-only --no-renames --diff-filter=d
+  { git -c core.quotePath=false diff --cached --name-only --no-renames --diff-filter=d
     git diff --cached -U0 --no-color --no-ext-diff --no-renames \
       | awk '/^diff --git /{h=1} /^@@/{h=0; next} !h && /^\+/{print substr($0, 2)}'
   } > "$staged"
-  # /dev/null makes the scanner print file:line rather than the matched text.
-  "$scan" "$staged" /dev/null >/dev/null \
-    || { echo "pre-commit: private denylist hit in the staged paths or added lines (inspect: git diff --cached)" >&2; rc=1; }
+  # The scanner's file:line output would name this temp file, so it is dropped; the hint locates a hit.
+  if ! "$scan" "$staged" /dev/null >/dev/null; then
+    echo "pre-commit: private denylist hit in the staged paths or added lines" >&2
+    printf '  locate: git diff --cached --name-only --diff-filter=d -z | xargs -0 %q /dev/null\n' "$scan" >&2
+    rc=1
+  fi
 fi
 exit "$rc"

@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
-# commit-msg: run the maintainer's private denylist scanner (when configured) over the message as the
-# editor flow records it: no `#` comment lines and no `-v` diff. See scripts/hooks/pre-commit for setup.
+# commit-msg: run the maintainer's private denylist scanner (when labs.denylistScan is set) over the
+# message as git will record it. Without an editor (-m, -F) git sets GIT_EDITOR=: for hooks and keeps
+# the message as written, comment lines included. In the editor flow git drops comment lines and the
+# -v diff below the scissors line, so they are dropped here too. See scripts/hooks/pre-commit for setup.
 set -u
-scan="$(git config --type=path --get labs.denylistScan || true)"
+scan="$(git config --type=path --get labs.denylistScan)"
+case $? in
+  0) ;;
+  1) exit 0 ;;
+  *) echo "commit-msg: cannot read labs.denylistScan (a ~user/ path that does not expand?)" >&2; exit 1 ;;
+esac
 [ -n "$scan" ] || exit 0
 [ -x "$scan" ] || { echo "commit-msg: labs.denylistScan is set but $scan is missing or not executable" >&2; exit 1; }
 msg="$(mktemp)"
 trap 'rm -f "$msg"' EXIT
-sed '/^# -\{24\} >8 -\{24\}$/,$d' "$1" | git stripspace --strip-comments > "$msg"
-# /dev/null makes the scanner print file:line rather than the matched text.
+if [ "${GIT_EDITOR:-}" = ":" ]; then
+  cp "$1" "$msg"
+else
+  cc="$(git config --get core.commentChar || true)"
+  case "$cc" in ?) ;; *) cc='#' ;; esac
+  esc="$(printf '%s' "$cc" | sed 's/[][\/.^$*]/\\&/g')"
+  sed "/^$esc -\{24\} >8 -\{24\}\$/,\$d" "$1" | git stripspace --strip-comments > "$msg"
+fi
 "$scan" "$msg" /dev/null >/dev/null || { echo "commit-msg: private denylist hit in the commit message" >&2; exit 1; }

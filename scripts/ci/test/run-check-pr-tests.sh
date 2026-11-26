@@ -87,6 +87,14 @@ fresh
 check "a missing head is refused" "$( (cd "$R" && bash scripts/ci/check-pr.sh "$BASE") >/dev/null 2>&1; echo $?)" 2
 check "an unknown base is refused" "$( (cd "$R" && bash scripts/ci/check-pr.sh 1234567890123456789012345678901234567890 HEAD) >/dev/null 2>&1; echo $?)" 2
 
+# Without node every version would read empty and pass, so the check refuses to run.
+fresh
+printf '{\n  "name": "alpha",\n  "version": "1.0.1"\n}\n' > "$R/plugins/alpha/.claude-plugin/plugin.json"; frag a; commit "chore: bump"
+mkdir -p "$W/nonode"
+for t in bash git mktemp rm cat dirname; do ln -sf "$(command -v "$t")" "$W/nonode/$t"; done
+check "no node on PATH is refused, not reported clean" \
+  "$( (cd "$R" && PATH="$W/nonode" bash scripts/ci/check-pr.sh "$BASE" HEAD) > "$W/out" 2>&1; echo $?):$(grep -c 'node is required' "$W/out")" "2:1"
+
 echo "=============================================="
 echo "$total checks, $fails failed"
 [ "$total" -gt 0 ] || { echo "FAIL: no checks ran"; exit 1; }

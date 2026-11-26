@@ -24,13 +24,13 @@ plugins/
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). Each plugin is independently versioned; this repo is the source of truth.
 
-Optional: `git config core.hooksPath scripts/hooks` runs gitleaks and the private denylist scan on each commit. The hooks check no version or fragment rule.
+Optional: `git config core.hooksPath scripts/hooks` runs gitleaks on each commit, and the private denylist scan when `git config labs.denylistScan <path>` names it. The hooks check no version or fragment rule.
 
 ### Versions and changelog — HARD RULE
 
 Never edit an existing `version` in a plugin.json or marketplace.json, or CHANGELOG.md. The release workflow writes all three after merge, and CI fails a version edit.
-Title every PR, and a single-commit PR's commit, as a conventional commit; CI fails the PR otherwise.
-Check before pushing: `bash scripts/ci/check-pr.sh origin/main HEAD`.
+Title every PR as a conventional commit; a single-commit PR's commit must release at the title's level (same type, `!` and `BREAKING CHANGE:` footer). CI fails the PR otherwise.
+Check before pushing: `bash scripts/ci/check-pr.sh origin/main HEAD` (`upstream/main` in a fork).
 
 ```
 if the PR changes plugins/:

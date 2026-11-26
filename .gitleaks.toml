@@ -4,10 +4,11 @@
 #   description  why the value is safe (required)
 #   condition    "AND" — the path AND the value must both match
 #   paths        exactly one file, anchored (no directory globs)
-#   regexes      ONE ^-anchored pattern on one line, no .* or .+: the exact line (regexTarget = "line")
-#                or detected value (regexTarget = "secret")
-# scripts/ci/security/secret-scan.sh refuses any other shape: a .gitleaksignore file, an allow-list
-# outside a top-level [[allowlists]] table (legacy, per-rule, dotted key or inline) and disabledRules.
+#   regexes      ONE pattern on one line: ^, then 8+ literal characters (escape punctuation as \.),
+#                then an optional $; the exact line (regexTarget = "line") or value (regexTarget = "secret")
+# scripts/ci/security/secret-scan.sh refuses any other shape: a .gitleaksignore file, stopwords, an
+# allow-list outside a top-level [[allowlists]] table (legacy, per-rule, dotted key or inline),
+# disabledRules, and any [extend] key but useDefault = true.
 # Inline gitleaks:allow comments are ignored.
 
 [extend]

@@ -25,7 +25,8 @@ git config --global user.email tester@example.com
 git config --global commit.gpgsign false
 git config --global core.hooksPath "$HOOKS"
 
-TERM_HIT="zebra""corn"   # the stub scanner's one denylisted term, split so this file never matches it
+TERM_HIT="zebra""corn"                  # the stub scanner's terms, built so this file never matches them
+TERM_UTF8="$(printf 'z\303\274''ri')"   # a non-ASCII term (UTF-8 bytes)
 fake_secret() { printf 'ghp_%s' "$(printf 'x7Kq2Lm9Pz4Rt8Vw1Ny3x7Kq2Lm9Pz4Rt8Vw' | tr 'x' 'A')"; }
 
 mkdir -p "$W/bin" "$W/home/bin"
@@ -33,7 +34,7 @@ cat > "$W/home/bin/scan.sh" <<EOF
 #!/usr/bin/env bash
 set -o pipefail
 [ \$# -gt 0 ] || { echo "stub scanner: no-argument mode" >&2; exit 1; }
-grep -inE '$TERM_HIT' "\$@" | cut -d: -f1,2 && exit 1 || exit 0
+grep -inE '$TERM_HIT|$TERM_UTF8' "\$@" | cut -d: -f1,2 && exit 1 || exit 0
 EOF
 chmod +x "$W/home/bin/scan.sh"
 
@@ -64,11 +65,15 @@ check "an --amend that fixes HEAD's message passes" "$(try --amend -m "fix: clea
 fresh
 echo "x $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt
 check "a hit in an added line blocks" "$(try -m "feat: a")" 1
-check "  and says where to look" "$(said 'staged paths or added lines')" 1
+check "  and says where to look" "$(said 'staged paths or added lines'):$(said 'locate: git diff --cached')" "1:1"
 
 fresh
 echo ok > "$R/$TERM_HIT.txt"; git -C "$R" add -A
 check "a hit in a staged path blocks" "$(try -m "feat: a")" 1
+
+fresh
+echo ok > "$R/$TERM_UTF8.txt"; git -C "$R" add -A
+check "a non-ASCII term in a staged path blocks" "$(try -m "feat: a")" 1
 
 fresh
 echo "x $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt; try --no-verify -m "chore: seed" >/dev/null
@@ -86,7 +91,7 @@ check "a .gitleaksignore file is refused" "$(try -m "feat: a")" 1
 check "  by name" "$(said 'remove .gitleaksignore')" 1
 
 fresh
-printf '#!/bin/sh\nexit 126\n' > "$W/bin/gitleaks"; chmod +x "$W/bin/gitleaks"
+printf '#!/bin/sh\nexit 1\n' > "$W/bin/gitleaks"; chmod +x "$W/bin/gitleaks"   # 1: what a bad config exits
 echo ok > "$R/a.txt"; git -C "$R" add a.txt
 code="$(PATH="$W/bin:$PATH" try -m "feat: a")"
 check "a gitleaks that cannot run blocks" "$code" 1
@@ -107,11 +112,25 @@ echo "x $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt
 check "a ~ scanner path resolves" "$(HOME="$W/home" try -m "feat: a"):$(said 'not executable')" "1:0"
 git -C "$R" config labs.denylistScan "$W/home/bin/missing.sh"
 check "a missing scanner is named as missing" "$(try -m "feat: a"):$(said 'missing or not executable')" "1:1"
+# shellcheck disable=SC2088 # the literal ~user is the input under test
+git -C "$R" config labs.denylistScan "~nosuchuser-zz9/bin/scan.sh"
+check "a ~user path that does not expand blocks" "$(try -m "feat: a"):$(said 'cannot read labs.denylistScan')" "1:1"
+
+fresh
+# shellcheck disable=SC2088 # the literal ~ is the input under test
+git -C "$R" config labs.denylistScan "~/bin/scan.sh"
+echo ok > "$R/a.txt"; git -C "$R" add a.txt
+check "commit-msg resolves a ~ scanner path" "$(HOME="$W/home" try -m "feat: $TERM_HIT"):$(said 'hit in the commit message')" "1:1"
+git -C "$R" config labs.denylistScan "$W/home/bin/missing.sh"
+printf 'feat: a\n' > "$W/msg"
+code="$( (cd "$R" && bash "$HOOKS/commit-msg" "$W/msg") 2>"$W/err"; echo $?)"
+check "commit-msg names a missing scanner" "$code:$(said 'missing or not executable')" "1:1"
 
 fresh
 echo ok > "$R/a.txt"; git -C "$R" add a.txt
 check "a hit in the message blocks" "$(try -m "feat: $TERM_HIT")" 1
 check "  in commit-msg" "$(said 'hit in the commit message')" 1
+check "a -m line starting with # is recorded, so a term there blocks" "$(try -m "fix: a" -m "#21 follow-up for $TERM_HIT")" 1
 
 fresh
 echo "x $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt; try --no-verify -m "chore: seed" >/dev/null
@@ -123,6 +142,13 @@ fresh
 echo x > "$R/$TERM_HIT.txt"; git -C "$R" add -A; try --no-verify -m "chore: seed" >/dev/null
 git -C "$R" rm -q "$TERM_HIT.txt"
 check "git's # status comments do not block commit-msg" "$(GIT_EDITOR="sed -i.bak '1s/^/chore: drop it/'" try)" 0
+
+fresh
+git -C "$R" config core.commentChar ';'
+echo "x $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt; try --no-verify -m "chore: seed" >/dev/null
+echo ok > "$R/a.txt"; git -C "$R" add a.txt
+check "with core.commentChar ';' the -v diff still does not block" \
+  "$(GIT_EDITOR="sed -i.bak '1s/^/fix: remove it/'" try -v)" 0
 
 echo "=============================================="
 echo "$total checks, $fails failed"

@@ -14,6 +14,7 @@ MARKETPLACE=".claude-plugin/marketplace.json"
 
 die() { echo "check-pr: $1" >&2; exit 2; }
 [ -n "$base" ] && [ -n "$head" ] || die "usage: check-pr.sh <base> <head>"
+command -v node >/dev/null 2>&1 || die "node is required to read versions"
 git cat-file -e "$base^{commit}" 2>/dev/null || die "base $base is not a commit in this clone"
 git cat-file -e "$head^{commit}" 2>/dev/null || die "head $head is not a commit in this clone"
 

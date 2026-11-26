@@ -21,35 +21,53 @@ die() { echo "secret-scan: $1" >&2; exit 2; }
 case "$head$before" in *[!0-9a-f]*) die "SCAN_BASE and SCAN_HEAD must be commit SHAs" ;; esac
 [ -f "$config" ] || die "missing gitleaks config $config"
 
-# Every [[allowlists]] entry: a description, condition = "AND", an exact value (stopwords, or one
-# ^-anchored regex with no .* or .+), and exactly one anchored single-file path on the `paths =` line.
-# No other allow-list form (legacy or per-rule tables, dotted keys, inline arrays), and no disabled
-# default rule.
-problems="$(awk -v q="'" '
+# Every [[allowlists]] entry: a description, condition = "AND", one exact value (a single regex: ^, then
+# at least 8 literal or backslash-escaped punctuation characters, then an optional $; no stopwords), and
+# exactly one anchored single-file path on the `paths =` line. [extend] may only set useDefault = true
+# (no second config). No other allow-list form (legacy or per-rule tables, dotted keys, inline arrays),
+# and no disabled default rule.
+problems="$(awk -v q="'" \
+  -v LIT='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_=:/ ,@%&~#"<>!;-' \
+  -v PUNCT='.[](){}*+?|^$/-' '
   function flush() {
     if (!inblock) return
     if (!desc)       print "entry at line " start ": no description"
     if (!cond)       print "entry at line " start ": condition must be \"AND\""
-    if (!val)        print "entry at line " start ": no exact value (regexes or stopwords)"
+    if (!val)        print "entry at line " start ": no exact value (one regexes pattern)"
     if (paths != 1)  print "entry at line " start ": needs exactly one paths line naming one anchored file"
   }
   /^[[:space:]]*#/ { next }
+  /^[[:space:]]*$/ { next }
   {
     key = $0; sub(/=.*/, "", key)
     if (tolower(key) ~ /allowlist/ && $0 !~ /^[[:space:]]*\[\[allowlists\]\][[:space:]]*(#.*)?$/)
       print "line " NR ": an allow-list outside a top-level [[allowlists]] table is not allowed"
+    if (key ~ /^[[:space:]]*"?extend"?[[:space:]]*\./)
+      print "line " NR ": a dotted extend key is not allowed"
   }
   /^[[:space:]]*disabledRules[[:space:]]*=/ { print "line " NR ": disabling default rules is not allowed" }
-  /^[[:space:]]*\[\[allowlists\]\]/ { flush(); inblock = 1; desc = cond = val = paths = 0; start = NR; next }
-  /^[[:space:]]*\[/ { flush(); inblock = 0; next }
+  /^[[:space:]]*\[extend\][[:space:]]*(#.*)?$/ { flush(); inblock = 0; inextend = 1; next }
+  /^[[:space:]]*\[\[allowlists\]\]/ { flush(); inextend = 0; inblock = 1; desc = cond = val = paths = 0; start = NR; next }
+  /^[[:space:]]*\[/ { flush(); inblock = 0; inextend = 0; next }
+  inextend && $0 !~ /^[[:space:]]*useDefault[[:space:]]*=[[:space:]]*true[[:space:]]*(#.*)?$/ {
+    print "line " NR ": [extend] may only set useDefault = true"
+  }
   inblock && /^[[:space:]]*description[[:space:]]*=[[:space:]]*"[^"]+"/ { desc = 1 }
   inblock && /^[[:space:]]*condition[[:space:]]*=[[:space:]]*"AND"[[:space:]]*$/ { cond = 1 }
-  inblock && /^[[:space:]]*stopwords[[:space:]]*=/ { val = 1 }
+  inblock && /^[[:space:]]*stopwords[[:space:]]*=/ { print "entry at line " start ": stopwords are not allowed; use one exact regex" }
   inblock && /^[[:space:]]*regexes[[:space:]]*=/ {
     one = "^[[:space:]]*regexes[[:space:]]*=[[:space:]]*\\[" q q q "\\^[^" q "]+" q q q "\\][[:space:]]*$"
-    pat = $0; sub("^[^" q "]*" q q q, "", pat); sub(q q q ".*$", "", pat); gsub(/\\./, "", pat)
-    if ($0 ~ one && pat !~ /\.[*+{]/) val = 1
-    else print "entry at line " start ": regexes must be one ^-anchored pattern on one line, with no .* or .+"
+    pat = $0; sub("^[^" q "]*" q q q, "", pat); sub(q q q ".*$", "", pat)
+    ok = 1; n = 0                              # after ^: literal chars, or \ + punctuation; a last bare $ anchors
+    for (i = 2; i <= length(pat); i++) {
+      ch = substr(pat, i, 1)
+      if (ch == "\\") { i++; ch = substr(pat, i, 1); if (ch == "" || index(PUNCT, ch) == 0) ok = 0 }
+      else if (ch == "$" && i == length(pat)) continue
+      else if (index(LIT, ch) == 0) ok = 0
+      n++
+    }
+    if ($0 ~ one && ok && n >= 8) val = 1
+    else print "entry at line " start ": regexes must be one pattern: ^, 8+ literal characters (escape punctuation), optional $"
   }
   inblock && /^[[:space:]]*paths[[:space:]]*=/ {
     one = "^[[:space:]]*paths[[:space:]]*=[[:space:]]*\\[" q q q "\\^[A-Za-z0-9_./\\\\-]+[$]" q q q "\\][[:space:]]*$"
