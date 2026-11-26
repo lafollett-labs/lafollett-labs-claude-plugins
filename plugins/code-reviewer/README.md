@@ -100,8 +100,8 @@ review.
 places that state the same rule or repeat the same defect. A round that requests changes prints a
 pre-flight. Fix each blocking finding and its siblings, re-check every rule your
 fix touched, commit, and pass one `RIPPLE RECEIPTS` line per rule
-(`<rule> → N restatements checked @ <sha>`) with the next `/code-reviewer` run. From round 2, each finding says
-which earlier fix caused it, and the report's fix cascade shows whether the
+(`<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>`) with the next `/code-reviewer` run. From round 2, each finding says
+whether an earlier fix caused it, and the report's fix cascade shows whether the
 rounds are converging or churning.
 
 **CRITICAL / HIGH / MEDIUM block. LOW and INFO are awareness only** — they do

@@ -288,7 +288,7 @@ stack_cmds   = the .code-reviewer.yml / Stack Map test command(s) for this PE's 
 receipts     = author test output (command, result, sha) from the caller's invocation text,
                the PR body, or a hand-off message
 ripple_receipts = "<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>" lines from the same
-                  sources whose sha == reviewed_sha (§ Remediation Pre-flight)
+                  sources whose `git rev-parse <sha>` == reviewed_sha (§ Remediation Pre-flight)
 if pe == pe-devtools:
   omit TEST BUDGET                            # lint-only Pass 2; always runs
 elif pe in {pe-governance, pe-audio} or stack_cmds is empty:
@@ -770,6 +770,7 @@ findings:
     severity: CRITICAL
     move: M4                     # M1..M7 | none
     siblings: []                 # every other path:line stating or repeating what the fix changes — REVIEW_MOVES § Finding Keys
+    introduced_by: new
     in_scope: true
     title: "XSS via unsanitized HTML injection"
     location: "src/components/email-viewer.ts:207"

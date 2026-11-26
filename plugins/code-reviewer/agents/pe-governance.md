@@ -20,7 +20,7 @@ The parent provides metadata — you pull your own diff and read full files:
 - **Worktree path** — repo root for grepping cross-file references
 - **Prior review** (round 2+) — path to prior review doc
 - **Review moves** — `REVIEW_MOVES`: absolute path to the moves asset (§ Review Moves)
-- **Ripple receipts** (round 2+) — `RIPPLE RECEIPTS`: the remediator's `<rule> → N restatements checked @ <sha>` lines, or `none`
+- **Ripple receipts** (round 2+) — `RIPPLE RECEIPTS`: the remediator's `<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>` lines, or `none`
 
 ## Workflow
 
@@ -542,6 +542,7 @@ findings:
     in_scope: true
     move: M2                     # M1..M7 | none
     siblings: []
+    introduced_by: new
     title: "Loop variable never set"
     location: ".claude/agents/content-writer.md:80"
     description: |

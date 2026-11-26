@@ -90,8 +90,8 @@ M7 Fact check:
 if FIX DIFF is set:                     # every hunk outside docs/code-reviews/** is a fix
   for each hunk: apply M1's sibling grep and M4
   if RIPPLE RECEIPTS lists receipts:    # spot-check
-    for each receipt: grep its rule; a restatement its count misses is a finding,
-      unless the receipt keeps it with a reason that holds
+    for each receipt: grep its rule; a restatement that disagrees with it is a finding,
+      unless the receipt keeps it with a reason that holds   # a count mismatch alone is not
     grep every rule the fix diff adds or changes that no receipt names, as below
   else:                                 # RIPPLE RECEIPTS: none → exhaustive
     list every rule the fix diff adds or changes and grep every restatement of each
