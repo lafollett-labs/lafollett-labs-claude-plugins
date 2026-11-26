@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-aws-infra, pe-governance, pe-devtools). Four-pass protocol with mandatory adversarial re-read, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop with hard 3-round cap until APPROVED (LOW + INFO are awareness-only and do NOT block). pe-devtools calibrated for single-operator local threat model. Story-linked PRs additionally run Phase 4.5 Spec Coverage, asserting every story acceptance criterion is genuinely discharged or explicitly deferred.
+description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-rust, pe-aws-infra, pe-governance, pe-devtools) plus the pe-audio domain PE on real-time audio/DSP paths. Four-pass protocol with mandatory adversarial re-read, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop with hard 3-round cap until APPROVED (LOW + INFO are awareness-only and do NOT block). pe-devtools calibrated for single-operator local threat model. Story-linked changes — a GitHub story/epic issue, or a local story code such as feat/LT-02-live-tuner resolved from docs/epics, no GitHub required — additionally run Phase 4.5 Spec Coverage, asserting every story acceptance criterion is genuinely discharged or explicitly deferred.
 ---
 
 # Expert Code Review
@@ -54,12 +54,29 @@ Read the files directly. No diff context — review entire content.
 ### Review Name (used for output filename)
 
 ```
-if branch matches "<type>/<issue-id>-<description>":
+code = story_code(branch)         # § Story Code
+if code:
+  name = code.code                # e.g., "LT-02" — a story code beats a bare number
+elif branch matches "<type>/<issue-id>-<description>":
   name = issue_id                 # e.g., "983"
 elif on a branch (no issue ID):
   name = slugify(branch)          # e.g., "fix-code-reviewer-cleanup"
 else:
   ask user for a short descriptive name
+```
+
+### Story Code
+
+```
+story_code(text):                          # → {code, file} | None
+  declared = None
+  for tok in matches of /\b[A-Za-z]{2,5}-[0-9]+\b/ in text, left to right:
+    code = upper(tok)
+    file = first line of: grep -rlE "^\*\*Code:\*\* +<code> *$" docs/epics --include='*.md'
+    if file:                    return {code, file}
+    if tok == code and not declared:
+      declared = {code, file: None}        # written uppercase but no story file — still a declared code
+  return declared                          # lowercase tokens that resolve nothing ("fix-12") are slugs
 ```
 
 ### PE Routing
@@ -70,7 +87,14 @@ git diff <target>...<source> --stat | tail -1  # PR reviews (informational)
 ```
 
 ```
-matching_pes = PEs whose Stack Map paths intersect with files in the diff
+matching_pes = stack PEs whose Stack Map paths intersect with files in the diff   # § Selection Priority
+for pe in domain PEs (§ PE Agent Selection, Kind = domain):
+  domain_paths = pe's default globs ∪ every Stack Map row naming pe
+  if any diff file matches domain_paths:
+    matching_pes += pe                     # rides beside the file's stack PE, never replaces it
+domain_only = diff files matched by a domain PE and by no stack PE
+if domain_only:
+  primary also runs the generic three-pass review on domain_only   # e.g., an audio .ts file with no Stack Map
 
 if matching_pes is empty:
   approach = "generic"     # primary runs generic three-pass (no PE expertise available)
@@ -86,15 +110,17 @@ Diff size is informational only. Domain expertise is the constant — every revi
 
 ## PE Agent Selection
 
-The plugin ships five built-in PE sub-agents:
+The plugin ships seven built-in PE sub-agents. A **stack** PE owns the files it matches, including Pass 2 test execution. A **domain** PE reviews one concern across stacks and is dispatched in addition to the stack PE for the same files.
 
-| Subagent | Domain | File patterns |
-| - | - | - |
-| `code-reviewer:pe-go` | Go / PostgreSQL / AWS Lambda | `*.go`, `go.mod`, `go.sum`, `*.sql` |
-| `code-reviewer:pe-vue` | Vue 3 / Nuxt 3 / TS / Tailwind / Storybook | `*.vue`, `*.tsx`, `*.jsx`, `tailwind.config.*`, `nuxt.config.*`, `vite.config.*`, `*.stories.*` |
-| `code-reviewer:pe-aws-infra` | AWS CDK / Cloudflare CDKTF / Terraform / Docker / GH Actions | `cdk.json`, `*.tf`, `*.tfvars`, `Dockerfile*`, `docker-compose*`, `.github/workflows/*.yml` |
-| `code-reviewer:pe-governance` | Agent definitions, skills, plugin instructions, CLAUDE.md, AGENTS.md | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md` |
-| `code-reviewer:pe-devtools` | Local dev tooling (single-operator threat model) — bash scripts, hooks, code-review wrappers | `scripts/dev/**`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` |
+| Subagent | Kind | Domain | File patterns (default globs) |
+| - | - | - | - |
+| `code-reviewer:pe-go` | stack | Go / PostgreSQL / AWS Lambda | `*.go`, `go.mod`, `go.sum`, `*.sql` |
+| `code-reviewer:pe-vue` | stack | Vue 3 (Nuxt 3 or Vite SPA/PWA) / TS / Tailwind / Storybook | `*.vue`, `*.tsx`, `*.jsx`, `tailwind.config.*`, `nuxt.config.*`, `vite.config.*`, `*.stories.*`, `*.webmanifest` |
+| `code-reviewer:pe-rust` | stack | Rust workspaces / unsafe + FFI / WebAssembly (wasm-bindgen) | `*.rs`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo/config.toml` |
+| `code-reviewer:pe-aws-infra` | stack | AWS CDK / Cloudflare CDKTF / Terraform / Docker / GH Actions | `cdk.json`, `*.tf`, `*.tfvars`, `Dockerfile*`, `docker-compose*`, `.github/workflows/*.yml` |
+| `code-reviewer:pe-governance` | stack | Agent definitions, skills, plugin instructions, CLAUDE.md, AGENTS.md | `.claude/agents/*.md`, `**/SKILL.md`, `plugins/**/agents/*.md`, `**/CLAUDE.md`, `**/AGENTS.md`, `.claude/rules/*.md`, `docs/rules/*.md` |
+| `code-reviewer:pe-devtools` | stack | Local dev tooling (single-operator threat model) — bash scripts, hooks, code-review wrappers | `scripts/dev/**`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` |
+| `code-reviewer:pe-audio` | domain | Real-time audio / DSP — audio-thread rules, analysis windows, sample rate, signal hygiene, scheduling, mic capture, pitch/cents accuracy, fixture coverage | `**/{audio,dsp,pitch}/**/*.{rs,ts,js,mjs,vue}`, `**/*[Ww]orklet*.{ts,js,mjs}` — always applied, plus Stack Map rows naming `pe-audio` |
 
 Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five-pass protocol (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial) — they do NOT need a reference file at runtime.
 
@@ -121,9 +147,11 @@ Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five
    without stack-specific test commands or domain checklists.
 ```
 
+Steps 1-3 pick stack PEs; domain PEs are added on top per § PE Routing. A Stack Map row naming a domain PE overlaps stack rows on purpose and carries no test command.
+
 **Mixed diffs:** If the diff spans multiple stacks, dispatch every matching PE subagent, at most `max_parallel_pes` suite-running PEs at a time (§ Dispatch). Each PE reviews only the portion of the diff relevant to its domain.
 
-**Stacks not covered by built-in agents** (Rust, Python, Java, C#, etc.): primary agent runs the generic three-pass review directly. The Stack Map from step 1 or 2 still tells the parent which paths are which stack and what test commands to run.
+**Stacks not covered by built-in agents** (Python, Java, C#, etc.): primary agent runs the generic three-pass review directly. The Stack Map from step 1 or 2 still tells the parent which paths are which stack and what test commands to run.
 
 ---
 
@@ -184,8 +212,8 @@ match approach:
 
   case "multi_pe":
     max_parallel  = settings.max_parallel_pes (.code-reviewer.yml) if a positive integer, else 2
-    suite_running = matching_pes ∩ {pe-go, pe-vue, pe-aws-infra}
-    suite_free    = matching_pes − suite_running        # pe-governance, pe-devtools — uncapped
+    suite_running = matching_pes ∩ {pe-go, pe-vue, pe-rust, pe-aws-infra}
+    suite_free    = matching_pes − suite_running        # pe-governance, pe-devtools, pe-audio — uncapped
     batches = chunks(suite_running, max_parallel) or [[]]
     batches[0] += suite_free                            # suite-free PEs ride the first message
     for batch in batches:
@@ -213,8 +241,8 @@ receipts     = author test output (command, result, sha) from the caller's invoc
                the PR body, or a hand-off message
 if pe == pe-devtools:
   omit TEST BUDGET                            # lint-only Pass 2; always runs
-elif pe == pe-governance or stack_cmds is empty:
-  TEST BUDGET: none
+elif pe in {pe-governance, pe-audio} or stack_cmds is empty:
+  TEST BUDGET: none                           # pe-audio: the stack PE beside it runs the suites
 elif any receipt for a cmd in stack_cmds at reviewed_sha has result == fail:
   TEST BUDGET: full
 elif every cmd in stack_cmds has a receipt with result == pass at reviewed_sha:
@@ -237,7 +265,7 @@ diff content into the prompt. The calling agent provides metadata only:
 You are reviewing changes for {ISSUE_ID}.
 
 DIFF COMMAND (run this yourself — do NOT ask the caller to paste it):
-  git diff {target}...{source} -- {file patterns for your domain}
+  git diff {target}...{source} -- {file patterns for your domain; for a domain PE, its domain_paths}
 
 KEY FILES CHANGED:
   {bullet list of changed files relevant to this PE's domain, from --stat output}
@@ -246,7 +274,7 @@ SCOPE: {Branch Diff | Staged Diff | PR Review}
 TARGET BRANCH: {main | etc.}
 SOURCE BRANCH: {current branch}
 WORKTREE: {absolute path to repo root}
-{optional} PROJECT SUBDIR: {e.g., "frontend/" for Vue/Nuxt subdir in a monorepo, "cdk/" for CDK subdir}
+{optional} PROJECT SUBDIR: {e.g., "frontend/" for a Vue subdir in a monorepo, "cdk/" for CDK, "engine/" for a Cargo workspace}
 {optional} PRIOR REVIEW: {path to prior review doc if round 2+}
 {optional} STORY_FILE: {absolute path to local story/epic markdown when PR is story-linked — PE may tag findings with discharges_ac: [AC-N] to enrich Phase 4.5 Spec Coverage}
 TEST BUDGET: {none | targeted | full — per § Test Budget; omitted for pe-devtools}
@@ -294,64 +322,115 @@ cross_pe_verification (when multiple PEs dispatched):
       flag MEDIUM "over-permissioned IAM — handler doesn't call <action>"
     if handler makes AWS API calls PE-AWS-Infra didn't grant:
       flag HIGH "missing IAM grant — handler calls <api> but CDK doesn't grant it"
+
+  pe-rust ↔ pe-vue (WASM boundary):
+    for each #[wasm_bindgen] export PE-Rust reports added/changed:
+      grep its name across *.ts / *.vue / generated *.d.ts
+      if a call site's arity, nullability (Option → undefined) or numeric type (u64/i64 → bigint) disagrees:
+        flag HIGH "WASM boundary mismatch — <export> in <rust file> vs <ts call site>"
+    if PE-Rust says an export returns Result/throws but PE-Vue found the call site without
+      try/catch or error UI:
+      flag MEDIUM "engine error unhandled at <call site>"
+    if PE-Rust reports a new exported struct and PE-Vue found no .free() / FinalizationRegistry
+      on the owning component's teardown:
+      flag MEDIUM "wasm handle leak — <struct> never freed"
+    if PE-Vue says the engine initialises once but PE-Rust's #[wasm_bindgen(start)] does heavy work,
+      or the reverse (PE-Rust exposes init(), PE-Vue never awaits it):
+      flag the discrepancy — one PE may have missed something
+
+  pe-rust ↔ pe-audio (real-time constraints in Rust DSP):
+    if PE-Audio classifies a Rust fn as audio_rt and PE-Rust flags a panic path, allocation,
+      lock, or log call in that fn or its callees:
+      merge into ONE finding, severity = max(both, HIGH), domains [Real-time, Rust]
+    if PE-Rust's determinism/float findings touch a fn PE-Audio relies on for pitch, cents, or level:
+      keep the higher severity — numeric drift there is a user-visible wrong reading
+    if PE-Audio says "no allocation in the callback" but PE-Rust's Pass 2b shows a callee outside
+      the diff allocates:
+      flag HIGH "audio-thread allocation via <callee>"
+
+  pe-vue ↔ pe-audio (AudioWorklet / TS audio graph):
+    if PE-Audio flags a mic stream or AudioContext and PE-Vue found the owning component or
+      composable has no teardown (track.stop(), context.close() in onBeforeUnmount/onScopeDispose):
+      flag HIGH "audio graph outlives its component — mic stays open"
+    if PE-Audio requires resume() from a user gesture and PE-Vue traces the start path to
+      onMounted / watch / a timer:
+      flag HIGH "audio started outside a user gesture — context stays suspended"
+    if PE-Vue reports an SW update or route change that reloads/remounts, and PE-Audio
+      reports a live session on that view:
+      flag HIGH "reload or remount tears down a live audio session"
+    if PE-Audio flags hash-route permission re-prompts and PE-Vue confirms createWebHashHistory:
+      merge into ONE finding, domains [Audio, Vue]
 ```
 
 ---
 
-## Phase 4.5: Spec Coverage Trigger (Story-Linked PRs)
+## Phase 4.5: Spec Coverage Trigger (Story-Linked Changes)
 
-**Calling-agent responsibility only.** When the PR (or branch's primary linked issue) carries a `story` or `epic` label, the calling agent enriches PE dispatch inputs with the absolute path to the Spec Coverage protocol asset. PEs load the protocol themselves and run it as a story-linked-only pass (the protocol's pseudocode lives in `assets/spec-coverage-protocol.md` so reviewer agents — who do NOT see SKILL.md — actually have access to it).
+**Calling-agent responsibility only.** When § Trigger links the change to a story — by explicit argument, a story-labeled GitHub issue, or a local story code — the calling agent enriches PE dispatch inputs with the absolute path to the Spec Coverage protocol asset. PEs load the protocol themselves and run it as a story-linked-only pass (the protocol's pseudocode lives in `assets/spec-coverage-protocol.md` so reviewer agents — who do NOT see SKILL.md — actually have access to it).
 
 ### Trigger
 
 ```
-issue_id = extract_issue_id(pr.title, pr.body, current_branch_name)
+gh_ok     = `gh repo view --json name` exits 0      # gh installed + authenticated + a GitHub remote
+pr_number = PR number (PR Review)
+            | (gh_ok and `gh pr view <source_branch> --json number --jq .number` succeeds)
+            | None
+issue_id  = gh_ok and extract_issue_id(pr.title, pr.body, current_branch_name)
   # "Closes #NNN", "fix(#NNN)", "feat(#NNN)", or branch prefix <type>/<NNN>-<...>
+code      = story_code(current_branch_name)          # § Story Code
+if code is None or code.file is None:
+  for text in [pr.title if pr_number] + `git log --reverse --format=%s <target>..<source>`:
+    hit = story_code(text)
+    if hit and hit.file: code = hit; break          # PR title / subjects count only when they resolve
 
-if issue_id is None:
-  story_linked = false
+story_linked = false; story_file_path = None
+if the invocation names a story file path or story code:                       # 1. explicit
+  story_linked    = true
+  story_file_path = that path if the file exists, else story_code(<code>).file
+elif code and code.file and the first H1 of code.file starts "# Story:" or "# Epic:":
+  story_linked    = true                                                        # 3. a story code beats a bare number
+  story_file_path = code.file
 else:
-  labels = bash: gh issue view <issue_id> --json labels --jq '.labels[].name'
-  story_linked = ("story" in labels) or ("epic" in labels)
+  if issue_id:                                                                  # 2. GitHub — unchanged
+    labels = bash: gh issue view <issue_id> --json labels --jq '.labels[].name'
+    if "story" in labels or "epic" in labels:
+      story_linked    = true
+      story_file_path = § GitHub Story File Resolution
+  if not story_linked and code and code.file is None
+     and `grep -rqE '^\*\*Code:\*\* ' docs/epics --include='*.md'` succeeds:
+    story_linked = true                                                         # declared code, no story file → gate
 
 if not story_linked:
-  # Non-story PR (chore, bugfix, task) — Phase 4.5 does not apply
+  # chore, bugfix, task, no link — and gh missing / no remote / no PR — Phase 4.5 does not apply, silently
   return
 ```
 
-### Story File Resolution
+### GitHub Story File Resolution
 
 ```
-# Priority order:
-#   1. caller-provided STORY_FILE path
-#   2. local epic file via docs/epics/*/.github-state.json mapping
-#   3. GH issue body directly
-
+# 2a. local epic file via docs/epics/*/.github-state.json mapping
+# 2b. GH issue body directly
 story_file_path = None
+state_files = bash: find docs/epics -maxdepth 3 -name .github-state.json
+for state_file in state_files:
+  if jq -r '.issues | to_entries[] | select(.value == <issue_id>) | .key' returns a filename:
+    story_file_path = <state_file_dir>/<filename>
+    break
 
-if user passed STORY_FILE explicitly:
-  story_file_path = <user value>
-else:
-  # Search local epics
-  state_files = bash: find docs/epics -maxdepth 3 -name .github-state.json
-  for state_file in state_files:
-    if jq -r '.issues | to_entries[] | select(.value == <issue_id>) | .key' returns a filename:
-      story_file_path = <state_file_dir>/<filename>
-      break
-
-  if story_file_path is None:
-    # Fallback — fetch GH issue body to a temp file
-    body = bash: gh issue view <issue_id> --json body --jq '.body'
-    if body is empty or command failed (rate limit, network down):
-      story_file_path = None  # keep None — fall through to gate
-    else:
-      bash: write body to /tmp/spec-coverage-<issue_id>.md
-      story_file_path = /tmp/spec-coverage-<issue_id>.md
-
-# FAILURE GATE — must run before Dispatch Input Enrichment
 if story_file_path is None:
-  # All three resolution paths failed. Do NOT enrich dispatch — dispatching
-  # with STORY_LINKED: true + missing STORY_FILE would silently mis-fire.
+  body = bash: gh issue view <issue_id> --json body --jq '.body'
+  if body is non-empty:
+    bash: write body to /tmp/spec-coverage-<issue_id>.md
+    story_file_path = /tmp/spec-coverage-<issue_id>.md
+  # empty body or failed command (rate limit, network down) → stays None → gate
+```
+
+### Failure Gate
+
+```
+# Runs before Dispatch Input Enrichment, only when story_linked is true
+if story_file_path is None:
+  # Do NOT enrich dispatch — STORY_LINKED: true + missing STORY_FILE would silently mis-fire.
   add to calling agent's own finding list:
     expert: "Spec Coverage"
     id: "SPEC-STORY-FILE-UNRESOLVED"
@@ -359,14 +438,12 @@ if story_file_path is None:
     in_scope: true
     title: "Story link detected but story file unresolvable"
     description: |
-      PR closes story-labeled issue #<issue_id> but neither caller-provided
-      STORY_FILE, local docs/epics/*/.github-state.json mapping, nor
-      `gh issue view <issue_id>` body-fetch fallback yielded a story file.
-      Spec Coverage pass SKIPPED.
+      The change links <explicit "<arg>" | story-labeled issue #<issue_id> | story code <CODE>>
+      but no resolution path yielded a story file. Spec Coverage pass SKIPPED.
     recommendation: |
-      Pass STORY_FILE explicitly via the skill invocation, OR add the issue
-      to a local docs/epics/*/.github-state.json mapping, OR verify
-      `gh issue view <issue_id>` works (auth + network).
+      Pass STORY_FILE explicitly via the skill invocation, OR add a `**Code:** <CODE>` line
+      to the story under docs/epics/, OR add the issue to a docs/epics/*/.github-state.json
+      mapping, OR verify `gh issue view <issue_id>` works (auth + network).
   return  # do not proceed to Dispatch Input Enrichment
 ```
 
@@ -389,9 +466,9 @@ Append these fields to each PE's dispatch input:
 
 ```
 STORY_LINKED: true
-STORY_FILE: <absolute path resolved in § Story File Resolution>
+STORY_FILE: <absolute path resolved in § Trigger>
 SPEC_COVERAGE_PROTOCOL: <spec_coverage_protocol_path — absolute, no ${...} placeholders>
-PR_NUMBER: <PR number, for `gh pr view <N>` calls inside the protocol>
+PR_NUMBER: <pr_number — omit when None; the protocol then reads AC claims from branch commit messages>
 ```
 
 The calling agent owns plugin-path resolution because it (the skill orchestrator) has reliable access to `$CLAUDE_PLUGIN_ROOT`. PEs at depth-1 do not — passing them a literal `${CLAUDE_PLUGIN_ROOT}/...` string would cause `Read()` to fail on the unresolved placeholder.
@@ -445,7 +522,7 @@ Never publish a CRITICAL/HIGH without a second look.
 
 ### Step 2: Write or Append
 
-Each round's **Test Evidence** section has one row per dispatched PE: suite-running PEs report `test_budget` + `pass2_evidence`; pe-governance / pe-devtools rows read `none` / `lint-only`; a MISSING PE reads `MISSING` / `no YAML after re-ping`.
+Each round's **Test Evidence** section has one row per dispatched PE: suite-running PEs report `test_budget` + `pass2_evidence`; pe-governance and pe-audio rows read `none`, pe-devtools `lint-only`; a MISSING PE reads `MISSING` / `no YAML after re-ping`.
 
 ```
 reviewed_sha = git rev-parse HEAD     # capture BEFORE writing
@@ -617,7 +694,7 @@ Round-to-round continuity is enforced inside each PE (PEs read the prior committ
 PE sub-agents return findings in this exact format. Primary agent parses YAML blocks and consolidates into the final report.
 
 ```yaml
-expert: PE-Go|PE-Vue|PE-AWS-Infra|Primary
+expert: PE-Go|PE-Vue|PE-Rust|PE-AWS-Infra|PE-Governance|PE-DevTools|PE-Audio|Primary
 findings:
   - id: "CRITICAL-001"
     severity: CRITICAL

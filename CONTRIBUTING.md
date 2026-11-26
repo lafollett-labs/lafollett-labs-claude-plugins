@@ -32,18 +32,18 @@ Sub-agents (e.g., the PE reviewers in `code-reviewer/agents/*.md`) load their fu
 
 - Keep all instructions a sub-agent needs to execute its task INLINE in its agent file
 - Do NOT reference plugin assets via relative paths from sub-agent prose — the path resolution is unreliable from sub-agent context
-- If multiple sub-agents share content (e.g., the four production PEs share the Pass 4 Common Adversarial Lenses + Calibration Anchor + Apply Protocol), inline the shared block in each agent file and document the sync convention below
+- If multiple sub-agents share content (e.g., the six production PEs share the Pass 4 Common Adversarial Lenses + Calibration Anchor + Apply Protocol), inline the shared block in each agent file and document the sync convention below
 
 ### Sync convention for shared blocks
 
-The four production PE files (`pe-go.md`, `pe-vue.md`, `pe-aws-infra.md`, `pe-governance.md`) carry an identical Pass 4 framing:
+The six production PE files (`pe-go.md`, `pe-vue.md`, `pe-rust.md`, `pe-aws-infra.md`, `pe-governance.md`, `pe-audio.md`) carry an identical Pass 4 framing:
 - Calibration Anchor
 - Six common lenses (`hostile_attacker`, `scale_10x`, `junior_in_one_year`, `prod_incident_2am`, `partial_failure`, `silence_check`)
 - How to Apply Pass 4 protocol
 
-Stack-flavored examples for `silence_check` (and any stack-specific lenses) differ per file. The shared blocks must stay in sync. When editing any of those blocks, edit ALL FOUR files together.
+Stack-flavored examples for `silence_check` (and any stack-specific lenses) differ per file. The shared blocks must stay in sync. When editing any of those blocks, edit ALL SIX files together.
 
-The § Test Budget `match` block is identical across `pe-go.md`, `pe-vue.md` and `pe-aws-infra.md`; only the static-check, narrow-run and `always:` lines vary by stack. Edit all three together.
+The § Test Budget `match` block is identical across `pe-go.md`, `pe-vue.md`, `pe-rust.md` and `pe-aws-infra.md`; only the static-check, narrow-run and `always:` lines vary by stack. Edit all four together.
 
 `pe-devtools.md` runs a different lens set (single-operator local threat model) and is NOT part of this sync.
 

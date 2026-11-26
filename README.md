@@ -11,7 +11,7 @@ do.
 
 | Plugin | What it does | |
 | - | - | - |
-| **code-reviewer** | Reviews that dispatch a principal engineer per stack — Go, Vue/Nuxt, AWS IaC, agent governance, dev tooling — then consolidate the findings | [Usage & tips](./plugins/code-reviewer/README.md) |
+| **code-reviewer** | Reviews that dispatch a principal engineer per stack — Go, Vue (Nuxt or Vite PWA), Rust/WASM, AWS IaC, agent governance, dev tooling, plus real-time audio — then consolidate the findings | [Usage & tips](./plugins/code-reviewer/README.md) |
 | **context-handoff** | Carry a session's working state, decisions, and next steps across a `/clear` | [Usage & tips](./plugins/context-handoff/README.md) |
 | **issue-manager** | GitHub Issues that define what and why, never how — authored locally, pushed without duplicates | [Usage & tips](./plugins/issue-manager/README.md) |
 | **plugin-janitor** | Remove cached plugin versions nothing points at, and the empty directories they leave | [Usage & tips](./plugins/plugin-janitor/README.md) |
@@ -77,7 +77,7 @@ docs/
   plans/                        # Live design work
 ```
 
-`code-reviewer` also ships five PE sub-agents under `agents/`, and `ux-designer`
+`code-reviewer` also ships seven PE sub-agents under `agents/`, and `ux-designer`
 ships `design-engineer`.
 
 ## Contributing
