@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - init-project detects Cargo workspaces, wasm32 crates, Vue + Vite without Nuxt, PWAs, and audio paths (by content signals and fixture directories). It emits `pe-rust` test commands and a `pe-audio` domain row, and the YAML template gains matching examples.
   - Phase 4.5 resolves the story in this order:
     1. an explicit story file or code in the invocation;
-    2. a story code from the branch (or, when it resolves, the PR title or a commit subject) matched to a `**Code:** <CODE>` line under `docs/epics/` — a code beats a bare issue number, and any file except a `# Task:` or `# Bug:` links;
+    2. a story code from the branch — or the one resolving code named by `feat` PR titles and commit subjects — matched to a `**Code:** <CODE>` line under `docs/epics/`. A code beats a bare issue number; any file except a `# Task:` or `# Bug:` links, unless the story is already checked off at the target;
     3. the GitHub issue path, unchanged.
   - Without `gh`, a remote or a PR, the GitHub paths are skipped silently. Acceptance-criteria claims then come from the newest branch commit message carrying the checklist.
   - Deferrals may name a story code or file. It must resolve to a story other than the one under review that is not checked off in its epic. Deferral and evidence paths are limited to a safe character set and checked without a shell.

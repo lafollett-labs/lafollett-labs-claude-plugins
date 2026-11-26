@@ -425,10 +425,11 @@ tdd_and_hygiene:
     grep -nE "as any|: any" <file>
     → flag MEDIUM per match "any cast hiding type bug — use proper type or unknown"
 
-  for each component or composable with setInterval/setTimeout/addEventListener/getUserMedia/
-  new AudioContext/wakeLock.request in diff:
-    grep -nE "setInterval|setTimeout|addEventListener|getUserMedia|new AudioContext|wakeLock\.request" <file>
-    if no corresponding clear/remove/track.stop()/close()/release() in onBeforeUnmount/onScopeDispose:
+  for each component or composable in diff that creates, inside its own setup/function body,
+  an interval, timeout, event listener, getUserMedia stream, or AudioContext
+  (module-level and provide/inject singletons are exempt; wake locks follow wake_lock_and_permissions):
+    grep -nE "setInterval|setTimeout|addEventListener|getUserMedia|new AudioContext" <file>
+    if no corresponding clear/remove/track.stop()/close() in onBeforeUnmount/onScopeDispose:
       flag HIGH "lifecycle leak — cleanup missing in onBeforeUnmount"
 
   for each page/component with async data in diff:
@@ -443,7 +444,7 @@ tdd_and_hygiene:
 
   verification commands:
     grep -nE "as any|: any" <file>
-    grep -nE "setInterval|setTimeout|addEventListener" <file>
+    grep -nE "setInterval|setTimeout|addEventListener|getUserMedia|new AudioContext" <file>
     grep -nE "onBeforeUnmount|onUnmounted|onScopeDispose" <file>
 ```
 

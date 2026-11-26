@@ -89,7 +89,7 @@ cd <worktree>/<workspace_subdir> && cargo build -p <wasm_crate> --target wasm32-
 ls -l target/wasm32-unknown-unknown/release/*.wasm      # record raw size in pass2_evidence
 ```
 
-If the workspace has `#[wasm_bindgen_test]` tests, `wasm-pack` is on PATH, and `wasm32-unknown-unknown` is already installed (wasm-pack otherwise installs it):
+If the workspace has `#[wasm_bindgen_test]` tests, `wasm-pack` is on PATH, `wasm32-unknown-unknown` is installed, and `wasm-bindgen --version` matches the wasm-bindgen version in Cargo.lock (wasm-pack otherwise downloads the target or CLI):
 
 ```bash
 cd <worktree>/<workspace_subdir> && wasm-pack test --node <wasm_crate_dir>

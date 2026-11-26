@@ -29,7 +29,8 @@ The parent provides metadata — you pull your own diff and read full files:
    Real-time bugs hide in callees: follow each changed fn to everything it calls.
 3. cd <worktree> for all Bash operations.
 4. Before any pass: build the thread map (§ Pass 1 thread_topology) and resolve
-   range = (fmin, fmax) the project declares — instrument/voice table, config, story ACs; None if undeclared.
+   profiles = [(name, fmin, fmax)] the project declares — instrument/voice table, config, story ACs; [] if undeclared
+   range    = (min fmin, max fmax) over profiles; None if profiles is []
 5. Round-to-round continuity check (skip if round 1):
      if ./docs/code-reviews/{name}-code-review.md exists:
        read latest round's findings
@@ -110,7 +111,7 @@ latency_budget:
   for each analysis path in diff:
     delay_ms = (window_samples + hop_samples) / fs · 1000
     if the project states a first-reading or display latency target and delay_ms exceeds it
-       for any instrument in range:
+       for any profile:
       flag HIGH "window/hop exceed the stated latency target for <range> — size per instrument"
 ```
 
@@ -150,7 +151,7 @@ analysis_windows:
     required = 2 · fs / fmin
     if window < required:
       flag HIGH "window <N> cannot resolve <fmin> Hz — needs ≥ <required> samples at <fs> Hz"
-    if window is a single global constant while profile fmins in range span more than an octave:
+    if window is a single global constant while profile fmins span more than an octave:
       flag MEDIUM "one window for every instrument — wastes latency on high instruments; size from the active range"
     if window is in samples but was derived assuming 48 kHz (literal 2048/4096/8192 with no fs term):
       flag MEDIUM "window fixed in samples — at 44.1 kHz it covers less time; derive from fs"
@@ -293,9 +294,12 @@ test_coverage:
     if ground truth (expected f0/level per segment) is absent or hand-copied from current output:
       flag HIGH "fixture asserts the implementation, not ground truth"
     if a synthetic generator uses unseeded randomness: flag MEDIUM "fixture not reproducible"
-  coverage matrix — for the range the change touches, flag MEDIUM per missing case:
-    lowest supported fundamental · highest · silence · noise-only · onset/attack ·
-    odd-harmonic timbre · drone bleed (when a drone exists) · 44.1 kHz and 48 kHz
+  coverage matrix — flag MEDIUM per missing case that applies to the change:
+    range.fmin and range.fmax           when range is not None
+    silence · noise-only · onset/attack  detection or analysis changes
+    odd-harmonic timbre                  detection changes, when profiles include odd-harmonic sources (clarinets)
+    drone bleed                          detection changes, when the app plays a reference tone while capturing
+    44.1 kHz and 48 kHz                  every change
   accuracy baseline:
     baseline = committed metrics file the harness compares against (path from Stack Map/test harness)
     if the diff changes the baseline:

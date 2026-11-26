@@ -71,14 +71,17 @@ else:
 story_code(text):                          # → {code, file} | None
   declared = None
   for tok in matches of /\b[A-Za-z]{2,5}-[0-9]+\b/ in text, left to right:
-    code = upper(tok)
-    file = first line of: grep -rlE "^\*\*Code:\*\* +<code> *$" docs/epics --include='*.md'
-    if file:                    return {code, file}
+    code = upper(tok)                      # ^[A-Z]{2,5}-[0-9]+$ by construction — safe to interpolate
+    file = first line of: grep -rlE '^\*\*Code:\*\* +<code> *$' docs/epics --include='*.md'
+    if file and safe_path(file):  return {code, file}
     prefix = code before "-"
     if tok == code and not declared
-       and `grep -rqE "^\*\*Code:\*\* +<prefix>-[0-9]+" docs/epics --include='*.md'` succeeds:
+       and `grep -rqE '^\*\*Code:\*\* +<prefix>-[0-9]+' docs/epics --include='*.md'` succeeds:
       declared = {code, file: None}        # a known story prefix with no file for this number
   return declared                          # anything else ("fix-12", "UTF-8") is part of the slug
+
+safe_path(p)       = p matches ^[A-Za-z0-9._/-]+$ and contains no ".."
+done_at_target(c)  = `git grep -qE '^[[:space:]]*-[[:space:]]*\[x\][[:space:]]*(\*\*|\[)?<c>([^0-9]|$)' <target> -- docs/epics` succeeds
 ```
 
 ### PE Routing
@@ -125,7 +128,7 @@ The plugin ships seven built-in PE sub-agents. A **stack** PE owns the files it 
 | `code-reviewer:pe-devtools` | stack | Local dev tooling (single-operator threat model) — bash scripts, hooks, code-review wrappers | `scripts/dev/**`, `scripts/**/*.sh` with `# pe: devtools` header, `.githooks/**`, `lefthook.yml` |
 | `code-reviewer:pe-audio` | domain | Real-time audio / DSP — audio-thread rules, analysis windows, sample rate, signal hygiene, scheduling, mic capture, pitch/cents accuracy, fixture coverage | `**/{audio,dsp,pitch}/**/*.{rs,ts,js,mjs,vue}`, `**/*[Ww]orklet*.{ts,js,mjs}` — always applied, plus Stack Map rows naming `pe-audio` |
 
-Each agent has its own model (`claude-opus-4-7`), tools, and self-contained five-pass protocol (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial) — they do NOT need a reference file at runtime.
+Each agent has its own tools and self-contained five-pass protocol (Architecture → Quality+Tests → Security → Adversarial → Self-Adversarial) — they do NOT need a reference file at runtime.
 
 `pe-governance` reviews documents whose audience is the model (agent governance markdown). It does NOT review documents whose audience is humans (ADRs at `docs/architecture/*.md`, runbooks at `docs/runbooks/*.md`, review docs at `docs/code-reviews/*.md`, READMEs). Those fall to generic three-pass review.
 
@@ -327,8 +330,9 @@ cross_pe_verification (when multiple PEs dispatched):
       flag HIGH "missing IAM grant — handler calls <api> but CDK doesn't grant it"
 
   pe-rust ↔ pe-vue (WASM boundary):
-    exports = names on the line after each added/changed `#[wasm_bindgen]` in
-              git diff <target>...<source> -- '*.rs'          # calling agent computes this
+    exports = from git diff <target>...<source> -- '*.rs', every fn whose signature line is
+              added/changed and that sits under #[wasm_bindgen], directly or inside a
+              #[wasm_bindgen] impl; name = its js_name when set   # calling agent computes this
     for each export: grep its call sites across *.ts / *.vue / generated *.d.ts
       if arity, nullability (Option → undefined) or numeric type (u64/i64 → bigint) disagrees:
         flag HIGH "WASM boundary mismatch — <export> in <rust file> vs <ts call site>"
@@ -369,15 +373,17 @@ issue_id  = gh_ok and extract_issue_id(pr.title, pr.body, current_branch_name)
   # "Closes #NNN", "fix(#NNN)", "feat(#NNN)", or branch prefix <type>/<NNN>-<...>
 code      = story_code(current_branch_name)          # § Story Code
 if code is None or code.file is None:
-  for text in [pr.title if pr_number] + `git log --reverse --format=%s <target>..<source>`:
-    hit = story_code(text)
-    if hit and hit.file: code = hit; break          # PR title / subjects count only when they resolve
+  texts = [pr.title if pr_number] + `git log --format=%s <target>..<source>`
+  texts = texts matching /^feat(\([^)]*\))?!?:/          # fix/chore/docs subjects never link
+  hits  = distinct story_code(t) over texts where story_code(t).file is set
+  if len(hits) == 1: code = hits[0]                    # several codes → ambiguous, no link from subjects
 
 story_linked = false; story_file_path = None
 if the invocation names a story file path or story code:                       # 1. explicit
   story_linked    = true
   story_file_path = that path if the file exists, else story_code(<code>).file
-elif code and code.file and the first H1 of code.file does not start "# Task:" or "# Bug:":
+elif code and code.file and the first H1 of code.file does not start "# Task:" or "# Bug:"
+     and not done_at_target(code.code):
   story_linked    = true                                                        # 2. local story code — beats a bare number
   story_file_path = code.file
 else:
@@ -418,7 +424,7 @@ if story_file_path is None:
 
 ```
 # Runs before Dispatch Input Enrichment, only when story_linked is true
-if story_file_path is None:
+if story_file_path is None or not safe_path(story_file_path):
   # Do NOT enrich dispatch — STORY_LINKED: true + missing STORY_FILE would silently mis-fire.
   add to calling agent's own finding list:
     expert: "Spec Coverage"
@@ -430,7 +436,7 @@ if story_file_path is None:
       The change links <explicit "<arg>" | story-labeled issue #<issue_id> | story code <CODE>>
       but no resolution path yielded a story file. Spec Coverage pass SKIPPED.
     recommendation: |
-      Pass STORY_FILE explicitly via the skill invocation, OR add a `**Code:** <CODE>` line
+      Pass STORY_FILE explicitly (path chars [A-Za-z0-9._/-] only), OR add a `**Code:** <CODE>` line
       to the story under docs/epics/, OR add the issue to a docs/epics/*/.github-state.json
       mapping, OR verify `gh issue view <issue_id>` works (auth + network).
   return  # do not proceed to Dispatch Input Enrichment
@@ -455,7 +461,7 @@ Append these fields to each PE's dispatch input:
 
 ```
 STORY_LINKED: true
-STORY_FILE: <realpath(story_file_path) from § Trigger — absolute>
+STORY_FILE: <`realpath '<story_file_path>'` — absolute; safe_path already checked by the gate>
 SPEC_COVERAGE_PROTOCOL: <spec_coverage_protocol_path — absolute, no ${...} placeholders>
 PR_NUMBER: <pr_number — omit when None; the protocol then reads AC claims from branch commit messages>
 ```

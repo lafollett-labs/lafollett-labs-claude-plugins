@@ -211,7 +211,7 @@ verify_deferral(followup, ac):
       if state is empty or command fails:  invalid(ac, "#" + n, "does not exist in the repo")
       elif state == "CLOSED":               closed(ac, "#" + n, "is already CLOSED")
     "<CODE>":                                          # local story code
-      file = first line of: grep -rlE "^\*\*Code:\*\* +<CODE> *$" docs/epics --include='*.md'
+      file = first line of: grep -rlE '^\*\*Code:\*\* +<CODE> *$' docs/epics --include='*.md'
       verify_local(ac, followup, file)
     "<path>.md":                                       # local story file
       if path contains ".." or starts with "/": file = None
@@ -222,8 +222,8 @@ verify_local(ac, followup, file):
   if file is None:                                     invalid(ac, followup, "resolves to no story file")
   elif realpath(file) == realpath(STORY_FILE):         invalid(ac, followup, "is the story under review")
   else:
-    code = the `**Code:** <CODE>` value in file, if any
-    if code and `grep -rqE "^\s*-\s*\[x\]\s*(\*\*|\[)?<code>\b" docs/epics --include='*.md'` succeeds:
+    code = the `**Code:** <CODE>` value in file if it matches ^[A-Z]{2,5}-[0-9]+$, else None   # never interpolate other text
+    if code and `grep -rqE '^\s*-\s*\[x\]\s*(\*\*|\[)?<code>\b' docs/epics --include='*.md'` succeeds:
       closed(ac, followup, "is checked off as done in its epic")
 
 invalid(ac, target, why):
