@@ -2,7 +2,8 @@
 # Release orchestrator: the only half of version stamping that touches git and gh.
 #
 #   1. reconcile  tag every merged release commit (chore(release): vX plus a Base: trailer) that has
-#                 no vX tag yet, and publish its GitHub Release from the CHANGELOG entry
+#                 no vX tag yet, and publish its GitHub Release from the CHANGELOG entry; a commit the
+#                 workflow token may not tag stops the run with the command to tag it by hand
 #   2. stamp      plan the bumps for the commits since the newest tag (version-stamp.js plan);
 #                 build ONE stamp commit on the latest main; force-push it to the release branch;
 #                 open or update the release PR; dispatch CI on it; enable squash auto-merge
@@ -71,24 +72,41 @@ fetch_state() {
 
 newest_tag() { git tag -l "${TAG_PREFIX}[0-9]*" --sort=-v:refname | head -n 1; }
 
-# create_tag <tag> <sha>: through the REST API, then locally. A GITHUB_TOKEN `git push` of a tag onto
-# a commit whose workflow files differ from the default branch's can be refused; the API is not.
+# GitHub refuses a workflow token any ref (git push or REST API) on a commit whose .github/workflows
+# differs from the default branch's: that needs the workflows permission, which GITHUB_TOKEN cannot get.
+same_workflows() { git diff --quiet "$1" "$MAIN_SHA" -- .github/workflows; }
+
+# by_hand <tag> <sha>: the command a maintainer runs to create the tag this token may not.
+by_hand() {
+  echo "create it by hand (gh api repos/${GH_REPO:-"{owner}/{repo}"}/git/refs -f ref=refs/tags/$1 -f sha=$2) and re-run this workflow"
+}
+
+# create_tag <tag> <sha>: through the REST API, then locally.
 create_tag() {
-  "$GH" api "repos/{owner}/{repo}/git/refs" -f "ref=refs/tags/$1" -f "sha=$2" >/dev/null \
-    || die "failed to create tag $1 at $2"
+  if ! "$GH" api "repos/{owner}/{repo}/git/refs" -f "ref=refs/tags/$1" -f "sha=$2" >/dev/null; then
+    same_workflows "$2" || die "failed to create tag $1 at $2: its .github/workflows differs from $MAIN's; $(by_hand "$1" "$2")"
+    die "failed to create tag $1 at $2"
+  fi
   git tag "$1" "$2" || die "failed to create local tag $1"
 }
 
 # First run: seed the baseline at the first parent of the merge that activated this workflow, so
 # that merge's own change is the first thing stamped and history before it is never re-released.
+# If that parent's workflows differ from main's, the token may not tag it: seed on main itself when
+# that skips no release, else stop for a human.
 seed_baseline() {
   local seed v tag
   seed="$(git rev-parse -q --verify "$MAIN_SHA^1")" || die "cannot seed: $MAIN has no first parent"
   git show "$seed:$MARKETPLACE" > "$WORK/seed.json" 2>/dev/null || die "no $MARKETPLACE at $MAIN^1"
   v="$(engine read-version "$WORK/seed.json")" || die "cannot read the seed marketplace version"
   tag="$TAG_PREFIX$v"
+  if ! same_workflows "$seed"; then
+    plan "$seed"
+    if releases; then die "cannot seed $tag at $MAIN^1 ($seed): its .github/workflows differs from $MAIN's, and seeding on $MAIN would skip releasing its changes; $(by_hand "$tag" "$seed")"; fi
+    seed="$MAIN_SHA"   # it changed no plugin or marketplace entry, so the version is the same
+  fi
   create_tag "$tag" "$seed"
-  log "first run: seeded baseline $tag at $MAIN^1"
+  log "first run: seeded baseline $tag at $seed"
 }
 
 # publish_release <tag> <sha> <version>: GitHub Release from the CHANGELOG entry at <sha>. Idempotent.
@@ -110,6 +128,12 @@ reconcile() {
   local base sha subject v at tag built_on
   base="$(newest_tag)"
   [ -n "$base" ] || return 0
+  # A release tag made by hand (by_hand) is the base, outside the range below: publish it here.
+  sha="$(git rev-parse "$base^{commit}")" || die "cannot resolve $base"
+  if v="$(engine release-version --subject "$(git log -1 --format=%s "$sha")" 2>/dev/null)" \
+     && [ "$TAG_PREFIX$v" = "$base" ]; then
+    publish_release "$base" "$sha" "$v"
+  fi
   git log --reverse --format='%H %s' "$base..$MAIN_SHA" > "$WORK/since.txt" || die "cannot list commits since $base"
   while read -r sha subject; do
     v="$(engine release-version --subject "$subject" 2>/dev/null)" || continue
@@ -140,6 +164,17 @@ reconcile() {
   done < "$WORK/since.txt"
 }
 
+# plan <base>: the bumps for <base>..main into $WORK/plan, from the commits logged in $WORK/log.
+plan() {
+  git log --reverse --no-merges -z --format='%x1e%H%x1f%s%x1f%b%x1f' --name-only "$1..$MAIN_SHA" > "$WORK/log" \
+    || die "change detection failed against $1"
+  git show "$1:$MARKETPLACE" > "$WORK/before.json" 2>/dev/null || die "no $MARKETPLACE at $1"
+  git show "$MAIN_SHA:$MARKETPLACE" > "$WORK/after.json" || die "no $MARKETPLACE at $MAIN"
+  engine plan --log "$WORK/log" --before "$WORK/before.json" --after "$WORK/after.json" > "$WORK/plan" \
+    || die "release planning failed"
+}
+releases() { grep -q '^marketplace ' "$WORK/plan"; }
+
 # open_pr <title> <body-file>: prints the open release PR number, creating the PR if needed.
 open_pr() {
   local title="$1" body="$2" num url
@@ -167,14 +202,8 @@ log "baseline $BASE, $MAIN at $MAIN_SHA"
 # Hold only for a trailer-less release title this plan reads; a release tagged after it moved BASE past it.
 if [ -n "$HELD" ] && ! git merge-base --is-ancestor "$BASE^{commit}" "$HELD"; then HELD=; fi
 
-git log --reverse --no-merges -z --format='%x1e%H%x1f%s%x1f%b%x1f' --name-only "$BASE..$MAIN_SHA" > "$WORK/log" \
-  || die "change detection failed against $BASE"
-git show "$BASE:$MARKETPLACE" > "$WORK/before.json" 2>/dev/null || die "no $MARKETPLACE at $BASE"
-git show "$MAIN_SHA:$MARKETPLACE" > "$WORK/after.json" || die "no $MARKETPLACE at $MAIN"
-engine plan --log "$WORK/log" --before "$WORK/before.json" --after "$WORK/after.json" > "$WORK/plan" \
-  || die "release planning failed"
-
-if ! grep -q '^marketplace ' "$WORK/plan"; then
+plan "$BASE"
+if ! releases; then
   log "no plugin or marketplace change since $BASE: nothing to release"
   exit 0
 fi
