@@ -1966,4 +1966,332 @@ PR. Another round on this shard is unlikely to change severity without a scope c
 
 ---
 
+## Review Round 4
+
+**Verdict:** ⚠️ CHANGES REQUESTED
+
+| | |
+| - | - |
+| **Reviewer** | @Cali LaFollett |
+| **PR** | [#24](https://github.com/lafollett-labs/lafollett-labs-claude-plugins/pull/24) |
+| **Reviewed SHA** | `4d273665f1ec177cbbfe3231fdbae2efc38b6fb2` |
+| **Date** | 2026-11-27 |
+| **Fix cascade** | 5 / 10 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 17 spot-checked |
+
+### Summary
+
+Round 4 ran one past the cap, on the owner's approval. Every round-3 finding the PEs re-checked is fixed at this SHA, including round 3's MEDIUM. One gating gap remains in the same family: deliver still treats a fresh run as progress when implement resumes an existing ticket branch and stops before committing, because HEAD moved and commits are ahead. The LOWs are labels that lag the Staged change, an empty-index stop reason, misleading advice in deliver's open-PR message, and test gaps on two new guards. All four PEs report severity falling over a closed set and recommend no further round. One overlap was merged (the Staged label at SKILL.md:388), and nothing was dismissed.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-Governance (review skill + agents) | none | doc-only; pe-agent 144/0, skill-structure 31/0, pr-checks 47/0, convergence 197/0, review-file 138/0, scope 49/0 at HEAD; pe-sql-server block run under zsh and bash |
+| PE-Governance (other skills + shared refs) | none | doc-only; skill-structure 31/0, pr-checks 47/0; the resume-then-stop path reproduced in a temp repo |
+| PE-DevTools (review scripts) | lint-only | 6 suites from / → 619 checks, 0 failed; shellcheck clean; 21 mutations, 20 caught |
+| PE-DevTools (other scripts) | lint-only | 11 suites from / pass; shellcheck clean; CI mawk run green; 27 mutations, 21 caught (1 equivalent) |
+| Primary | n/a | `bash scripts/ci/run-shell-tests.sh` → 25 suites, 0 failed; CI run 45981953635 green at 4d27366 |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-Governance (review + agents) | 7 receipts, Staged rule grepped, 1 lagging comment | settle vs a push mid-poll, Staged → partial_rounds → --skip | pe-sql-server with 0/1/2 projects, settle without workflows, override by ledger | 3 fix guards both ways | 4 failure paths | n/a — no test in this shard | --settle, find quoting, convergence --skip |
+| PE-Governance (other skills) | 9 receipts, 1 kept reason does not hold | deliver → implement → deliver, 3 starts × 3 modes × 3 stops | Phase 7 PR states, --settle values, no-commit stops | HEAD == head_before both ways (false negative reproduced) | 5 failure paths | n/a — no test in this shard | push-and-create vs pr-checks.js, gh pr view default |
+| PE-DevTools (review scripts) | 1 contract → 4 consumers, 12 restatements | 6 state orders on temp files | --skip values, empty index, zero-commit branch | 5 guards via mutants | 4 failure paths | 21 mutations, 1 survivor accepted | headers vs code paths |
+| PE-DevTools (other scripts) | 6 receipts, 0 disagree | the --settle loop, suite temp dirs | --settle range, issue_refs forms, revert subjects | 4 guards both ways | no workflows dir, unreadable workflow, head moves | 27 mutations, 6 survived | headers and usage vs code, awk vs mawk |
+| Primary | 2 README restatements vs pr-checks.js and scope.js | n/a — no state change in this shard | n/a — no parser or loop | n/a — no guard in this shard | n/a — no calls | n/a — no test | n/a — no new external claim |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 1 | 0 |
+| 🟢 LOW | 5 | 0 |
+| ℹ️ INFO | 4 | 0 |
+
+### In Scope Findings
+
+#### 🟡 MEDIUM-001: A fresh deliver run still goes on to review, and under --auto to a PR, when implement resumes an existing ticket branch and stops before committing
+
+**Domains:** [Governance] · **Move:** M1
+**Location:** `plugins/sdlc/skills/deliver/SKILL.md:242`
+**Introduced by:** MEDIUM-001
+**Siblings:** `plugins/sdlc/skills/deliver/SKILL.md:225`, `plugins/sdlc/skills/deliver/SKILL.md:247`, `plugins/sdlc/skills/deliver/references/resume-menus.md:15`, `plugins/sdlc/skills/implement/references/existing-branch.md:22`
+
+The receipt says the no-commit stop now runs for every implement mode. It keeps line 247 for a
+fresh branch cut at the base tip. Neither check covers a fresh run where implement checks out a
+branch this ticket already has.
+Trace: feat/42-add-search already has 2 commits from an earlier run. The engineer is on main
+and runs `/sdlc:deliver #42 --auto`.
+  - Phase 0 looks only at the current branch, so the entry is fresh (line 181) and no resume
+    menu is shown.
+  - Phase 1 binds head_before to main's tip. implement finds the branch. Under --auto it
+    resumes it (existing-branch.md:22) and checks it out, so HEAD moves.
+  - implement then stops before its first commit. Any of these does it: the engineer declines
+    the plan at Step 6 by typing "stop", the playbook hard-stops (an empty scope scout or the
+    Multi-Area gate after 3 attempts), or `base --branch` fails (existing-branch.md:39).
+  - At line 242, HEAD != head_before. At line 247, commits_ahead == 2. deliver goes on to
+    Phase 2 with session.auto still true. Review and remediation run unattended, Phase 6.5 is
+    auto-approved, and the PR is opened and announced.
+Reproduced in a temp repo: after the checkout-only resume, HEAD == head_before is false and
+commits_ahead is 2.
+Phase 0.5 tells the engineer that the plan approval is their one decision. Here the plan was
+never approved, and the chain runs anyway. Without --auto, review's scope banner and the later
+gates still ask, so the interactive cost is one unexpected review. The comment on line 242
+("or switching branch") suggests that a branch switch is covered. It is not.
+
+**Recommendation:**
+Check for a new commit, not for a moved HEAD. Bind a start time next to head_before and
+replace line 242:
+```
+t0 = `date +%s`                                  # next to head_before, before invoking implement
+...
+if `git log -1 --format=%ct HEAD` < t0:         # HEAD is a commit that existed before implement ran
+  finish("✅ Done — sdlc:implement added no commits on {session.branch}; re-run sdlc:deliver {session.ticket_key} when ready")
+```
+Checked in the same temp repo: the condition is true after the checkout-only resume and false
+after a new commit. It also covers every case the current line 242 catches. Keep line 247.
+This does not catch a stop that comes after implement's first commit, such as scope expansion
+or a flake. If that case should stop too, also check whether implement printed its ✅ Done
+summary.
+
+#### 🟢 LOW-001: Phase 7's new advice ('push, then re-run sdlc:pull-request') can contradict pull-request's own stop, and a re-run repeats the Copilot request and the Slack announcement
+
+**Domains:** [Governance] · **Move:** M5
+**Location:** `plugins/sdlc/skills/deliver/SKILL.md:462`
+**Introduced by:** LOW-004
+**Siblings:** `plugins/sdlc/skills/copilot-review/SKILL.md:136`, `plugins/sdlc/references/version-collision-guard.md:54`, `plugins/sdlc/skills/pull-request/SKILL.md:299`, `plugins/sdlc/skills/pull-request/references/push-and-create.md:67`
+
+Line 461 fires whenever the branch has an open PR whose head is not the local HEAD. Two paths
+reach it:
+  (1) The LOW-004 path. copilot-review's push was rejected, so its fix commits stay local
+      (copilot-review/SKILL.md:136). By then pull-request has already labelled, commented and
+      announced. Re-running the author path with the recommended auto intent pushes, then runs
+      Phase 7 again (a new Copilot request on the new head, which spends quota) and Phase 9
+      again (a second Slack announcement). Only the push and `/sdlc:copilot-review #N` were
+      still needed, the second for the replies that were never posted.
+  (2) An earlier delivery left a PR open, there are new local commits, and pull-request stops
+      before its push. Three stops do this: the version-collision hard stop
+      (version-collision-guard.md:54), the SHA-drift gate's "Re-run sdlc:review first"
+      (pull-request/SKILL.md:299), and the Conventional Commits "rewrite" exit. Round 3's
+      message ("exited without opening or updating one (see its output above)") was accurate
+      here. The new message tells the engineer to push the very commits pull-request just
+      refused.
+Only the advice text is affected. Every step after it is interactive.
+
+**Recommendation:**
+Point to the sub-skill's own output instead of prescribing a step:
+```
+if v.headRefOid != `git rev-parse HEAD`:
+  finish("⚠️ PR #{v.number} {v.url} is open but HEAD is not on it — sdlc:pull-request stopped before pushing, or its push failed (see its output above)")
+```
+
+#### 🟢 LOW-002: An empty index or a branch with no commits stops with 'only excluded files changed' and excluded []
+
+**Domains:** [DevTools] · **Move:** M3
+**Location:** `plugins/sdlc/skills/review/bin/scope.js:208`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/review/bin/scope.js:21`, `plugins/sdlc/skills/review/SKILL.md:212`, `plugins/sdlc/skills/review/bin/test/run-scope-tests.sh:126`
+
+When classify finds no changed files at all, it uses the same stop reason as a diff of only
+review docs. Reproduced:
+  - In a fresh temp repo, `classify --mode staged` with nothing staged prints
+    {"stop":"only excluded files changed — nothing to review","excluded":[]} and exits 3.
+  - On a branch cut at main with no commits, `classify --mode branch --range main...HEAD`
+    prints the same.
+SKILL.md:212 relays this as "🛑 stop — only excluded files changed — nothing to review ([])".
+The stop itself is correct. The reason is wrong, and the operator's likely mistake (forgot to
+`git add`, or nothing committed yet) goes unnamed.
+Surfaced via Pass 4 / operator_runs_in_six_months.
+
+**Recommendation:**
+Name the empty case separately at scope.js:208:
+  if (!kept.length) {
+    const stop = excluded.length ? 'only excluded files changed — nothing to review'
+      : opts.mode === 'staged' ? 'nothing staged — nothing to review' : 'no changes against the base — nothing to review';
+    return { exit: 3, out: { stop, excluded } };
+  }
+Change the scope.js:21-22 header to "3 nothing to review (no changes, or only excluded files)".
+Beside run-scope-tests.sh:126, add a case that runs staged mode on an empty index and asserts
+exit 3 with a stop reason that does not mention "excluded".
+
+#### 🟢 LOW-003: Three labels still list only Files / Folder / Ad-hoc as partial-scope rounds after staged joined them
+
+**Domains:** [Governance, DevTools] · **Move:** M1
+**Location:** `plugins/sdlc/skills/review/bin/test/run-convergence-tests.sh:509`
+**Introduced by:** LOW-006
+**Siblings:** `plugins/sdlc/skills/review/SKILL.md:388`, `plugins/sdlc/skills/review/SKILL.md:440`, `plugins/sdlc/skills/review/SKILL.md:488`, `plugins/sdlc/skills/review/bin/convergence.js:15`, `plugins/sdlc/skills/review/bin/review-file.js:85`, `plugins/sdlc/skills/review/bin/test/run-review-file-tests.sh:394`, `plugins/sdlc/skills/review/references/round-state.md:31`, `plugins/sdlc/skills/review/references/round-state.md:50`
+
+The LOW-006 fix makes Staged Diff a partial-scope round. Its receipt reports 8 restatements
+checked. Three more were missed and still name the old set:
+  - run-convergence-tests.sh:509, a section comment: "--skip: Files / Folder / Ad-hoc round numbers ..."
+  - run-review-file-tests.sh:394, a check name: "gate1: a Files / Folder / Ad-hoc round after the lock leaves it locked"
+  - SKILL.md:388, a comment on the `not session.ledger` arm: "# files / folder / ad-hoc rounds never lock Gate 1".
+    That arm now also takes staged rounds (governance shard; listed for the lead to de-duplicate).
+These are labels only. The code and every contract restatement agree with scope.js:181, so
+nothing behaves differently.
+
+**Recommendation:**
+Add "Staged /" to each label, matching review-file.js:85 and convergence.js:15. This fits the
+planned diet PR.
+
+#### 🟢 LOW-004: issue_refs' 'glued to #' rule, its carry-over of the previous match, and multi-file output have no test in either suite
+
+**Domains:** [DevTools] · **Move:** M6
+**Location:** `plugins/sdlc/bin/test/run-skill-structure-tests.sh:42`
+**Introduced by:** LOW-010
+**Siblings:** `plugins/sdlc/bin/test/run-pe-agent-tests.sh:55`, `plugins/sdlc/bin/test/run-pe-agent-tests.sh:57`, `plugins/sdlc/bin/test/run-pe-agent-tests.sh:50`, `plugins/sdlc/bin/test/run-skill-structure-tests.sh:44`, `plugins/sdlc/bin/test/run-skill-structure-tests.sh:174`, `plugins/sdlc/bin/test/run-pe-agent-tests.sh:554`
+
+The new awk helper has three branches that no test exercises. On temp copies, all 144 / 31 checks
+still pass with each one broken:
+  - Drop '#' from the before class ([[:alnum:]&#] → [[:alnum:]&]). Both suites survive, so the
+    comment's "a # glued to a word or #" (e.g. ##30) is unproven.
+  - Set prev = "" instead of carrying the last char of the previous match. Both suites survive, so
+    "#20#17" would report #17 and no test notices.
+  - Force many=0 in run-pe-agent-tests.sh. The suite survives. check_review_skill (line 284) is the
+    only caller that passes several files, and its sed prefix keys on the file path. Under this
+    mutant a #NNN in a review reference still fails the tree, but it is printed without the
+    "review: ticket narration: <file>:" prefix. No mutant seeds an issue number under skills/review.
+Neither form shows up in real docs, and the guards work today (probe output above). This is a test
+gap only: no current doc is missed or wrongly flagged.
+
+**Recommendation:**
+In run-skill-structure-tests.sh, add one seed beside line 174:
+  echo 'See ##30 and #20#17.' → expect exactly one line, ending ':#20'.
+In run-pe-agent-tests.sh, add the same allowed/mutant pair, plus one mutant that seeds
+'(fixed in #4321)' into skills/review/references/<any>.md and expects
+'review: ticket narration: references/'.
+
+#### 🟢 LOW-005: --settle's documented upper bound 600 has no accept case; an off-by-one that refuses 600 passes the suite
+
+**Domains:** [DevTools] · **Move:** M6
+**Location:** `plugins/sdlc/bin/pr-checks.js:65`
+**Introduced by:** LOW-001
+**Siblings:** `plugins/sdlc/bin/pr-checks.js:21`, `plugins/sdlc/bin/pr-checks.js:47`, `plugins/sdlc/bin/test/run-pr-checks-tests.sh:238`
+
+The header documents 0–600 inclusive, and the suite tests only the refusal of 601
+(run-pr-checks-tests.sh:238). With `> MAX_SETTLE_S` changed to `>= MAX_SETTLE_S` on a temp copy,
+all 47 checks pass, though --settle 600 now exits 2. No caller passes 600: pull-request uses 20
+and Gate 2 uses 30, so normal use cannot hit this.
+
+**Recommendation:**
+Add a parse-only accept case next to line 238, e.g. run --settle 600 against a $CASE with no
+workflows (one read, no wait) and assert exit 0 and state none.
+
+#### ℹ️ INFO-001: Convergence signal: every round-3 finding in this shard is fixed at 4d27366; nothing here gates
+
+**Domains:** [Governance] · **Move:** none
+**Location:** `docs/code-reviews/feat-sdlc-code-review.md:1452`
+**Introduced by:** new
+**Siblings:** none
+
+Verified fixed at HEAD:
+- LOW-001: ci-gate.md:6 makes one pr-checks.js call with `--settle 30`, so the shell glob and the
+  bare 30-second wait are gone. The settle logic lives in pr-checks.js:153-182, with an fs-based
+  workflow check and a bounded poll. ci-gate.md:34 and README.md:31 describe it accurately.
+- LOW-002: pe-sql-server.md:36-40 uses find, then a while-read loop. Under zsh and bash, with no
+  .sqlproj the block prints "no .sqlproj", "sqlfluff not installed" and exit=127 for the parse.
+  With two projects (one nested, one with a space in its name), both build, and dotnet never
+  reads the loop's stdin.
+- LOW-003: option (b) at SKILL.md:440 is now conditional inline (`if session.ledger:`).
+- LOW-006 (doc siblings in this shard): SKILL.md:440/488 and round-state.md:31/50 name Staged.
+  INFO-001 is the one comment left.
+- LOW-008 (1): round-state.md:59 passes --skip to both conflict stages.
+- INFO-001 (round 3): SKILL.md:312 lists session.skip_rounds.
+The fix diff is 17+/20- lines, so this shard got smaller. No MEDIUM or higher finding was raised
+in this shard in round 3 or round 4.
+
+**Recommendation:**
+Do not run another round for this shard. Apply INFO-001 in the planned diet PR.
+
+#### ℹ️ INFO-002: Convergence signal: every round-3 finding in this shard is verified fixed at 4d27366; one gating sibling remains
+
+**Domains:** [Governance] · **Move:** none
+**Location:** `docs/code-reviews/feat-sdlc-code-review.md:1452`
+**Introduced by:** new
+**Siblings:** none
+
+Verified at HEAD:
+  - MEDIUM-001: the traced path now ends at deliver/SKILL.md:242, and resume-menus.md:15 says
+    "every run".
+  - LOW-004: the split follows the recommendation.
+  - LOW-005: all four lines are cut.
+  - pull-request CI read: push-and-create.md:125 runs pr-checks.js --settle 20 from the repo
+    root. This matches pr-checks.js:21-24, with no shell glob and no sleep.
+The fix diff is net −2 lines and adds no justification prose.
+Severity in this shard: 1 HIGH + 1 MEDIUM in round 2, 1 MEDIUM + 2 LOW in round 3, 1 MEDIUM +
+1 LOW now. The MEDIUM is the third path of the same deliver no-commit theme and needs a
+one-line change.
+
+**Recommendation:**
+Fix MEDIUM-001 by checking for a new commit, as recommended above. Treat LOW-001 as awareness
+or fix it with the same edit.
+
+#### ℹ️ INFO-003: Convergence signal: severity falling (3 LOW → 2 LOW), all round-3 findings in this shard fixed, nothing gating
+
+**Domains:** [DevTools] · **Move:** none
+**Location:** `docs/code-reviews/feat-sdlc-code-review.md:1452`
+**Introduced by:** new
+**Siblings:** none
+
+Round 3 had 3 LOW in this shard (LOW-006, LOW-007, LOW-008). All three are fixed at 4d27366;
+suite, mutant and probe evidence is under prior_findings_verified.
+This round has 2 LOW and nothing at MEDIUM or above:
+  - LOW-002 is a restatement lagging its fix, the same theme as round-3 LOW-008 and LOW-012.
+  - LOW-001 is a new operator-message nit, present since round 1.
+Neither changes what the scripts decide.
+
+**Recommendation:**
+Do not run another round for this shard. Fold LOW-001 and LOW-002 into the planned follow-up PR,
+or accept them.
+
+#### ℹ️ INFO-004: Convergence signal: all 4 round-3 findings in this shard fixed, severity falling, only LOW test-gap refinements remain
+
+**Domains:** [DevTools] · **Move:** none
+**Location:** `docs/code-reviews/feat-sdlc-code-review.md:1452`
+**Introduced by:** new
+**Siblings:** none
+
+Round 3 had 4 LOW in this shard (LOW-009 to LOW-012) and no MEDIUM or above. Each is fixed at
+4d27366 and checked by suite and mutation (see prior_findings_verified). The script side of
+LOW-001, the --settle mechanism, is also in place, with no shell glob and no sleep. Round 4 adds
+2 LOW and nothing that changes behaviour. Both are untested branches of guards a fix just added,
+the same "guard with no test" theme as round-3 LOW-011 and round-2 LOW-013 (closed set).
+
+**Recommendation:**
+Do not run another round for this shard. LOW-001 and LOW-002 can go in the planned follow-up PR,
+or be accepted.
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+
+#### Should Fix
+
+- [ ] MEDIUM-001: fix `plugins/sdlc/skills/deliver/SKILL.md:242` + 4 siblings
+
+#### Consider
+
+- [ ] LOW-001: fix `plugins/sdlc/skills/deliver/SKILL.md:462` + 4 siblings
+- [ ] LOW-002: fix `plugins/sdlc/skills/review/bin/scope.js:208` + 3 siblings
+- [ ] LOW-003: fix `plugins/sdlc/skills/review/bin/test/run-convergence-tests.sh:509` + 8 siblings
+- [ ] LOW-004: fix `plugins/sdlc/bin/test/run-skill-structure-tests.sh:42` + 6 siblings
+- [ ] LOW-005: fix `plugins/sdlc/bin/pr-checks.js:65` + 3 siblings
+- [ ] INFO-001: fix `docs/code-reviews/feat-sdlc-code-review.md:1452` + 0 siblings
+- [ ] INFO-002: fix `docs/code-reviews/feat-sdlc-code-review.md:1452` + 0 siblings
+- [ ] INFO-003: fix `docs/code-reviews/feat-sdlc-code-review.md:1452` + 0 siblings
+- [ ] INFO-004: fix `docs/code-reviews/feat-sdlc-code-review.md:1452` + 0 siblings
+
+### Merge Eligibility
+
+**Locked to SHA:** `4d273665f1ec177cbbfe3231fdbae2efc38b6fb2`
+**Status:** ⚠️ Not mergeable — 0 HIGH and 1 MEDIUM findings open. Any commit after this SHA requires re-review.
+
+---
+
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
