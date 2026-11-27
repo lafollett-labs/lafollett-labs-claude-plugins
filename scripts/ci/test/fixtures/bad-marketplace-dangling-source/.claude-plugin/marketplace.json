@@ -1,0 +1,27 @@
+{
+  "name": "test-marketplace",
+  "owner": {
+    "name": "Fixture Owner",
+    "email": "owner@example.com"
+  },
+  "metadata": {
+    "description": "Fixture marketplace",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "alpha",
+      "description": "d",
+      "source": "./plugins/alpha",
+      "category": "developer-tools",
+      "homepage": "https://example.com"
+    },
+    {
+      "name": "ghost",
+      "description": "d",
+      "source": "./plugins/ghost",
+      "category": "developer-tools",
+      "homepage": "https://example.com"
+    }
+  ]
+}

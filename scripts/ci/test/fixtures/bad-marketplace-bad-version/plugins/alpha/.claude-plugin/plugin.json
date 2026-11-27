@@ -1,0 +1,6 @@
+{
+  "name": "alpha",
+  "version": "1.2.3",
+  "description": "Alpha fixture plugin",
+  "author": { "name": "Fixture Owner", "email": "owner@example.com" }
+}

@@ -1,11 +1,18 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this marketplace. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+From the first automated release on, the release workflow writes each entry
+from the `changelog.d/` fragments: the heading is the marketplace version, and
+**Plugins** lists the plugin versions it bumped. Unreleased work lives in
+`changelog.d/`; never edit this file by hand.
 
-## [Unreleased]
+## [1.34.1] — 2026-11-26
+
+Everything through marketplace 1.34.1, recorded by hand before automated
+releases. Each entry names the versions it shipped.
 
 ### Fixed
 - **code-reviewer ripple receipts must cite a hex commit SHA (`code-reviewer` v2.14.1, marketplace 1.34.1).** In 2.14.0 a receipt counted when `git rev-parse <sha>` resolved to the reviewed SHA. That also accepted `HEAD` or a branch name, so a receipt left in a PR body matched every later round, and the token reached a shell unvalidated.

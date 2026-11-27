@@ -3,14 +3,24 @@ name: CI
 # No `paths` filter, deliberately. Scoping at the trigger means a PR that
 # matches nothing runs no jobs, and a required check that never reports blocks
 # the merge forever.
+#
+# workflow_dispatch: the release workflow opens its PR with GITHUB_TOKEN, which triggers no
+# pull_request run, so it dispatches this workflow on the release branch to report the checks.
+#
+# `manifests • skills` is the one required check. It runs after every other job and fails unless
+# each passed, so every gate here blocks the merge, the release PR's auto-merge included.
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, edited]   # edited: a retitle re-runs the title gate
+  workflow_dispatch:
 
+# Cancel superseded PR runs only: a cancelled main run leaves that push's commits unscanned,
+# because the next push's secret scan covers only its own commits.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -18,10 +28,15 @@ permissions:
 jobs:
   check:
     name: manifests • skills
+    needs: [title, shellcheck, gitleaks, suites]
+    # A failed or skipped need would skip this job, and a skipped required check counts as passing.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Every manifest is valid JSON
         # The floor assertion is load-bearing. `< <(find ...)` does not surface
@@ -96,6 +111,23 @@ jobs:
           sys.exit(1 if fail else 0)
           PY
 
+      - name: Manifests and skill/agent frontmatter validate
+        run: |
+          set -euo pipefail
+          bash scripts/ci/test/run-validate-manifests-tests.sh
+          node scripts/ci/validate-manifests.js
+
+      - name: Branches carry no version edits; plugin changes carry a changelog fragment
+        # Every PR and dispatched branch except this repo's release/next, the one branch that stamps.
+        if: >-
+          (github.event_name == 'pull_request'
+            && !(github.head_ref == 'release/next' && github.event.pull_request.head.repo.full_name == github.repository))
+          || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/release/next')
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bash scripts/ci/check-pr.sh "$BASE_SHA" "$HEAD_SHA"
+
       - name: issue-manager CLI tests
         # Run in-process, not --test: under --test an empty file counts as one passing test.
         run: |
@@ -152,3 +184,89 @@ jobs:
             exit 1
           fi
           echo "no hardcoded marketplace keys"
+
+      - name: Every other gate passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EXPECT: 4
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: bash scripts/ci/gate-needs.sh
+
+  title:
+    name: conventional title
+    # scripts/ci/check-title.sh: the squash commit sets the release level, so the title (and a
+    # one-commit PR's commit) must be a conventional commit.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Title (and a lone commit's message) is a conventional commit
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          COMMITS: ${{ github.event.pull_request.commits }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: bash scripts/ci/check-title.sh
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Lint every tracked shell script
+        # *.sh plus extensionless files with a sh/bash shebang (git hooks). Fail if none are found:
+        # zero files would read as clean.
+        run: |
+          set -euo pipefail
+          shellcheck --version | head -n 2
+          files=()
+          while IFS= read -r -d '' f; do
+            case "$f" in
+              *.sh) files+=("$f") ;;
+              *.*) ;;
+              *) head -n 1 "$f" | grep -qE '^#!.*[/ ](ba)?sh([[:space:]]|$)' && files+=("$f") ;;
+            esac
+          done < <(git ls-files -z)
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::no shell scripts found"; exit 1; }
+          printf '  %s\n' "${files[@]}"
+          shellcheck "${files[@]}"
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks (pinned, checksum-verified)
+        run: bash scripts/ci/security/install-gitleaks.sh
+
+      - name: Scan the commits this run brings in
+        # PR: its commits. Push: the pushed commits. Dispatch: the whole tree.
+        env:
+          SCAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SCAN_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bash scripts/ci/security/secret-scan.sh
+
+  suites:
+    name: test suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install gitleaks (the secret-scan suite runs the real binary)
+        run: bash scripts/ci/security/install-gitleaks.sh
+
+      - name: Every scripts/ci and plugin bin/test suite
+        run: bash scripts/ci/run-shell-tests.sh

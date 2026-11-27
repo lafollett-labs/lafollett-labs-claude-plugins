@@ -10,7 +10,21 @@ Thanks for your interest in improving the LaFollett Labs Claude Code plugins.
    - `feat: add X`
    - `fix: handle Y in /code-reviewer`
    - `docs: clarify Z`
-4. Open a PR with a short description of the change and its motivation
+4. If you changed anything under `plugins/`, add a changelog fragment: `changelog.d/<branch-slug>.md` ([format](changelog.d/README.md))
+5. Open a PR whose title is a conventional commit, with a short description of the change and its motivation
+
+Never edit an existing `version` field or `CHANGELOG.md`; a new plugin's `plugin.json` is the one
+version a branch writes. After a PR merges, the release workflow bumps each plugin the PR touched by
+its squash subject (`feat` minor, `fix`/`chore`/… patch, `!` or a `BREAKING CHANGE:` footer in a
+commit message major), bumps the marketplace, folds the fragments into `CHANGELOG.md`, and tags the
+release. CI fails a PR that edits a version, changes a plugin without a fragment, or has a
+non-conventional title. A one-commit PR also fails when that commit's subject is not conventional or
+its message releases at another level than the title.
+Check before pushing: `bash scripts/ci/check-pr.sh origin/main HEAD` (`upstream/main` in a fork).
+
+Optional local hooks: `git config core.hooksPath scripts/hooks` runs gitleaks v8.25+ on the staged
+diff, and `git config labs.denylistScan <path>` adds a private denylist scanner over the staged diff
+and the commit message.
 
 ## Plugin & Skill Authoring Style
 

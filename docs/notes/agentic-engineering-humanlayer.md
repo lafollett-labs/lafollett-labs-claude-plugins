@@ -135,7 +135,7 @@ prompt and named exits; exits are what a human picks to route the next step.
 
 Their task board uses the same vocabulary as labels — `research`,
 `research-questions`, `design-prd`, `design-tdd`, `implementation`,
-`describe-pr` — with tasks keyed `[CORE-870]` and a stage graph running
+`describe-pr` — with tasks keyed `[TICKET-123]` and a stage graph running
 `design -> outline -> implement -> PR`.
 
 `Watch: xgkjtF89-44 00:13:49`

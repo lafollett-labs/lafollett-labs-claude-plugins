@@ -1,0 +1,30 @@
+{
+  "name": "example-marketplace",
+  "owner": {
+    "name": "Example Owner"
+  },
+  "metadata": {
+    "description": "release-stamp fixture",
+    "version": "1.29.5"
+  },
+  "plugins": [
+    {
+      "name": "alpha",
+      "description": "alpha plugin",
+      "source": "./plugins/alpha",
+      "category": "developer-tools"
+    },
+    {
+      "name": "beta",
+      "description": "beta plugin",
+      "source": "./plugins/beta",
+      "category": "developer-tools"
+    },
+    {
+      "name": "gamma",
+      "description": "gamma plugin",
+      "source": "./plugins/gamma",
+      "category": "developer-tools"
+    }
+  ]
+}

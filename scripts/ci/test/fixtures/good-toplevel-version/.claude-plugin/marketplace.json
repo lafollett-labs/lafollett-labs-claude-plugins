@@ -1,0 +1,17 @@
+{
+  "name": "test-marketplace",
+  "owner": {
+    "name": "Fixture Owner",
+    "email": "owner@example.com"
+  },
+  "plugins": [
+    {
+      "name": "alpha",
+      "description": "Alpha fixture plugin",
+      "source": "./plugins/alpha",
+      "category": "developer-tools",
+      "homepage": "https://example.com"
+    }
+  ],
+  "version": "1.0.0"
+}
