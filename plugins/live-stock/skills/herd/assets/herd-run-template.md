@@ -51,7 +51,7 @@ Used only when the plan has no next_work. Ordered.
 | Setting | Value |
 | - | - |
 | max_lanes | <number, or default> |
-| Watch CI | <project:ref[@sha],project:ref[@sha]> (comma-separated, no spaces) |
+| Watch CI | <project:ref[@sha],project:ref[@sha]> (comma-separated, no spaces, sha 40 hex; empty when nothing is watched) |
 | Lane ceiling | <model/effort that caps every rung, such as opus/high, or none> |
 
 ## Lanes

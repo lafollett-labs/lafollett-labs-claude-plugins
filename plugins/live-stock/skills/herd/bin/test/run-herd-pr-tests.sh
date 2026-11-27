@@ -39,7 +39,7 @@ newcase() {
 const fs = require('fs');
 const d = process.env.HERD_FIXTURES;
 fs.appendFileSync(`${d}/checks-calls.log`, `${JSON.stringify({ cwd: process.cwd(), argv: process.argv.slice(2),
-  gh: process.env.SDLC_GH || null, timeout: process.env.SDLC_GH_TIMEOUT_MS || null })}\n`);
+  gh: process.env.SDLC_GH || null, timeout: process.env.SDLC_GH_TIMEOUT_MS || null, repo: process.env.GH_REPO || null })}\n`);
 const f = `${d}/checks.json`;
 if (!fs.existsSync(f)) { process.stdout.write('{"error":"stub: no checks fixture"}'); process.exit(2); }
 process.stdout.write(fs.readFileSync(f, 'utf8'));
@@ -121,6 +121,14 @@ check "approved at the head → ready" 0 "o.verdict === 'ready' && o.target === 
 grep -q "\"cwd\":\"$CASE/checkout\"" "$CASE/fx/checks-calls.log" && grep -q "\"argv\":\[\"check\",\"--pr\",\"42\",\"--head\",\"$A\",\"--settle\",\"20\"\]" "$CASE/fx/checks-calls.log" \
   && pass "pr-checks runs from the project checkout with check --pr N --head SHA --settle 20" || fail "pr-checks runs from the project checkout — $(cat "$CASE/fx/checks-calls.log")"
 grep -q '"timeout":"2000"' "$CASE/fx/checks-calls.log" && pass "pr-checks gets herd's gh timeout" || fail "pr-checks gets herd's gh timeout"
+grep -q "\"repo\":\"$REPO\"" "$CASE/fx/checks-calls.log" && pass "pr-checks gets GH_REPO = the configured repo" || fail "pr-checks gets GH_REPO — $(cat "$CASE/fx/checks-calls.log")"
+
+ok_head; run ready --pr 'octo#42' --reviewer OctoCat
+check "--reviewer matches review logins case-insensitively" 0 "o.verdict === 'ready' && o.checks.approval.ok === true && o.checks.approval.reviewer === 'OctoCat'"
+
+ok_head; reviews "$(rv OctoCat APPROVED $A 31),$(rv octocat CHANGES_REQUESTED $A 32)"; run ready --pr 'octo#42' --reviewer octocat
+check "reviews by one login in different cases share one decisive review" 0 \
+  "o.verdict === 'blocked' && o.checks.approval.ok === false && o.checks.changes_requested.by.length === 1 && o.checks.changes_requested.by[0].review_id === 32"
 unrouted && pass "ready makes only the contract's gh calls" || fail "ready makes only the contract's gh calls — $(cat "$CASE/fx/gh-unrouted.log")"
 calls | grep -q '"-F","number=42"' && calls | grep -q '"-f","owner=octo-org"' && calls | grep -q '"-f","repo=octo-repo"' \
   && pass "the threads query names owner, repo and number" || fail "the threads query names owner, repo and number — $(calls)"

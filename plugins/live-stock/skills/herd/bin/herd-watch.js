@@ -40,6 +40,8 @@
  *   has had none for HERD_CI_NONE_MS, then none.
  *
  * Every unreadable GitHub call lands in degraded[] and keeps that source's previous state: never an event.
+ *   A source the baseline could not read (prs:<lane> — failed, or the lane had no pane — or review_requests) is
+ *   listed in the baseline's unread[]; its first clean read becomes its baseline without events and leaves unread[].
  * A GitHub rate limit skips the rest of that poll's GitHub calls and doubles the gap to the next GitHub poll
  *   (up to 16 slow ticks), kept in the baseline as github_backoff and github_quiet_until so a re-armed wait
  *   honours it; degraded[] names it. A clean GitHub poll resets it.
@@ -140,13 +142,15 @@ function laneProject(config, cwd) {
   throw new HerdError(`cwd ${cwd} is not a lane worktree of a configured project`);
 }
 
+// The worktree's branch. A detached HEAD, or a branch with no commit yet (unborn), throws HerdError.
 function gitBranch(cwd) {
-  const r = spawnSync('git', ['-C', cwd, 'symbolic-ref', '--quiet', '--short', 'HEAD'],
+  const r = spawnSync('git', ['-C', cwd, 'rev-parse', '--verify', '--quiet', '--symbolic-full-name', 'HEAD'],
     { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, killSignal: 'SIGKILL' });
   if (r.error || r.signal) throw new HerdError(`git in ${cwd} not runnable: ${r.error ? r.error.message : 'timed out'}`);
-  const branch = (r.stdout || '').trim();
-  if (r.status !== 0 || !branch) throw new HerdError(`worktree ${cwd} is not on a branch`);
-  return branch;
+  const ref = (r.stdout || '').trim();
+  if (r.status !== 0 || !ref) throw new HerdError(`worktree ${cwd} has no commit at HEAD (unborn branch or not a repo)`);
+  if (!ref.startsWith('refs/heads/')) throw new HerdError(`worktree ${cwd} is not on a branch (detached HEAD)`);
+  return ref.slice('refs/heads/'.length);
 }
 
 function laneList(opts) {
@@ -168,6 +172,7 @@ function githubContext(config) {
     config,
     degraded,
     limited: false,
+    unread: new Set(), // the sources (prs:<lane>, review_requests) this poll did not read: failed, or a lane without a pane
     degrade: (msg) => { if (!degraded.includes(msg)) degraded.push(msg); },
   };
   const guarded = (fn) => (...args) => {
@@ -262,12 +267,13 @@ function fetchPrs(ctx, lanes, agents, prev = []) {
   for (const lane of lanes) {
     const mine = prev.filter((m) => m.lane === lane);
     const agent = agents.find((a) => a.name === lane);
-    if (!agent || !agent.cwd) { out.push(...mine); continue; }
+    if (!agent || !agent.cwd) { ctx.unread.add(`prs:${lane}`); out.push(...mine); continue; }
     try {
       out.push(...lanePrs(ctx, lane, agent.cwd, mine));
     } catch (e) {
       if (!(e instanceof HerdError)) throw e;
       ctx.degrade(`prs ${lane}: ${e.message}`);
+      ctx.unread.add(`prs:${lane}`);
       out.push(...mine);
     }
   }
@@ -277,16 +283,17 @@ function fetchPrs(ctx, lanes, agents, prev = []) {
 // Open PRs requesting the user's review, kept when the author is allowlisted; a failed poll keeps `prev`.
 function fetchReviewRequests(ctx, prev = []) {
   try {
-    const allowed = new Set(ctx.config.review_request_authors);
+    const allowed = new Set(ctx.config.review_request_authors.map((a) => String(a).toLowerCase())); // logins ignore case
     const list = ctx.json(['search', 'prs', '--review-requested=@me', '--state', 'open', '--limit', '100',
       '--json', 'number,repository,author,url,state,updatedAt']);
     if (!Array.isArray(list)) throw new HerdError('gh search prs did not return a list');
     return list
-      .filter((pr) => pr.author && allowed.has(pr.author.login))
+      .filter((pr) => pr.author && allowed.has(String(pr.author.login).toLowerCase()))
       .map((pr) => ({ ref: `${pr.repository.nameWithOwner}#${pr.number}`, url: pr.url, state: pr.state, author: pr.author.login }));
   } catch (e) {
     if (!(e instanceof HerdError)) throw e;
     ctx.degrade(`review requests: ${e.message}`);
+    ctx.unread.add('review_requests');
     return prev;
   }
 }
@@ -367,6 +374,7 @@ function takeBaseline(lanes, ctx, ci) {
   const prs = fetchPrs(ctx, lanes, agents);
   checksEvents([], prs); // seeds each PR's checks_fired; nothing fires on a baseline
   const state = { lanes: {}, agents, prs, review_requests: fetchReviewRequests(ctx), ci: fetchCi(ctx, ci.filter((e) => !e.sha)) };
+  state.unread = [...ctx.unread]; // an unpinned --ci key it could not read is absent, which already raises nothing
   for (const name of lanes) state.lanes[name] = { completion_seq: (readLane(name) || GONE).completion_seq };
   reviewRounds({ lanes, state, ctx }); // records each lane's current round; rounds already there raise nothing
   return state;
@@ -513,13 +521,19 @@ function slowEvents(w) {
     return events;
   }
   ctx.limited = false;
+  ctx.unread = new Set();
   const prs = fetchPrs(ctx, w.lanes, state.agents, state.prs);
-  events.push(...prEvents(state.prs, prs), ...checksEvents(state.prs, prs));
+  // a source the baseline could not read takes its first clean read as its baseline, quietly
+  const baselined = (k) => state.unread.includes(k) && !ctx.unread.has(k);
+  events.push(...[...prEvents(state.prs, prs), ...checksEvents(state.prs, prs)].filter((e) => !baselined(`prs:${e.lane}`)));
   state.prs = prs;
   const rrs = fetchReviewRequests(ctx, state.review_requests);
   const seenRefs = new Set(state.review_requests.map((r) => r.ref));
-  for (const r of rrs) if (!seenRefs.has(r.ref)) events.push({ type: 'review_request', ref: r.ref, author: r.author });
+  if (!baselined('review_requests')) {
+    for (const r of rrs) if (!seenRefs.has(r.ref)) events.push({ type: 'review_request', ref: r.ref, author: r.author });
+  }
   state.review_requests = rrs;
+  state.unread = state.unread.filter((k) => ctx.unread.has(k));
   const ci = fetchCi(ctx, w.ci, state.ci);
   events.push(...ciEvents(state.ci, ci, w.ci));
   state.ci = { ...state.ci, ...ci };
@@ -557,7 +571,7 @@ function wait(opts) {
   const save = (st) => fs.writeFileSync(file, `${JSON.stringify(st)}\n`);
   let state = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
   if (!state) save(state = takeBaseline(lanes, ctx, ci));
-  state = { lanes: {}, agents: [], prs: [], review_requests: [], ci: {}, ...state }; // a baseline written by an older watcher lacks some parts
+  state = { lanes: {}, agents: [], prs: [], review_requests: [], ci: {}, unread: [], ...state }; // a baseline written by an older watcher lacks some parts
 
   const seen = new Set();
   const start = Date.now();

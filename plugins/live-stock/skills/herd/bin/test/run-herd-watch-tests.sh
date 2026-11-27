@@ -18,6 +18,9 @@ GIT="$(command -v git)"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# git sees only this config, never the user's or the system's
+export GIT_CONFIG_GLOBAL="$TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1
+printf '[user]\n\tname = Test Lane\n\temail = lane@example.invalid\n[init]\n\tdefaultBranch = main\n' > "$GIT_CONFIG_GLOBAL"
 
 fails=0
 pass() { echo "PASS: $1"; }
@@ -101,10 +104,15 @@ agents() {
   printf '{"id":"cli:agent:list","result":{"agents":[%s]}}\n' "$items" > "$CASE/fx/agents.json"
   hroute "agent list" agents.json
 }
+# git_wt <dir> <branch> — a git repo at $CASE/<dir> with one commit on <branch>
+git_wt() {
+  mkdir -p "$CASE/$1"
+  "$GIT" -C "$CASE/$1" init -q -b "$2" && "$GIT" -C "$CASE/$1" commit -q --allow-empty -m init \
+    || { echo "FAIL: git setup in $CASE/$1" >&2; exit 1; }
+}
 # lane_wt — lane-a's pane in its worktree $CASE/$WT, a git repo on $BR, with no PR yet
 lane_wt() {
-  mkdir -p "$CASE/$WT"
-  "$GIT" -C "$CASE/$WT" init -q -b "$BR" >/dev/null 2>&1 || { "$GIT" -C "$CASE/$WT" init -q && "$GIT" -C "$CASE/$WT" symbolic-ref HEAD "refs/heads/$BR"; }
+  git_wt "$WT" "$BR"
   agents "w1:p1|lane-a|$CASE/$WT"
   groute "$PRLIST_RE" empty-list.json
 }
@@ -175,7 +183,7 @@ ci_runs() {
 
 # run [args...] — sets $out and $code
 run() {
-  out="$(cd "$CASE" && env -i HOME="$CASE/home" PATH="$CASE/bin" HERD_FIXTURES="$CASE/fx" HERD_CONFIG="$CASE/config.json" \
+  out="$(cd "$CASE" && env -i HOME="$CASE/home" PATH="$CASE/bin" GIT_CONFIG_GLOBAL="$GIT_CONFIG_GLOBAL" GIT_CONFIG_NOSYSTEM=1 HERD_FIXTURES="$CASE/fx" HERD_CONFIG="$CASE/config.json" \
     HERD_POLL_MS=50 HERD_DEBOUNCE_MS=100 HERD_GH_TIMEOUT_MS=2000 ${CI_NONE_MS:+HERD_CI_NONE_MS=$CI_NONE_MS} \
     "$NODE" "$CLI" "$@" 2>/dev/null)"
   code=$?
@@ -329,11 +337,19 @@ grep -q '"pr"' "$CASE/fx/gh-calls.log" && fail "no gh pr call for a lane outside
 
 newcase
 lane lane-a working:null
-mkdir -p "$CASE/$WT"; "$GIT" -C "$CASE/$WT" init -q 2>/dev/null; "$GIT" -C "$CASE/$WT" commit -q --allow-empty -m x 2>/dev/null
-"$GIT" -C "$CASE/$WT" -c advice.detachedHead=false checkout -q --detach 2>/dev/null
+git_wt "$WT" "$BR"; "$GIT" -C "$CASE/$WT" checkout -q --detach || fail "detach the worktree's HEAD"
 agents "w1:p1|lane-a|$CASE/$WT"
 run snapshot --lanes lane-a
-check "a lane worktree on a detached HEAD is degraded" 0 "o.prs.length === 0 && o.degraded.some((d) => /not on a branch/.test(d))"
+check "a lane worktree on a detached HEAD is degraded" 0 "o.prs.length === 0 && o.degraded.some((d) => /detached HEAD/.test(d))"
+grep -q '"pr"' "$CASE/fx/gh-calls.log" 2>/dev/null && fail "no gh pr list for a detached HEAD" || pass "no gh pr list for a detached HEAD"
+
+newcase
+lane lane-a working:null
+mkdir -p "$CASE/$WT"; "$GIT" -C "$CASE/$WT" init -q -b "$BR" || fail "init the unborn worktree"
+agents "w1:p1|lane-a|$CASE/$WT"
+run snapshot --lanes lane-a
+check "a lane worktree on an unborn branch is degraded like a detached HEAD" 0 "o.prs.length === 0 && o.degraded.some((d) => /no commit at HEAD/.test(d))"
+grep -q '"pr"' "$CASE/fx/gh-calls.log" 2>/dev/null && fail "no gh pr list for an unborn branch" || pass "no gh pr list for an unborn branch"
 
 newcase
 lane lane-a working:null
@@ -349,6 +365,13 @@ groute "$PRLIST_RE" "EXIT:1"
 run snapshot --lanes lane-a
 check "snapshot survives a gh failure and names the lane in degraded" 0 \
   "o.prs.length === 0 && o.degraded.length === 1 && /prs lane-a/.test(o.degraded[0])"
+
+newcase
+lane lane-a working:null
+sed -i.bak 's/"hubot"/"HuBot"/' "$CASE/config.json"
+review_requests "octo-org/octo-repo#7|hubot"
+run snapshot --lanes lane-a
+check "the review-request allowlist ignores login case" 0 "o.review_requests.length === 1 && o.review_requests[0].author === 'hubot'"
 
 # --- wait: usage, run-dir, baseline, heartbeat -----------------------------
 newcase
@@ -749,6 +772,59 @@ check "the clean poll after a partial failure raises the checks change once" 0 \
   "o.events.filter((e) => e.type === 'pr_checks').length === 1 && o.events.some((e) => e.type === 'pr_checks' && e.number === 5 && e.state === 'passed')"
 wait_run
 check "the checks change is not raised again on the next poll" 0 "$HB"
+
+# --- wait: a baseline that could not read a source ----------------------------
+newcase
+lane lane-a working:null; lane_wt
+prs "5|OPEN|aaaa0005|BLOCKED|0|||passed"
+groute "$PRLIST_RE" "RATE"
+base
+baseline_ok "a rate-limited first wait lists the sources it could not read" \
+  "s.unread.includes('prs:lane-a') && s.unread.includes('review_requests') && s.prs.length === 0"
+groute "$PRLIST_RE" prlist.json
+review_requests "octo-org/octo-repo#7|hubot"
+baseline_set "s.github_quiet_until = 0"
+wait_run
+check "the first clean read after a degraded baseline raises no pr_opened or review_request for what was already there" 0 "$HB"
+baseline_ok "the clean read becomes the baseline and leaves unread" \
+  "s.unread.length === 0 && s.prs.length === 1 && s.prs[0].number === 5 && s.review_requests.length === 1"
+prs "5|OPEN|bbbb0005|BLOCKED|0|||passed"
+review_requests "octo-org/octo-repo#7|hubot" "octo-org/octo-repo#8|hubot"
+wait_run
+check "changes after that baseline are raised as usual" 0 \
+  "o.events.some((e) => e.type === 'pr_change' && e.changes[0].field === 'sha') &&
+   o.events.some((e) => e.type === 'review_request' && e.ref === 'octo-org/octo-repo#8') && !o.events.some((e) => e.ref === 'octo-org/octo-repo#7')"
+
+newcase
+lane lane-a working:null
+groute "$SEARCH_RE" "EXIT:1"
+base
+baseline_ok "a failed first review-request search is listed as unread" "s.unread.includes('review_requests')"
+review_requests "octo-org/octo-repo#7|hubot"
+wait_run
+check "the first clean review-request search after it raises nothing" 0 "$HB"
+groute "$SEARCH_RE" "EXIT:1"; wait_run
+review_requests "octo-org/octo-repo#7|hubot" "octo-org/octo-repo#9|hubot"; wait_run
+check "a failure after the review requests were baselined keeps them, and a new request is raised" 0 \
+  "o.events.length === 1 && o.events[0].type === 'review_request' && o.events[0].ref === 'octo-org/octo-repo#9'"
+
+newcase
+lane lane-a working:null; base
+baseline_ok "a lane without a pane at the baseline is listed as unread" "s.unread.includes('prs:lane-a')"
+lane_wt; prs "5|OPEN|aaaa0005|BLOCKED|0||"
+wait_run
+check "its PRs, first read when its pane appears, become its baseline quietly" 0 "!o.events.some((e) => /^pr_/.test(e.type))"
+prs "5|OPEN|aaaa0005|CLEAN|0||"; wait_run
+check "and its later PR changes are raised" 0 "o.events.length === 1 && o.events[0].type === 'pr_change' && o.events[0].changes[0].to === 'CLEAN'"
+
+newcase
+lane lane-a working:null
+lane_wt; groute "$PRLIST_RE" "EXIT:1"
+base
+wait_run
+baseline_ok "a source that keeps failing stays unread" "s.unread.includes('prs:lane-a')"
+prs "5|OPEN|aaaa0005|BLOCKED|0||"; wait_run
+check "and is still baselined quietly once it reads" 0 "!o.events.some((e) => /^pr_/.test(e.type))"
 
 # --- wait: review requests ----------------------------------------------------
 newcase

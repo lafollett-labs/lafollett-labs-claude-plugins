@@ -16,12 +16,14 @@
 
 ## Order
 
+`story_file` is the `docs/epics/` file for the row: the story code's file, or the file whose `.github-state.json` maps the row's issue; none for a bare issue with no file.
+
 Each step is logged in Decisions as `finish <KEY> step <n> done` when it completes, so a finish interrupted by a compaction resumes where it stopped. Every step checks its own result first (ticks present, body matches, issue closed, line posted) and skips what is already done.
 
 ```text
 require: the PR is merged and the base CI is green or main_ci is false (a release workflow, when the story ships one, has finished)
 State finishing; write it to the run file now     # a compaction inside finish then resumes it
-unproven = Definition of Done items this run cannot prove (a manual deploy step, a human settings change)
+unproven = Definition of Done items this run cannot prove (a manual deploy step, a human settings change), from story_file, else from the issue body
 for n, step in [1 tick the story file, 2 sync the issue body and verify the readback, 3 close the issue as completed,
                 4 post the Done line, 5 run the plan's finish(row), 6 record carries for the next PR of that repo]:
   if Decisions has "finish <KEY> step <n> done": continue
@@ -43,6 +45,8 @@ A parked row with only stand-in items open counts as settled for Done-when. When
 
 ## Story file ticks
 
+Skip this step, logging it done, when the row has no story_file.
+
 Tick every Definition of Done and Test Plan item that has evidence from the merged PR, its checks, the base CI or the lane's report. Never tick on the lane's say-so alone.
 
 ```text
@@ -57,7 +61,7 @@ Delegate the edit to a haiku / low subagent; read the diff before committing.
 
 ## Issue sync
 
-Skip this step, logging it done, when the row has no issue.
+Skip this step, logging it done, when the row has no issue or no story_file.
 
 ```text
 result = sdlc:plan update --file <story file>      # publishes the body, then reads the issue back

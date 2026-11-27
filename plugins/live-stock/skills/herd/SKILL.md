@@ -84,10 +84,13 @@ print: /goal <run.Done-when>        # the engineer sets it; herd stops when it h
 Runs on entry and after every compaction, before any other action.
 
 ```text
-snap = herd-watch.js snapshot --lanes <live lanes>
+snap = herd-watch.js snapshot --lanes '<live lanes>'
+if snap.error: Watch error (Loop) with snap.error; run Reconcile again after it
 run the plan's `on every session`
 for row in run.lanes where row.State not in (queued, closed):
-  pr = gh pr view <row.PR's n> -R <repo> --json state,baseRefName,mergeCommit,mergedAt     # when row.PR is set; a failed read changes nothing
+  if row.PR is set:
+    pr = gh pr view <row.PR's n> -R <repo> --json state,baseRefName,mergeCommit,mergedAt
+    if the call fails: log "reconcile-skip | <KEY> | <gh's first stderr line>"; continue   # next row; nothing changed or pinned
   state = match:
     row.State in (finishing, parked)                     -> row.State   # finishing resumes per finish.md; parked waits on its Hold
     row.State == finished                                -> finished    # close it if its lane is still open
@@ -100,6 +103,7 @@ for row in run.lanes where row.State not in (queued, closed):
   if state == merged and main_ci is false: Main green (below)
   elif state == merged or (state == parked and the row has a "<KEY> base CI" Hold):
     (base, sha) = (pr.baseRefName, pr.mergeCommit.oid)
+    if base or sha is empty: log "reconcile-skip | <KEY> | base or merge commit unknown"; continue   # never pin it
     if <project>:<base>@<sha> is not in Watch CI: add it   # a newly pinned commit whose CI already finished fires on the next wait
     else:                                          # its ci_done may have fired before a compaction; ask GitHub
       status = Base CI status of sha (below)
@@ -111,6 +115,7 @@ for row in run.lanes where row.State not in (queued, closed):
         else                                   -> nothing; the next ci_done or heartbeat asks again
   if state == finishing: finish(row)               # resumes at the first step without "finish <KEY> step <n> done"
   if (state == finished and the row has no "lane kept" Hold) or the row's "lane kept" Hold was cleared: Close the lane (Merge)
+  if state == parked and the row's "<KEY> merge refused" Hold was cleared: State pr-open; Merge
   if state == pr-open and (the row's "<KEY> announcement not posted" Hold was cleared, or it is still held and row.Announcement is set):
     drop the Hold; Merge            # an empty Announcement sends "post announcement" again
 Base CI status of sha:
@@ -146,6 +151,7 @@ loop:
       report would as "would start"; break
     (rung, model, effort, reviewers) = Model routing: Rung, Lane ceiling, Reviewers, then Stand-in's choice      # record it in the row and Decisions
     branch = git-conventions.js new --type <feat|fix|chore> --key <row.Key> < <its issue title, else its story file's H1>   # <sdlc>/bin, from herd-env
+    if not branch.ok: report branch.error; mark the row parked with a Hold "<KEY> branch: <branch.error>"; continue
     start(row)                                         # the plan's operation
     r = herd-lane.js start --branch <branch.branch> … < references/lane-prompts.md "start"
     if r.error and r.pane_id:                          # the lane exists but did not take its prompt
@@ -163,9 +169,16 @@ loop:
     write the run file's End-of-run summary from its template; give the same text as this session's final message; stop
   if --once and this pass handled events: stop
   max = 60 if --once and there is no live lane else 540     # a foreground Bash call is capped at 600 s
-  out = herd-watch.js wait --lanes <live lanes> --run-dir <env.run_dir> --max <max> --ci <run.Watch CI>   # Bash timeout 600000
+  out = herd-watch.js wait --lanes '<live lanes>' --run-dir <env.run_dir> --max <max> [--ci '<run.Watch CI>' when it is not empty]   # Bash timeout 600000
+  if out.error: Watch error with out.error; continue
+  watch_errors = 0
   for event in out.events: Event routing
   write lane rows, holds, carries and Decisions to the run file
+Watch error(e):                                  # a snapshot or wait that exited 2; watch_errors starts at 0 and resets on any success
+  watch_errors += 1; log "watch-error | <e>"
+  if watch_errors >= 3:
+    stop the loop; escalate to the stand-in now with e (AskUserQuestion); resume the loop only on their answer
+  else: Bash `sleep 30` before the retry      # never retry at once
 Next startable:                                  # one row or none
   skipped = the caller's exclusions + keys of lanes-table rows whose State is not queued
   loop:
@@ -218,8 +231,10 @@ The first matching row wins. For `lane_settled`, match on what the lane's last r
 | `ci_done` | `success` on another ref a lane waits for | Tell dependent lanes (lane-prompts "merge main"); clear the hold |
 | `ci_done` | `failed` or `canceled` on a pinned base commit for a merged row | Park on main (Reconcile), with the failed runs in the escalation |
 | `ci_done` | `none` on a pinned base commit for a merged row | Park on main (Reconcile) with status "no CI run" when the PR merged > 15 min ago, else nothing; the `heartbeat` Reconcile asks again |
-| `ci_done` | `failed` or `canceled` on another pinned ref | Escalate with the failed runs |
+| `ci_done` | `failed`, `canceled` or `none` on another watched ref, pinned or not | Escalate once with the failed runs; leave the dependent lanes' holds as they are |
+| `agent_new` | a lane in the run file | Ignore |
 | `heartbeat` | any | Reconcile; continue |
+| any event no row above matched | any | Log `unrouted \| <event>`; Reconcile |
 
 ## Merge
 
@@ -233,9 +248,14 @@ match v.verdict:
              match r.result:
                merged  -> State merged
                           if main_ci is false: Main green (Reconcile)
-                          else: add <project>:<r.base>@<r.merge_commit_sha> to Watch CI   # the full 40-hex sha
+                          elif r.base and r.merge_commit_sha: add <project>:<r.base>@<r.merge_commit_sha> to Watch CI   # the full 40-hex sha
+                          else: log "reconcile-skip | <KEY> | merge result has no base or sha"; the next heartbeat Reconcile pins it
                queued  -> wait for the pr_change whose state goes to MERGED; Reconcile then pins the base CI
-               refused -> log r.reason; re-check on the next event
+               refused -> log "merge-refused | <KEY> | <r.reason> | head <v.head>"
+                          if r.reason does not start with "head " (a moved head), or this is the 3rd such line for head <v.head>:
+                            if the row has no "<KEY> merge refused" Hold:
+                              State parked; Hold "<KEY> merge refused: <r.reason>" (unparks when the stand-in clears it); escalate to the stand-in once (Escalation message)
+                          else: re-check on the next event
   wait    -> nothing
   hold    -> nothing; the hold is in the run file
   blocked -> for reason in v.reasons:
@@ -269,6 +289,7 @@ Reviewer changes twice:                         # no further fix round without t
 Close the lane:
   r = herd-lane.js close --lane <n> --project <p> --key <KEY> --pr <n>
   if r.closed: State closed
+  elif r.error: leave the State; Hold "lane kept: error — <r.error>"; add it to the "For <stand-in>" list
   else: leave the State; Hold "lane kept: <r.class> — <r.reason>"; add it to the "For <stand-in>" list
         # Reconcile retries the close only after the stand-in clears that Hold
 ```

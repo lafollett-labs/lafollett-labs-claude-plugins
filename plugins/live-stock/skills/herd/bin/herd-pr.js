@@ -12,10 +12,10 @@
  *   target   = the newest PR commit that touches a path outside docs/code-reviews/ (a rename counts both names);
  *              with none, the oldest commit
  *   decisive = a reviewer's latest APPROVED, CHANGES_REQUESTED or DISMISSED review (COMMENTED never decides)
- *   approval = --reviewer's decisive review is APPROVED on the target or a later PR commit (by position in the PR's
+ *   approval = --reviewer's (case-insensitive) decisive review is APPROVED on the target or a later PR commit (by position in the PR's
  *              commit list, not by time); review-record commits after the approval do not reset it
  *   ci       = sdlc's bin/pr-checks.js check at the head with --settle 20, run from the project's checkout
- *              (a fresh push whose checks have not registered yet does not read as none)
+ *              (a fresh push whose checks have not registered yet does not read as none), with GH_REPO = the project's repo
  *   mergeable = CONFLICTING or DIRTY → conflicts; BEHIND → need_rebase; UNKNOWN → GitHub is still computing
  *   threads  = no review thread is unresolved (GraphQL reviewThreads)
  *   base     = the PR's baseRefName (post-merge CI is pinned on <project>:<base>@<merge_commit_sha>)
@@ -84,10 +84,11 @@ function targetOf(repo, commits) {
   return commits.length ? commits[0].sha : null;
 }
 
-// Each reviewer's latest decisive review; the reviews endpoint lists oldest first.
+// Each reviewer's latest decisive review, keyed by lower-cased login (GitHub logins are case-insensitive);
+// the reviews endpoint lists oldest first.
 function decisiveReviews(reviews) {
   const by = new Map();
-  for (const r of reviews) if (r.user && r.user.login && DECISIVE.has(r.state)) by.set(r.user.login, r);
+  for (const r of reviews) if (r.user && r.user.login && DECISIVE.has(r.state)) by.set(r.user.login.toLowerCase(), r);
   return by;
 }
 
@@ -110,7 +111,8 @@ function ciState(proj, n, head) {
   const root = sdlcRoot();
   if (!root.root) throw new HerdError(`checks: ${root.error}`);
   const timeout = Number(process.env.HERD_GH_TIMEOUT_MS) || 60000;
-  const env = { ...process.env, SDLC_GH_TIMEOUT_MS: String(timeout) };
+  // GH_REPO pins gh to the configured repo, whatever the checkout's remotes (a fork's origin) say.
+  const env = { ...process.env, GH_REPO: proj.repo, SDLC_GH_TIMEOUT_MS: String(timeout) };
   if (process.env.HERD_GH) env.SDLC_GH = process.env.HERD_GH;
   const r = spawnSync(process.execPath, [path.join(root.root, 'bin', 'pr-checks.js'), 'check', '--pr', String(n), '--head', head, '--settle', String(SETTLE_S)], {
     cwd: proj.checkout, encoding: 'utf8', timeout: SETTLE_S * 1000 + 4 * timeout, killSignal: 'SIGKILL', env,
@@ -169,7 +171,7 @@ function ready(cfg, opts) {
   const pos = new Map(commits.map((c, i) => [c.sha, i]));
   const decisive = decisiveReviews(ghPages(`repos/${proj.repo}/pulls/${ref.n}/reviews`));
 
-  const mine = decisive.get(opts.reviewer) || null;
+  const mine = decisive.get(opts.reviewer.toLowerCase()) || null;
   const approved = Boolean(mine && mine.state === 'APPROVED');
   const approvalOk = approved && pos.has(mine.commit_id) && pos.get(mine.commit_id) >= pos.get(target);
   checks.approval = {

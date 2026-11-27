@@ -86,7 +86,7 @@ One line per decision, in the run file, in time order. The end-of-run summary gr
 | Field | Value |
 | - | - |
 | time | Local time of the decision |
-| kind | `preflight`, `gate`, `merge`, `rerequest`, `reviewer-changes`, `finish`, `replan`, `park`, `escalate`, `reconcile`, `default`, `start`, `rung`, `red-flag`, `for-stand-in` |
+| kind | `preflight`, `gate`, `merge`, `rerequest`, `reviewer-changes`, `finish`, `replan`, `park`, `escalate`, `reconcile`, `default`, `start`, `rung`, `red-flag`, `for-stand-in`, `merge-refused`, `watch-error`, `reconcile-skip`, `unrouted` |
 | key | The row's key (`#42`, `LT-02`), or `<project>#<n>` for a PR |
 | what | The action taken, in one clause |
 | why | The reason, in one clause |
