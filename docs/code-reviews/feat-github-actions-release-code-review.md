@@ -1,6 +1,6 @@
 # Code Review: feat-github-actions-release
 
-**Verdict:** ✅ APPROVED (round 3)
+**Verdict:** ✅ APPROVED (round 4)
 
 | | |
 | - | - |
@@ -222,8 +222,8 @@ None.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `e3dc826e76eb67948271c7bada426ee5555c8084` (round 3)
-**Status:** ✅ Mergeable IF the branch head is `e3dc826e76eb67948271c7bada426ee5555c8084` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
+**Locked to SHA:** `c009230baec7b23c805dc1497506bacf1e50b06e` (round 4)
+**Status:** ✅ Mergeable IF the branch head is `c009230baec7b23c805dc1497506bacf1e50b06e` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
 
 ---
 
@@ -432,6 +432,105 @@ None.
 - [ ] LOW-005: fix `scripts/ci/test/run-hooks-tests.sh:117` + 4 siblings
 - [ ] LOW-006: fix `scripts/ci/test/run-hooks-tests.sh:3` + 1 sibling
 - [ ] INFO-001 … INFO-005: each at its location + the siblings listed above
+
+---
+
+## Review Round 4
+
+> 🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval changes
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer` 2.14.1) for Cali LaFollett |
+| **Reviewed SHA** | `c009230baec7b23c805dc1497506bacf1e50b06e` |
+| **Date** | 2026-11-26 |
+| **Round cap** | 4: raised from 3 by the owner after round 3 ("fix all of the legitimate issues") |
+| **Fix cascade** | 7 / 10 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 5 spot-checked, 0 disagree |
+
+### Summary
+
+Round 3 was approved at `e3dc826`, and its LOW and INFO findings were then fixed. All 12 of round 3's findings are closed; INFO-006, its convergence note, is replaced by INFO-004 below.
+
+What the fixes did:
+- `scripts/ci/security/check-allowlist.py` parses `.gitleaks.toml` as TOML. Every key spelling and `[[rules]]` is checked as the structure gitleaks reads.
+- Paths and values must be `$`-anchored literals, so "one exact value in one exact file" holds.
+- The hooks follow `commit.cleanup` and `core.commentString`, and they name where a hit is.
+
+Round 4 found no CRITICAL, HIGH or MEDIUM. 7 of the 10 LOW and INFO findings are edge cases of round-3 fixes. Notable ones:
+- CLAUDE.md:32 asks for the same type and `!` on a lone commit, but CI compares only the release levels (LOW-001).
+- The value cases never test the literal or escape classes themselves, so a wildcard-admitting class would pass the suite (LOW-002).
+- 3 hook mutants survive the 41 checks (LOW-006). The round-3 note that the `auto` bracket mutant is equivalent is refuted: git 2.54 picks `;` for a message whose first line starts with `#`.
+
+CI was green on all 5 jobs at the reviewed SHA (run 45919419861). Ubuntu ran secret-scan 78/78 and hooks 41/41 with no SKIP. This is the last round under the 4-round cap.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-AWS-Infra | none | none — TEST BUDGET none. Read CI run 45919419861 at `c009230`: all 5 jobs green, 8 suites, secret-scan 78/78, and the gitleaks job passed check-allowlist.py on the runner's python3. Under M3/M4/M6: check-allowlist.py on 24 scratch configs, 7 of them also on real gitleaks 8.30.1; 4 value-class mutants (3 survive, LOW-002); python3 3.9.6 → exit 2 "needs Python 3.11+" |
+| PE-Governance | none | none |
+| PE-DevTools | lint-only | run-hooks-tests.sh 41/41 on git 2.54 and gitleaks 8.30.1; shellcheck 0.11.0 clean; all 3 files 100755; 8 mutants of the fix diff: 5 killed, 3 survive (LOW-006) |
+| Primary | — | CI run 45919419861 at `c009230`: all 5 jobs green. Re-ran PE-DevTools' declined mutant run on copies in a fresh `mktemp -d` directory: baseline 41/41, and the 3 mutants survive, matching LOW-006 |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-AWS-Infra | 3 receipts spot-checked, 0 disagree; the `.gitleaks.toml`, release-trailer and title restatements agree; the unreceipted python3 3.11+ rule has 4 restatements, 2 of which omit it (INFO-002); value cases diffed against their path siblings (LOW-002); 5 round-3 findings re-checked | a trailer-less release squash traced through reconcile → stamp → force-push → auto-merge → wait (INFO-001); repo squash settings via gh api keep the `Base:` trailer on an unedited merge | 9 edge inputs to check-allowlist.py: empty, non-UTF-8, BOM, directory, `[[extend]]`, `commits`, `allowlists` as a table, `useDefault = 1` / `1.0` (gitleaks reads both as true) | 15 scratch configs, 7 on real gitleaks: key-case folding refused, the inline `allowlists` array honored by both, `UseDefault` refused, 40-char `.` and `\S` values refused; no accepted config clears more than one exact value in one file | python3 absent, 3.9.6, missing checker, unreadable, not TOML, decode error, signal exit: all fail closed | 53 shape cases read; 4 value-class mutants: `any \x escape`, `bare .` and `bare *` survive (LOW-002); 9 structural mutants killed | 9 claims: key-case folding, regexTarget, default-id override, exit codes, "no spelling gets past", `gh release create --target`, the unedited-squash claim hold; the warning's recovery timing (INFO-001) and "Requires bash + node" (INFO-002) do not |
+| PE-Governance | 1 receipt spot-checked; the lone-commit rule has 4 restatements, and only CLAUDE.md:32's parenthetical is stricter than CI (LOW-001); hook, `.gitleaks.toml` and release hunks vs CLAUDE.md:27 / :31: no drift | lone-commit state across a force-push 1 ↔ many commits and a retitle: no gap | 7 one-commit shapes through line 32: 3 rejected by the parenthetical but passed by CI (LOW-001) | line 32 as a guard vs check-title.sh:24-38 and commitLevel: rejects 2 valid shapes, accepts 1 contrived one | a level mismatch names both levels; check-pr.sh makes no title claim | n/a — no test in the CLAUDE.md diff | line 32 vs check-title.sh:16-38 and version-stamp.js:69-83: the parenthetical is false for same-level shapes (LOW-001) |
+| PE-DevTools | 3 receipts spot-checked; 4 unreceipted rules grepped, 1 disagrees (LOW-004); the quote-strip fix vs its `--name-only` sibling (LOW-005) | temp files removed on the hit, clean and early-exit paths; concurrent commits share nothing; amend and pathspec commits diff the right index | paths with a space, tab, backslash and quote (LOW-005); a subdirectory commit in a spaced repo path; 26 comment strings through BSD sed; `commit.cleanup=strip` × 4 `--cleanup=` flags (LOW-004); `auto` × 3 flows × 4 modes; whitespace-mode line numbers (INFO-003) | `core.commentChar` `auto` / `AUTO` / `Auto` end to end: the last two let a `#` subject through (LOW-003); `strip` vs a keep-flag; the `index()` prefix and `n in p` / `n in w` bounds | the locate fallback for a location-less scanner; `~user` 128 in each hook; the sed/stripspace pipeline cannot fail on the 26 strings | 8 mutants: 5 killed, 3 survive (LOW-006); cases that kill 2 of them written and run | 8 claims on git 2.54: the cleanup table, last-set-wins, `GIT_EDITOR=:`, invisible `--cleanup=` hold; "never less, except…" false (LOW-004); "line N of the message git will record" false in whitespace and scissors editor flows (INFO-003); "named unquoted" half true (LOW-005); the equivalent-mutant note refuted (LOW-006) |
+| Primary | 5 receipted rules vs CONTRIBUTING.md, README and changelog.d/README: all agree | n/a — human docs hold no state | CONTRIBUTING.md:20-22 vs 1 / many commits, a non-conventional lone commit, and a lone commit at another level: INFO-005 closed | n/a — no guard in the human docs | n/a — human docs make no call | n/a — no test in the human docs | CONTRIBUTING's CI-fails list vs check-title.sh:32 / :34 and check-pr.sh; the hooks sentence vs pre-commit and commit-msg: agree |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 6 | 0 |
+| ℹ️ INFO | 4 | 0 |
+
+### In Scope Findings
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| LOW-001 | M7 | `CLAUDE.md:32` | missed | The rule's "(same type, `!` and `BREAKING CHANGE:` footer)" is stricter than CI, which compares only the release levels; a `chore:` commit under a `fix:` title passes CI, but the model would ask for an amend | `CONTRIBUTING.md:21`, `scripts/ci/check-title.sh:3`, `scripts/ci/check-title.sh:35`, `CLAUDE.md:48` |
+| LOW-002 | M6 | `scripts/ci/security/test/run-secret-scan-tests.sh:208` | missed | Every refused value already fails on another character, so a LITERAL or ESCAPED class that admits `.`, `\S` or `*` passes the whole suite and accepts a 40-character wildcard value | `scripts/ci/security/test/run-secret-scan-tests.sh:200`, `scripts/ci/security/test/run-secret-scan-tests.sh:201`, `scripts/ci/security/check-allowlist.py:10`, `scripts/ci/security/check-allowlist.py:24`, `scripts/ci/security/check-allowlist.py:25`, `scripts/ci/security/check-allowlist.py:26`, `.gitleaks.toml:7` |
+| LOW-003 | M4 | `scripts/hooks/commit-msg:34` | INFO-004 | git reads `core.commentChar` `AUTO` / `Auto` as auto, but the hook matches lowercase only, so it strips a `#` first line that git keeps and records | `scripts/hooks/commit-msg:11`, `scripts/ci/test/run-hooks-tests.sh:208` |
+| LOW-004 | M7 | `scripts/hooks/commit-msg:12` | LOW-003 | The header's "never less, except…" list misses a keep-comments `--cleanup=` flag on `-m` under `commit.cleanup=strip`, which records a `#` line the hook dropped | `scripts/hooks/commit-msg:13`, `scripts/hooks/commit-msg:28` |
+| LOW-005 | M3 | `scripts/hooks/pre-commit:49` | LOW-004 | A path with a space is named with git's trailing tab, a quoted path keeps its C escapes, and the staged-path list stays quoted | `scripts/hooks/pre-commit:44`, `scripts/hooks/pre-commit:56`, `scripts/hooks/pre-commit:9`, `scripts/ci/test/run-hooks-tests.sh:83` |
+| LOW-006 | M6 | `scripts/ci/test/run-hooks-tests.sh:211` | INFO-004 | 3 fix mutants survive the 41 checks: the `auto` bracket reduced to `#`, commentChar/commentString `tail` → `head`, and an always-printed locate line | `scripts/hooks/commit-msg:34`, `scripts/hooks/commit-msg:32`, `scripts/hooks/pre-commit:58`, `scripts/ci/test/run-hooks-tests.sh:73`, `scripts/ci/test/run-hooks-tests.sh:198` |
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| INFO-001 | M2 | `scripts/ci/release/run-release.sh:115` | INFO-003 | The trailer-less release warning's recovery comes too late: the same run has already re-bumped the squash's plugins, armed auto-merge and may have merged | `scripts/ci/release/run-release.sh:155`, `scripts/ci/release/run-release.sh:239`, `scripts/ci/release/run-release.sh:253`, `scripts/ci/release/version-stamp.js:91`, `scripts/ci/release/version-stamp.js:147`, `.github/workflows/release.yml:9` |
+| INFO-002 | M1 | `scripts/ci/run-shell-tests.sh:8` | LOW-001 | The suite headers don't name the new python3 3.11+ need, and on an older python3 every run case fails as "expected [0], got [2]" with no reason shown | `scripts/ci/security/test/run-secret-scan-tests.sh:7`, `scripts/ci/security/secret-scan.sh:27`, `scripts/ci/security/check-allowlist.py:21` |
+| INFO-003 | M7 | `scripts/hooks/commit-msg:45` | LOW-003 | "line N of the message git will record" counts the edited file's blank lines in whitespace and scissors editor flows, where git collapses them | `scripts/ci/test/run-hooks-tests.sh:159` |
+| INFO-004 | none | `scripts/hooks/commit-msg:1` | new | Convergence signal: severity flat at LOW/INFO, and the hook findings refine round-3 fixes | none |
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+None.
+
+#### Should Fix
+
+None.
+
+#### Consider
+
+- [ ] LOW-001: fix `CLAUDE.md:32` + 4 siblings (drop the parenthetical; the table defines the bump)
+- [ ] LOW-002: fix `scripts/ci/security/test/run-secret-scan-tests.sh:208` + 7 siblings (mirror the path cases on the value side)
+- [ ] LOW-003: fix `scripts/hooks/commit-msg:34` + 2 siblings
+- [ ] LOW-004: fix `scripts/hooks/commit-msg:12` + 2 siblings
+- [ ] LOW-005: fix `scripts/hooks/pre-commit:49` + 4 siblings
+- [ ] LOW-006: fix `scripts/ci/test/run-hooks-tests.sh:211` + 5 siblings
+- [ ] INFO-001 … INFO-003: each at its location + the siblings listed above
 
 ---
 
