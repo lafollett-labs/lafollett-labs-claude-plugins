@@ -97,7 +97,7 @@ Above the table, even when there are no open threads:
 
 | `d.coverage.partial` | Print |
 | - | - |
-| `true` | `⚠ Copilot did not review every changed file ("<d.coverage.evidence>"). Review the rest yourself; no Copilot threads does not mean the PR is clean.` |
+| `true` | `⚠ Copilot did not fully review this PR ("<d.coverage.evidence>"). Review the rest yourself; no Copilot threads does not mean the PR is clean.` |
 | `null` | `⚠ Copilot's overview does not say which files it reviewed. Check its overview on the PR before treating no threads as clean.` |
 | `false` | nothing |
 

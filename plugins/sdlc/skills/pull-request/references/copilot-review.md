@@ -18,7 +18,7 @@ read its copilot-review-result block → res
 match res.status:
   "complete":
     session.copilot_line = "{len(res.findings)} finding(s): {count per disposition}" (or "nothing new to act on")
-    if res.coverage == "partial": append " — ⚠ Copilot skipped some changed files"
+    if res.coverage == "partial": append " — ⚠ Copilot did not fully review the PR"
     if res.coverage == "unknown": append " — ⚠ Copilot's coverage is unknown"
     if res.warnings:              append " — ⚠ " + join(res.warnings, "; ")
     if res.answered:              append " — {len(res.answered)} Copilot thread(s) you answered earlier are still open"
