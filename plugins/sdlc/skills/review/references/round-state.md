@@ -28,7 +28,7 @@ read_review(args):
 session.head_sha = `git -C "{session.review_root}" rev-parse HEAD`   # bound once; reused by Phases 3, 6, 7
 author = read_review(`--root "{session.review_root}" --name "{session.name}"`)   # the committed Gate 1 review on the reviewed branch
 session.gate1 = author.gate1             # the latest Gate 1 branch round: locked | overridden | open | none
-session.skip_rounds = join(author.partial_rounds, ",")   # Files / Folder / Ad-hoc round numbers: never a ledger gap
+session.skip_rounds = join(author.partial_rounds, ",")   # Staged / Files / Folder / Ad-hoc round numbers: never a ledger gap
 session.gate1_skip_note = null
 if session.gate == "Gate 1":
   p = author
@@ -47,7 +47,7 @@ session.round_n = p.next_round                    # 1 when no round exists; the 
 Checks the ledger before any PE runs, so a broken ledger stops the round before dispatch.
 
 ```text
-if not session.ledger: skip this section          # Gate 2, Specific Files, Folder, Ad-hoc
+if not session.ledger: skip this section          # Gate 2, Staged Diff, Specific Files, Folder, Ad-hoc
 status = `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/convergence.js" status --ledger "{session.ledger_path}" --target "$(git -C "{session.review_root}" rev-parse --abbrev-ref HEAD)" --round {session.round_n} --skip "{session.skip_rounds}"`
 if exit == 127:
   ❌ Error — sdlc:review needs Node on PATH (convergence controller); restore_stash(); STOP
@@ -56,7 +56,7 @@ elif exit != 0 and `git -C "{session.review_root}" ls-files -u -- "{session.ledg
      for stage in [2, 3]:
        tmp_{stage} = "{session.ledger_path}.stage{stage}.json"
        `git -C "{session.review_root}" show ":{stage}:{ledger path relative to review_root}"` > "{tmp_{stage}}"
-       status_{stage} = `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/convergence.js" status --ledger "{tmp_{stage}}"`
+       status_{stage} = `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/convergence.js" status --ledger "{tmp_{stage}}" --skip "{session.skip_rounds}"`
      if status_2.rounds != status_3.rounds:        keep = the stage with more rounds
      elif status_2.locked != status_3.locked:      keep = the stage whose locked is false   # fail closed — a lock never survives a dirty round
      else:                                         keep = 3

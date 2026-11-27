@@ -122,9 +122,7 @@ Surface an unvalidated or red head before anyone is pinged; checks run on every 
 
 ```text
 session.ci_validation = "unvalidated"                       # fail closed
-(c, ec) = `node "${CLAUDE_PLUGIN_ROOT}/bin/pr-checks.js" check --pr {session.pr_number} --head {session.head_sha}`
-if ec == 0 and c.state == "none":
-  wait ~20 s (checks register shortly after a push), then run it once more
+(c, ec) = `cd "$(git rev-parse --show-toplevel)" && node "${CLAUDE_PLUGIN_ROOT}/bin/pr-checks.js" check --pr {session.pr_number} --head {session.head_sha} --settle 20`
 status = c.state if ec == 0 else "unreadable: " + c.error
 
 match status:

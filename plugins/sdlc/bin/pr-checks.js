@@ -3,7 +3,7 @@
  * Classifies the checks on a pull request's head commit, for the sdlc skills' CI gates.
  *
  * Usage (run inside a checkout of the repository, so gh resolves it):
- *   node pr-checks.js check --pr <N> --head <sha>
+ *   node pr-checks.js check --pr <N> --head <sha> [--settle <seconds>]
  *
  * Confirms --head is the PR's head (gh pr view <N> --json headRefOid), then reads the head's checks
  * (gh pr checks <N> --json name,workflow,state,bucket,link) and classifies them by gh's bucket:
@@ -18,6 +18,11 @@
  *   run_id — the Actions run id from a failed check's link (/actions/runs/<id>/), else null (an external CI).
  *            Callers read its failed logs with `gh run view <run_id> --log-failed`.
  *
+ * --settle <s> (0–600, default 0): checks register a few seconds after a push, so when the state is none and a
+ * workflow in ./.github/workflows/*.y(a)ml mentions pull_request, re-read every 5 s (SDLC_SETTLE_POLL_MS) until
+ * the state is no longer none or <s> seconds have passed, and print the last read. Each re-read confirms the
+ * head again.
+ *
  * gh is $SDLC_GH or `gh`; each call is killed after SDLC_GH_TIMEOUT_MS (default 60000) and reported as timed out.
  *
  * Exit codes: 0 — success; 2 — error (bad arguments, gh failure, timeout, non-JSON, unknown bucket, or
@@ -26,6 +31,8 @@
 'use strict';
 
 const { spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 const GH = process.env.SDLC_GH || 'gh';
 const GH_TIMEOUT_MS = Number(process.env.SDLC_GH_TIMEOUT_MS) || 60000;
@@ -36,6 +43,8 @@ const RUN_ID = /\/actions\/runs\/(\d+)(?:[/?#]|$)/;
 const NO_CHECKS = /no (required )?checks reported/i;
 // gh pr checks exits 8 while checks are pending (and 1 when one failed); --json output is still on stdout.
 const CHECKS_EXITS_WITH_OUTPUT = [0, 1, 8];
+const SETTLE_POLL_MS = Number(process.env.SDLC_SETTLE_POLL_MS) || 5000;
+const MAX_SETTLE_S = 600;
 
 class ChecksError extends Error {}
 
@@ -46,12 +55,17 @@ function parseArgs(argv) {
   for (let i = 0; i < rest.length; i += 2) {
     const flag = rest[i];
     const key = flag.replace(/^--/, '');
-    if (!flag.startsWith('--') || !['pr', 'head'].includes(key)) throw new ChecksError(`unknown option '${flag}'`);
+    if (!flag.startsWith('--') || !['pr', 'head', 'settle'].includes(key)) throw new ChecksError(`unknown option '${flag}'`);
     if (rest[i + 1] === undefined) throw new ChecksError(`missing value for ${flag}`);
     opts[key] = rest[i + 1];
   }
   if (!/^[1-9][0-9]*$/.test(opts.pr || '')) throw new ChecksError('--pr must be a positive integer');
   if (!/^[0-9a-f]{7,40}$/i.test(opts.head || '')) throw new ChecksError('--head must be a commit SHA');
+  const settle = opts.settle === undefined ? '0' : opts.settle;
+  if (!/^(0|[1-9][0-9]*)$/.test(settle) || Number(settle) > MAX_SETTLE_S) {
+    throw new ChecksError(`--settle must be a whole number of seconds from 0 to ${MAX_SETTLE_S}`);
+  }
+  opts.settle = Number(settle);
   return opts;
 }
 
@@ -136,9 +150,40 @@ function check(opts) {
   return { state, head, checks, failed_checks: failed, reason: reason(state, opts.pr, head, checks) };
 }
 
-function main() {
+// True when a workflow under ./.github/workflows runs on pull requests, so a fresh PR's checks are coming.
+function prWorkflow() {
+  const dir = path.join(process.cwd(), '.github', 'workflows');
+  let names;
   try {
-    process.stdout.write(`${JSON.stringify(check(parseArgs(process.argv.slice(2))), null, 2)}\n`);
+    names = fs.readdirSync(dir);
+  } catch {
+    return false;
+  }
+  return names.filter((n) => /\.ya?ml$/.test(n)).some((n) => {
+    try {
+      return fs.readFileSync(path.join(dir, n), 'utf8').includes('pull_request');
+    } catch {
+      return false;
+    }
+  });
+}
+
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+async function settled(opts) {
+  let result = check(opts);
+  if (result.state !== 'none' || opts.settle === 0 || !prWorkflow()) return result;
+  const deadline = Date.now() + opts.settle * 1000;
+  while (result.state === 'none' && Date.now() < deadline) {
+    await sleep(Math.min(SETTLE_POLL_MS, deadline - Date.now()));
+    result = check(opts);
+  }
+  return result;
+}
+
+async function main() {
+  try {
+    process.stdout.write(`${JSON.stringify(await settled(parseArgs(process.argv.slice(2))), null, 2)}\n`);
   } catch (e) {
     const message = e instanceof ChecksError ? e.message : `unexpected failure: ${e.message}`;
     process.stderr.write(`pr-checks: ${message}\n`);

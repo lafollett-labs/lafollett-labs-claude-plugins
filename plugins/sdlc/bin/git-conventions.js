@@ -28,8 +28,8 @@
  *             on_feature = the branch starts <type>/<key_slug> and no letter or digit follows the key (looser
  *             than ok, which also checks the description): feat/42_x is on a feature branch, feat/2fa-login is not
  *   commits → {ok, count, offenders: [{subject, error}], error?}
- *             subject = <type>[(scope)][!]: <description>, or git's revert subject Revert "<subject>";
- *             no ticket key required
+ *             subject = <type>[(scope)][!]: <description>, or git's revert subjects Revert "<subject>" and
+ *             Reapply "<subject>" (a revert of a revert); no ticket key required
  *   key     → {ok, KEY, error?}
  *             --anchored: the whole (trimmed) text must be a key: #42, 42, or a story code in any ASCII case
  *             (returned uppercased). Otherwise the first #42 found wins, else the first uppercase story code
@@ -67,8 +67,8 @@ const KEY_SLUG = `${ISSUE}|${STORY}`;
 const BRANCH_RE = new RegExp(`^(${TYPE_ALT})/(${KEY_SLUG})(-[a-z0-9-]+)?$`);
 const ON_FEATURE_RE = new RegExp(`^(${TYPE_ALT})/(${KEY_SLUG})(?![A-Za-z0-9])`);
 const COMMIT_RE = new RegExp(`^(${COMMIT_ALT})(\\([^()\\s]+\\))?!?: \\S`);
-// git revert's default subject.
-const REVERT_RE = /^Revert ".+"$/;
+// git revert's default subjects: Revert "<subject>", and Reapply "<subject>" for a revert of a revert.
+const REVERT_RE = /^(Revert|Reapply) ".+"$/;
 const ISSUE_ANCHORED_RE = new RegExp(`^#?(${ISSUE})$`);
 const STORY_ANCHORED_RE = new RegExp(`^${STORY}$`);
 // No `u` flag on purpose: /i then folds ASCII only, so lookalikes such as `lıt-2` (dotless i) stay rejected.
@@ -261,9 +261,10 @@ function emit(obj, code) {
 
 function main() {
   const [cmd, ...args] = process.argv.slice(2);
-  const usage = 'usage: git-conventions.js branch [--name <b>] | commits < subjects | key [--text <t>] [--anchored]'
-    + ' | new --type <t> --key <KEY> < title | retype --type <t> [--name <b>] | sanitize [--max <n>] [--fallback <s>] < text'
-    + ' | base [--branch <b>] [--pr <N>] (absent flag → stdin)';
+  const usage = 'usage: git-conventions.js branch [--name <b> | < name] | commits < subjects'
+    + ' | key [--text <t> | < text] [--anchored] | new --type <t> --key <KEY> < title'
+    + ' | retype --type <t> [--name <b> | < name] | sanitize [--max <n>] [--fallback <s>] < text'
+    + ' | base [--branch <b>] [--pr <N>] (no stdin)';
   let result;
   switch (cmd) {
     case 'branch': {

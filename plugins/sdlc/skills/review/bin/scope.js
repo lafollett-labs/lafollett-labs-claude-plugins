@@ -14,7 +14,7 @@
  *   { size_small, size_large, config_only, security_path, deps_or_schema }, security_files, tier,
  *   tier_source: "classifier", tier_signals, routing, matched_pes, diff_cmd, ledger }.
  *   diff_cmd is the command PEs run for their diff (null for files / adhoc); ledger says whether the
- *   round belongs in the branch findings ledger (branch, pr, staged) or not (files, adhoc).
+ *   round belongs in the branch findings ledger (branch, pr) or not (staged, files, adhoc: the index or a subset is not the branch HEAD).
  * pe-tiers prints { pe: tier }: a PE whose files are all non-code artifacts, none security- or
  *   content-risk-flagged, runs TRIVIAL; every other PE runs the round tier.
  *
@@ -178,7 +178,7 @@ function rows(opts) {
       return { rows: numstat(root, [opts.range]), diffCmd, ledger: true };
     }
     case 'staged':
-      return { rows: numstat(root, ['--cached']), diffCmd: 'git diff --cached', ledger: true };
+      return { rows: numstat(root, ['--cached']), diffCmd: 'git diff --cached', ledger: false };
     case 'files':
       if (!opts.targets) throw new CliError('--mode files needs --targets');
       return { rows: filesRows(root, opts.targets.split(',').map((t) => t.trim()).filter(Boolean)), diffCmd: null, ledger: false };

@@ -13,9 +13,10 @@
  *   node review-file.js gate2    --pr <N> --head <sha> --root <dir>    < current.json
  *
  * render   Creates the file (round 1) or appends the next "## Review Round N" before the footer, then syncs
- *          the top-level Verdict line. The verdict is computed here from round.findings. A Gate 1 round that
- *          follows a clean, still-open Gate 1 round is headed as a confirmation (same code) or an invalidation
- *          (code changed); "same code" is same_code(--root) when --root is given, else the same SHA.
+ *          the top-level Verdict line. The verdict is computed here from round.findings. A branch Gate 1 round
+ *          whose prior branch round (partial-scope rounds skipped) is a clean Gate 1 round that has not closed
+ *          the gate is headed as a confirmation (same code) or an invalidation (code changed); no other round
+ *          gets a note. "Same code" is same_code(--root) when --root is given, else the same SHA.
  *          Prints { path, round, verdict }.
  * parse    Prints { rounds: [{ n, verdict, gate_status, reviewed_sha, engineer_reviewer, sdlc_version,
  *          counts: { in, out }, in_scope_findings: [{ id, severity, title, location, domains, recommendation }],
@@ -23,7 +24,7 @@
  *          gate1: { state, round, sha }, partial_rounds: [n], version_advisories: { findings, gate2 } }.
  *          gate1 is the latest Gate 1 branch round — a round whose gate_status starts with none of MERGEABLE,
  *          "OPEN — Gate 2", "OPEN — not a branch review": state locked (starts LOCKED) | overridden
- *          (starts OVERRIDDEN) | open | none (no round). partial_rounds are the Files / Folder / Ad-hoc rounds
+ *          (starts OVERRIDDEN) | open | none (no round). partial_rounds are the Staged / Files / Folder / Ad-hoc rounds
  *          ("OPEN — not a branch review"): convergence.js --skip takes them, so they are never a ledger gap.
  *          --root/--name reads <root>/docs/code-reviews/<name>-code-review.md (the committed Gate 1 review);
  *          --local/--pr/--name reads ~/.claude/sdlc/reviews/<owner>/<repo>/<name>-pr<N>-code-review.md (a Gate 2
@@ -33,7 +34,7 @@
  * override stdin: { round, reviewer, reason, findings: [{ id, title }] }. Inside that Gate 1 round, before the
  *          next round or the footer, inserts an "Overridden Findings" section and sets the round's Gate Status
  *          to "OVERRIDDEN — <reason>". Every id must be an in-scope finding of the round; a Gate 2 round, a
- *          Files / Folder / Ad-hoc round, or a round already overridden is refused. Prints { path, round, gate_status }.
+ *          Staged / Files / Folder / Ad-hoc round, or a round already overridden is refused. Prints { path, round, gate_status }.
  * verdict  stdin: findings array (or { findings }). Prints { verdict, counts, gating, advisory }.
  * gate2    stdin: { reviewer, verdict, ci: { state, reason } } for the round being recorded (ci.state: passed |
  *          none | failed | pending | incomplete | unreadable). Any ci.state but passed / none holds the round OPEN
@@ -81,7 +82,7 @@ const MERGEABLE = 'MERGEABLE — all Gate 2 reviewers approved on current HEAD';
 const GATE2_OPEN = 'OPEN — Gate 2 reviewer(s) outstanding or not on current HEAD';
 const GATE2_STATUS = /^(MERGEABLE|OPEN — Gate 2)/;
 const CLOSED_STATUS = /^(LOCKED|OVERRIDDEN)/;
-const PARTIAL_STATUS = /^OPEN — not a branch review/; // Files / Folder / Ad-hoc rounds: never part of the Gate 1 record
+const PARTIAL_STATUS = /^OPEN — not a branch review/; // Staged / Files / Folder / Ad-hoc rounds: never part of the Gate 1 record
 const CI_HOLD = {
   failed: 'OPEN — Gate 2 CI failed: ',
   pending: 'OPEN — Gate 2 waiting on CI: ',

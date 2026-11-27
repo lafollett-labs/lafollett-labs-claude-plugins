@@ -33,10 +33,11 @@ Run from `<worktree>/<db_subdir>` for each affected database root:
 tmp="$(mktemp -d)"
 
 # DB project build (Visual Studio Database Project / SDK-style); builds the schema model offline
-for p in <worktree>/<db_subdir>/*.sqlproj; do
-  [ -f "$p" ] || { echo "no .sqlproj — no model build ran"; break; }
-  echo "== $p"; dotnet build "$p" /p:NetCoreBuild=true; echo "exit=$?"
-done
+find <worktree>/<db_subdir> -name '*.sqlproj' -not -path '*/.git/*' > "$tmp/sqlproj.list"
+[ -s "$tmp/sqlproj.list" ] || echo "no .sqlproj — no model build ran"
+while IFS= read -r p; do
+  echo "== $p"; dotnet build "$p" /p:NetCoreBuild=true < /dev/null; echo "exit=$?"
+done < "$tmp/sqlproj.list"
 
 # T-SQL parse check, offline, one changed file at a time — parses only: no name resolution, nothing executes
 command -v sqlfluff >/dev/null || echo "sqlfluff not installed — no parse or lint ran"

@@ -404,6 +404,13 @@ check "gate1: a dirty partial-scope round never reopens the branch lock" "$(node
 clean 8a8a8a8 | node "$CLI" render --file "$TMP/partial-clean.md" >/dev/null
 clean 8a8a8a8 "$PARTIAL" | node "$CLI" render --file "$TMP/partial-clean.md" >/dev/null
 if grep -qx '## Review Round 2' "$TMP/partial-clean.md"; then pass "a partial-scope round after a clean branch round carries no note"; else fail "partial round note: $(grep -m1 '^## Review Round 2' "$TMP/partial-clean.md")"; fi
+clean 9b9b9b9 "$PARTIAL" | node "$CLI" render --file "$TMP/partial-only.md" >/dev/null
+clean 9b9b9b9 | node "$CLI" render --file "$TMP/partial-only.md" >/dev/null; code=$?
+if [ "$code" -eq 0 ] && grep -qx '## Review Round 2' "$TMP/partial-only.md"; then
+  pass "a branch round after only partial-scope rounds renders with no note"
+else
+  fail "branch round after only partial rounds (exit $code): $(grep -m1 '^## Review Round 2' "$TMP/partial-only.md")"
+fi
 cp "$FIX/expected-initial.md" "$TMP/partial-note.md"
 clean 8a8a8a8 "$PARTIAL" | node "$CLI" render --file "$TMP/partial-note.md" >/dev/null
 clean 8a8a8a8 | node "$CLI" render --file "$TMP/partial-note.md" >/dev/null

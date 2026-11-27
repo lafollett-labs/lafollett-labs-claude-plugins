@@ -43,9 +43,21 @@ unproven_branch() {
   docs_block '^#+ Negative-receipt proof check' "$@" | awk '/no reply == unproven/{on=1} on && /^[[:space:]]*else:/{exit} on{print}'
 }
 
-# issue_refs <file>... — "<file>:#<n>" for each issue number of two or more digits; a # glued to a word,
-# an entity (&#8212;) or a hex colour (#5319e7) is not one. Same rule as run-skill-structure-tests.sh.
-issue_refs() { local f; for f in "$@"; do tr -c '[:alnum:]#&' '\n' < "$f" | grep -E '^#[0-9]{2,}$' | sed "s|^|$f:|"; done; }
+# issue_refs <file>... — "<line>:#<n>" ("<file>:<line>:#<n>" for several files, as grep -n prints) for each
+# issue number of two or more digits; a # glued to a word or #, an entity (&#8212;) or a hex colour with a
+# letter (#5319e7) is not one. Same rule as run-skill-structure-tests.sh.
+issue_refs() {
+  awk -v many="$(( $# > 1 ))" '{
+    rest = $0; prev = ""
+    while (match(rest, /#[0-9][0-9]+/)) {
+      before = RSTART > 1 ? substr(rest, RSTART - 1, 1) : prev
+      after = substr(rest, RSTART + RLENGTH, 1)
+      if (before !~ /[[:alnum:]&#]/ && after !~ /[[:alnum:]]/)
+        print (many ? FILENAME ":" : "") FNR ":" substr(rest, RSTART, RLENGTH)
+      prev = substr(rest, RSTART + RLENGTH - 1, 1); rest = substr(rest, RSTART + RLENGTH)
+    }
+  }' "$@"
+}
 
 # narration <file>... — ticket keys / story numbers, ignoring finding and receipt ids (MEDIUM-001, RECEIPT-002)
 # and the PLACEHOLDERS example keys
@@ -539,6 +551,8 @@ mutant agent-issue-narration \
   'printf "\n- added in #4321\n" >> agents/pe-go.md' 'pe-go: ticket narration'
 mutant agent-two-digit-issue-narration \
   'printf "\n- since #20 merged (a regression from #17)\n" >> agents/pe-go.md' 'pe-go: ticket narration'
+mutant agent-adjacent-issue-narration \
+  'printf "\n- this reverts #20 #17\n" >> agents/pe-go.md' ':#17'
 allowed agent-entity-and-colour \
   'printf "\n- an em dash &#8212; and the colour #5319e7\n" >> agents/pe-go.md' 'pe-go: ticket narration'
 allowed agent-placeholder-keys \

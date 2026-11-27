@@ -2,8 +2,7 @@
 
 Loaded by SKILL.md Phase 2 when `found` (this ticket's branches, local first, else origin's) is not empty. It
 returns `resume`, with the branch checked out and `session.branch_name`, `branch_type`, `slug` and `base_branch`
-set, or `fresh`, and Phase 2 goes on to the base prompt and cuts a new branch. Every name in `found` passed
-SKILL.md's safe-ref check (`^[A-Za-z0-9._/-]+$`, no leading `-`), so it is safe inside the single quotes below.
+set, or `fresh`, and Phase 2 goes on to the base prompt and cuts a new branch.
 
 ```text
 current = `git branch --show-current`

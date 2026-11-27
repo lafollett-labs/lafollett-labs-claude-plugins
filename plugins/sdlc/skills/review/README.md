@@ -20,7 +20,7 @@ Stack-specialized code review with a two-gate model and a severity-gated verdict
 4. **Consolidate** — de-dupes findings, validates proof of each actual problem against the code, keeps unproven "cannot happen" claims as non-gating receipts, checks the change against the ticket's acceptance criteria, and computes a severity-gated verdict.
 5. **Record** — Gate 1 appends the round to `docs/code-reviews/` and commits only the review files on your branch (never on the default branch, a detached HEAD, or for pasted code). Gate 2 never commits or pushes to the author's branch: it posts the round as a PR comment plus an approve or request-changes review, and keeps your own running notes in `~/.claude/sdlc/reviews/<owner>/<repo>/`.
 
-The mechanical steps are tested scripts in `bin/`, not model judgment: `scope.js` picks the reviewed files, the depth tier, and the PE for each file; `findings.js` validates and de-dupes PE output; `review-file.js` computes the verdict and Gate 2 status, records overrides, and owns the review-file format; `build-plan.js` places front-end builds. Reviews of specific files, a folder, or pasted code never touch the branch's findings ledger.
+The mechanical steps are tested scripts in `bin/`, not model judgment: `scope.js` picks the reviewed files, the depth tier, and the PE for each file; `findings.js` validates and de-dupes PE output; `review-file.js` computes the verdict and Gate 2 status, records overrides, and owns the review-file format; `build-plan.js` places front-end builds. Reviews of staged changes, specific files, a folder, or pasted code never touch the branch's findings ledger.
 
 **Verdict:** any in-scope CRITICAL/HIGH → 🚫 BLOCKED · any MEDIUM → ⚠️ CHANGES REQUESTED · only LOW/INFO or none → ✅ APPROVED. Every MEDIUM+ finding must be addressed; LOW/INFO are advisory. Whether Gate 1 locks is decided by `bin/convergence.js`: it records each round to a findings ledger and locks after two consecutive clean rounds. If MEDIUM+ findings are still open at round 8 of a cycle, or one finding keeps re-opening, it stops for a human (`HUMAN_GATE`). Findings in data-integrity, migration, auth, and secrets are never recorded below MEDIUM.
 
@@ -28,7 +28,7 @@ The mechanical steps are tested scripts in `bin/`, not model judgment: `scope.js
 
 **Gate 2 status:** the PR is MERGEABLE when every Gate 2 reviewer's latest GitHub review is an approval on code identical to the PR head (a commit that only touches `docs/code-reviews/` does not count as a change) and the head's checks passed or none are reported.
 
-**Gate 2 CI gate:** Gate 2 reads the checks on the PR head (`../../bin/pr-checks.js`). A failed check adds a CRITICAL finding with the failed-step log tail; checks still running, cancelled, or unreadable hold the round open and withhold the approval; a PR with no checks is not blocked (when a workflow has a `pull_request` trigger, Gate 2 reads the checks once more about 30 seconds later first, since fresh checks take a moment to register).
+**Gate 2 CI gate:** Gate 2 reads the checks on the PR head (`../../bin/pr-checks.js`). A failed check adds a CRITICAL finding with the failed-step log tail; checks still running, cancelled, or unreadable hold the round open and withhold the approval; a PR with no checks is not blocked (when a workflow has a `pull_request` trigger, `pr-checks.js --settle 30` first polls for up to 30 seconds, since fresh checks take a moment to register).
 
 ## Usage examples
 

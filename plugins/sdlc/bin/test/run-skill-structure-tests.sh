@@ -30,9 +30,21 @@ instruction_docs() {
     -not -path '*/bin/test/fixtures/*' -not -name 'README.md' 2>/dev/null | sort
 }
 
-# issue_refs <file> — ":#<n>" for each issue number of two or more digits; a # glued to a word, an entity
-# (&#8212;) or a hex colour (#5319e7) is not one. Same rule as run-pe-agent-tests.sh.
-issue_refs() { tr -c '[:alnum:]#&' '\n' < "$1" | grep -E '^#[0-9]{2,}$' | sed 's|^|:|'; }
+# issue_refs <file>... — "<line>:#<n>" ("<file>:<line>:#<n>" for several files, as grep -n prints) for each
+# issue number of two or more digits; a # glued to a word or #, an entity (&#8212;) or a hex colour with a
+# letter (#5319e7) is not one. Same rule as run-pe-agent-tests.sh.
+issue_refs() {
+  awk -v many="$(( $# > 1 ))" '{
+    rest = $0; prev = ""
+    while (match(rest, /#[0-9][0-9]+/)) {
+      before = RSTART > 1 ? substr(rest, RSTART - 1, 1) : prev
+      after = substr(rest, RSTART + RLENGTH, 1)
+      if (before !~ /[[:alnum:]&#]/ && after !~ /[[:alnum:]]/)
+        print (many ? FILENAME ":" : "") FNR ":" substr(rest, RSTART, RLENGTH)
+      prev = substr(rest, RSTART + RLENGTH - 1, 1); rest = substr(rest, RSTART + RLENGTH)
+    }
+  }' "$@"
+}
 
 # strip_frontmatter <file> — the body without the leading --- … --- block
 strip_frontmatter() { awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {fm=0; next} !fm' "$1"; }
@@ -159,8 +171,12 @@ if [ $# -eq 0 ]; then
   seed; echo 'Loads ${CLAUDE_PLUGIN_ROOT}/skills/implement/references/spike.md' >> "$P/skills/implement/references/stash-restore.md"; fires "capitalised Loads of a skill reference" check_reference_depth
   seed; echo 'Since #517 merged this step changed.' >> "$P/skills/deliver/SKILL.md";  fires "#NNN issue history" check_ticket_history
   seed; echo 'Since #20 merged (a regression from #17).' >> "$P/skills/deliver/SKILL.md"; fires "#20 two-digit issue history" check_ticket_history
+  seed; echo 'This reverts #20 #17.' >> "$P/skills/deliver/SKILL.md"; n=$(wc -l < "$P/skills/deliver/SKILL.md" | tr -d ' ')
+  if [ "$(check_ticket_history "$P")" = "$(printf 'skills/deliver/SKILL.md:%s:#%s\n' "$n" 20 "$n" 17)" ]; then
+    pass "adjacent issue refs both reported as <file>:<line>:#<n>"
+  else fail "adjacent issue refs not both reported as <file>:<line>:#<n>"; fi
   seed; echo 'Refs #42, #57, #123 and #1234 are examples.' >> "$P/skills/deliver/SKILL.md"; silent "example issues #42 #57 #123 #1234" check_ticket_history
-  seed; echo 'An em dash &#8212; and the colour #5319e7.' >> "$P/skills/plan/SKILL.md"; silent "entity &#8212; and hex colour" check_ticket_history
+  seed; echo 'An em dash &#8212; and the colour #5319e7.' >> "$P/skills/plan/SKILL.md"; silent "entity &#8212; and hex colour with a letter" check_ticket_history
   seed; echo 'Hash it with SHA-256 and stamp ISO-8601 dates.' >> "$P/skills/plan/SKILL.md"; silent "standard terms SHA-256 and ISO-8601" check_ticket_history
 fi
 

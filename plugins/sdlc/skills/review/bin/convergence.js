@@ -12,7 +12,7 @@
  *   node convergence.js status --ledger <path> [--target <branch>] [--round <n>] [--skip <n,n>]
  *     --target: only that branch's rounds count toward locked / streak
  *     --round:  the round about to run — a round missing before it (errored, never recorded) breaks the lock
- *     --skip:   review-file round numbers that are not branch rounds (Files / Folder / Ad-hoc); missing from
+ *     --skip:   review-file round numbers that are not branch rounds (Staged / Files / Folder / Ad-hoc); missing from
  *               the ledger by design, so never a gap (may be empty)
  *
  *   findings.json = [{ location: "path:line", severity, title, category?, in_scope? }, ...]

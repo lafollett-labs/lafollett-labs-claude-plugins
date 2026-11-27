@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Fixture tests for pr-checks.js — confirms --head is the PR head, then classifies the head's checks
-# (passed, failed with run ids, pending, incomplete, none) and fails closed on gh errors, timeouts and
-# non-JSON. gh is the shared stub-gh.sh serving per-case routes. No npm packages — bash + node only.
+# (passed, failed with run ids, pending, incomplete, none), re-reads a none under --settle, and fails closed on
+# gh errors, timeouts and non-JSON. gh is the shared stub-gh.sh serving per-case routes. No npm packages — bash +
+# node only.
 # SDLC_TEST_TMP=<dir> keeps the case dirs there instead of a self-cleaning mktemp dir.
 # Exit 0 = all checks pass, 1 = any fail.
 set -u
@@ -47,12 +48,13 @@ route() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$CASE/routes"; }
 head_is() { route "$VIEW" 0 "$1"; }
 checks_are() { route "$CHECKS" "$1" "$2"; }
 
-# run [--head <sha>] [extra args...] — sets $out and $code; gh is the stub unless SDLC_GH is preset
+# run [--head <sha>] [extra args...] — sets $out and $code; runs in $CASE (no workflows) unless RUN_DIR names a
+# checkout; gh is the stub unless SDLC_GH is preset; --settle re-reads every 100 ms
 run() {
   local head="$HEAD"
   if [ "${1:-}" = "--head" ]; then head="$2"; shift 2; fi
-  out="$(SDLC_GH="${GH_OVERRIDE:-$STUB}" STUB_GH_DIR="$CASE" SDLC_GH_TIMEOUT_MS="${TIMEOUT_MS:-5000}" \
-    node "$CLI" check --pr 7 --head "$head" "$@" 2>/dev/null)"
+  out="$(cd "${RUN_DIR:-$CASE}" && SDLC_GH="${GH_OVERRIDE:-$STUB}" STUB_GH_DIR="$CASE" \
+    SDLC_GH_TIMEOUT_MS="${TIMEOUT_MS:-5000}" SDLC_SETTLE_POLL_MS=100 node "$CLI" check --pr 7 --head "$head" "$@" 2>/dev/null)"
   code=$?
 }
 # check <name> <expected-exit> <js-boolean-expression over `o`>
@@ -177,6 +179,49 @@ newcase
 GH_OVERRIDE="$W/no-such-gh" run
 check "an unrunnable gh is an error" 2 '/^gh not runnable/.test(o.error)'
 
+# --- --settle ----------------------------------------------------------------------------
+# checkout <name> <file>=<on: trigger>... — a dir whose .github/workflows holds those files
+checkout() {
+  local d="$W/$1" f; shift
+  mkdir -p "$d/.github/workflows"
+  for f in "$@"; do printf 'on: %s\n' "${f#*=}" > "$d/.github/workflows/${f%%=*}"; done
+  RUN_DIR="$d"
+}
+reads() { grep -c "^pr checks" "$CASE/calls"; }
+
+checkout pr-yml ci.yml=pull_request
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-empty.json,checks-passed.json
+run --settle 5
+check "--settle re-reads a none until the checks register" 0 'o.state === "passed" && o.checks.length === 3'
+calls_are "each re-read confirms the head first" "$(printf 'pr view 7 --json headRefOid\npr checks 7 --json name,workflow,state,bucket,link\n%.0s' 1 2 3)"
+
+checkout pr-yaml ci.yaml='[push, pull_request]'
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json
+start=$(date +%s); run --settle 1; elapsed=$(( $(date +%s) - start ))
+check "--settle returns none once the window passes" 0 'o.state === "none" && /^no checks reported/.test(o.reason)'
+if [ "$(reads)" -ge 3 ] && [ "$elapsed" -lt 5 ]; then pass "--settle polls within the window ($(reads) reads, ${elapsed}s)"
+else fail "--settle read $(reads) times in ${elapsed}s"; fi
+
+checkout push-only ci.yml=push notes.md=pull_request
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json
+run --settle 30
+check "--settle returns none at once with no pull_request workflow" 0 'o.state === "none"'
+if [ "$(reads)" -eq 1 ]; then pass "no pull_request workflow means one read"; else fail "no pull_request workflow read $(reads) times"; fi
+
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json
+RUN_DIR="$W/pr-yml" run --settle 0
+check "--settle 0 reads once" 0 'o.state === "none"'
+newcase; head_is pr-view.json; checks_are 0 checks-pending.json,checks-passed.json
+RUN_DIR="$W/pr-yml" run --settle 30
+check "--settle leaves a state other than none alone" 0 'o.state === "pending"'
+if [ "$(reads)" -eq 1 ]; then pass "a pending head is read once"; else fail "a pending head was read $(reads) times"; fi
+
+newcase; printf '{"headRefOid":"%s"}\n' "$OTHER" > "$CASE/pr-view-moved.json"
+head_is pr-view.json,pr-view-moved.json; checks_are 0 checks-empty.json,checks-passed.json
+RUN_DIR="$W/pr-yml" run --settle 5
+check "--settle fails when the PR head moves mid-wait" 2 'o.error === "HEAD is not the PR head"'
+unset RUN_DIR
+
 # --- arguments ---------------------------------------------------------------------------
 args_case() {  # args_case <name> <error regex> <args...>
   local name="$1" re="$2"; shift 2
@@ -189,6 +234,8 @@ args_case "a non-hex --head is an error" '--head must be' check --pr 7 --head zz
 args_case "a --head shorter than 7 is an error" '--head must be' check --pr 7 --head 012345
 args_case "an unknown option is an error" "unknown option '--issue'" check --issue 7 --head "$HEAD"
 args_case "a flag with no value is an error" 'missing value for --head' check --pr 7 --head
+args_case "a non-numeric --settle is an error" '--settle must be' check --pr 7 --head "$HEAD" --settle 5s
+args_case "a --settle over 600 is an error" '--settle must be a whole number of seconds from 0 to 600' check --pr 7 --head "$HEAD" --settle 601
 args_case "an unknown command is an error" "unknown command 'status'" status --pr 7 --head "$HEAD"
 
 echo

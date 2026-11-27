@@ -187,8 +187,8 @@ check "files mode accepts an in-repo name that starts with '..'" "$out" 'o.chang
 # --- modes ---------------------------------------------------------------------
 R="$TMP/staged"; new_repo "$R"; put "$R" src/a.py 7; git -C "$R" add -A
 out="$(node "$CLI" classify --root "$R" --mode staged)"
-check "staged mode reviews the index and keeps the ledger" "$out" \
-  'o.changed_files.join() === "src/a.py" && o.lines_added === 7 && o.diff_cmd === "git diff --cached" && o.ledger === true'
+check "staged mode reviews the index and never writes the branch ledger" "$out" \
+  'o.changed_files.join() === "src/a.py" && o.lines_added === 7 && o.diff_cmd === "git diff --cached" && o.ledger === false'
 
 R="$TMP/files"; new_repo "$R"; put "$R" src/a.py 12; put "$R" src/lib/b.py 3; put "$R" other/c.py 1; commit "$R"
 out="$(node "$CLI" classify --root "$R" --mode files --targets src/a.py,src/lib)"

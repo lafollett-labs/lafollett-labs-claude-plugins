@@ -88,7 +88,7 @@ check "branch rejects an empty name" 1 '!o.ok && /empty/.test(o.error)'
 
 # --- commits ------------------------------------------------------------------
 run_stdin "$FIX/commits-valid.txt" commits
-check "commits accepts typed, scoped, breaking and revert subjects with no key" 0 'o.ok && o.count === 6 && o.offenders.length === 0'
+check "commits accepts typed, scoped, breaking, revert and reapply subjects with no key" 0 'o.ok && o.count === 7 && o.offenders.length === 0'
 run_stdin "$FIX/commits-mixed.txt" commits
 check "commits reports the offender count" 1 '!o.ok && o.count === 10 && o.offenders.length === 9 && o.error === "9 commit(s) don'"'"'t match Conventional Commits format"'
 check "commits names an unknown type" 1 'o.offenders.some(f => f.subject === "feature: add x" && /type `feature` is not one of/.test(f.error))'
@@ -392,6 +392,24 @@ base_in "$R" --branch -x
 check "base --branch may not start with a dash" 2 '/"-x" is not a plain branch name/.test(o.error)'
 base_in "$R" --branch feat/1-x.lock
 check "base --branch may not end in .lock" 2 '/"feat\/1-x\.lock" is not a plain branch name/.test(o.error)'
+base_in "$R" --branch 'feat/x;id'
+check "base --branch allows only letters, digits and . _ / -" 2 '/"feat\/x;id" is not a plain branch name/.test(o.error)'
+base_in "$R" --branch 'a//b'
+check "base --branch may not hold //" 2 '/"a\/\/b" is not a plain branch name/.test(o.error)'
+base_in "$R" --branch 'feat/.x'
+check "base --branch may not start a component with ." 2 '/"feat\/\.x" is not a plain branch name/.test(o.error)'
+base_in "$R" --branch 'feat/x.'
+check "base --branch may not end in ." 2 '/"feat\/x\." is not a plain branch name/.test(o.error)'
+base_in "$R" --branch 'feat/x/'
+check "base --branch may not end in /" 2 '/"feat\/x\/" is not a plain branch name/.test(o.error)'
+A255="$(printf '%255s' '' | tr ' ' a)"
+base_in "$W/origin-head" --branch "$A255"
+check "base --branch takes a 255-char name" 0 'o.base === "trunk" && o.source === "origin-head"'
+base_in "$R" --branch "${A255}a"
+check "base --branch refuses a 256-char name" 2 '/^base --branch "a{256}" is not a plain branch name$/.test(o.error)'
+gh_routes 0 '{"baseRefName":"main$(id)"}'
+base_in "$R" --pr 7
+check "base --pr rejects a ref name with shell characters" 2 'o.error === "unsafe base ref \"main$(id)\" from pr"'
 base_in "$R" --pr
 check "base flag with no value is a usage error" 2 '/need a value/.test(o.error)'
 

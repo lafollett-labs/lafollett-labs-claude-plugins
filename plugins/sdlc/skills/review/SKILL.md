@@ -309,7 +309,7 @@ Each PE assigns `in_scope` per the review type (passed as `SCOPE` in the dispatc
 | Branch Diff / Staged Diff / PR Review | lines added/modified, or functions/types/components containing changes; pre-existing issues → `in_scope=false` |
 | Specific Files / Folder / Ad-hoc | everything provided → `in_scope=true` |
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/review/references/round-state.md` and run it in order. It binds `review_file`, `output_path`, `session.ledger_path`, `session.head_sha`, `session.round_n`, `session.prior`, `session.gate1`, and `session.gate1_skip_note`, and may stop the round (an abort after a changed-code lock, a Gate 2 bounce).
+Read `${CLAUDE_PLUGIN_ROOT}/skills/review/references/round-state.md` and run it in order. It binds `review_file`, `output_path`, `session.ledger_path`, `session.head_sha`, `session.round_n`, `session.prior`, `session.gate1`, `session.skip_rounds`, and `session.gate1_skip_note`, and may stop the round (an abort after a changed-code lock, a Gate 2 bounce).
 
 ---
 
@@ -437,7 +437,7 @@ elif d == "HUMAN_GATE" or session.verdict != "✅ APPROVED":
   q = "🛑 {session.gate_status}" if d == "HUMAN_GATE" else "🟡 {len(v.gating)} gating finding(s) open (listed above)"
   AskUserQuestion → "Round {session.round_n}: {q}. How to proceed?"; options:
     (a) "remediate + re-review (recommended) — two consecutive clean rounds lock Gate 1"
-    (b) "engineer override — proceed with findings open"   # offered only when session.ledger: a Files / Folder / Ad-hoc round is never part of Gate 1
+    if session.ledger: (b) "engineer override — proceed with findings open"   # a Staged / Files / Folder / Ad-hoc round is never part of Gate 1
     (c) "abort — the round is persisted; the gate stays OPEN"
   match user_response:
     case (a): pass                                         # the engineer remediates and re-invokes
@@ -485,7 +485,7 @@ This table is the one gating definition; PE severity definitions supply rating c
 - **PE dispatch contract** — pass the diff COMMAND, never diff content (Ad-hoc pasted code is the exception: it rides in PASTED CODE); inline the PE protocol, all lenses, and the tier contract (PEs cannot resolve `${CLAUDE_PLUGIN_ROOT}` paths).
 - **One agent per matched PE per round (shardable)** — named `{pe}-r{round}-shard{n}`; lenses and passes are never dispatch units.
 - **Review depth is tier-governed** — classifier-assigned, security-floored, engineer-overridable at the banner, PE-escalatable via `tier_escalation`.
-- **Gate 1 convergence is code** — `convergence.js` records every branch round and decides LOCKED / HUMAN_GATE / CONTINUE (round cap 8 per cycle, reopen-guard 2, MEDIUM floor for data-integrity/migration/auth/secrets); it never waives a finding, and controller errors fail closed to HUMAN_GATE. Specific Files / Folder / Ad-hoc rounds never write the branch ledger.
+- **Gate 1 convergence is code** — `convergence.js` records every branch round and decides LOCKED / HUMAN_GATE / CONTINUE (round cap 8 per cycle, reopen-guard 2, MEDIUM floor for data-integrity/migration/auth/secrets); it never waives a finding, and controller errors fail closed to HUMAN_GATE. Staged Diff / Specific Files / Folder / Ad-hoc rounds never write the branch ledger.
 - **Gate 1 reviews live in the repo** — `docs/code-reviews/{key_slug}-code-review.md` and `-findings-ledger.json`, committed (those paths only) on the author's branch with an ordinary commit that CI runs on; never on the default branch, a detached HEAD, or for pasted code. **A Gate 2 round never commits or pushes**: it is the PR comment plus `gh pr review`, with the reviewer's own continuity in a local doc (review-store.md).
 - **A SHA gates by code** — two SHAs are one review target when `same_code` holds, so a review-doc commit never invalidates a lock, an approval, or a once-per-SHA comment.
 - **Gate 1 locks at 2 consecutive clean rounds**; **Gate 2 is MERGEABLE when every Gate 2 reviewer's latest GitHub review is APPROVED on code identical to the PR head and HEAD's checks passed or none reported**; an override needs mandatory pushback and is recorded by `review-file.js override`.

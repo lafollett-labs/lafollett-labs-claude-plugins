@@ -264,7 +264,7 @@ Existing branch — this ticket's branch, local first, else origin's:
 ```text
 git fetch --quiet origin                                    # a failure is fine; local refs still count
 ticket_branches(refs) = each b in refs, in order, kept only when:      # runs before any shell command sees b
-  b matches ^[A-Za-z0-9._/-]+$ and does not start with "-"        # git allows $( ), backticks, quotes and ; in names
+  b matches ^[A-Za-z0-9._/-]+$ and does not start with "-"
     (else ⚠️ {session.ticket_key}: ignoring branch with unsafe characters)
   and `node "${CLAUDE_PLUGIN_ROOT}/bin/git-conventions.js" branch` (b on stdin via a quoted heredoc)
     reports on_feature and key_slug == session.key_slug

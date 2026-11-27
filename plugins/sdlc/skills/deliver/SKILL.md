@@ -239,8 +239,8 @@ session.commits_ahead       = `git rev-list --count 'origin/{session.base}..HEAD
 session.spike_present       = (Glob("docs/spikes/" + session.key_slug + "-*.md") is non-empty)
 session.code_outside_spikes = `git diff --name-only 'origin/{session.base}...HEAD'` has any path NOT under docs/spikes/
 
-if session.implement_mode and `git rev-parse HEAD` == head_before:   # a resume or start over that stopped before committing
-  finish("✅ Done — sdlc:implement added no commits on {session.branch}{" (start over did not happen)" if start_over}; re-run sdlc:deliver {session.ticket_key} when ready")
+if `git rev-parse HEAD` == head_before:              # implement stopped before committing or switching branch
+  finish("✅ Done — sdlc:implement added no commits on {session.branch}; re-run sdlc:deliver {session.ticket_key} when ready")
 
 if session.spike_present and not session.code_outside_spikes:
   goto Phase S
@@ -456,8 +456,10 @@ invoke skill sdlc:pull-request with $ARGUMENTS = join_nonempty([("--auto" if ses
 # deliver adds no gate and re-asks nothing here.
 
 (v, ec) = `gh pr view --json number,url,state,headRefOid`   # the current branch's PR; no branch name reaches the shell
-if ec != 0 or v.state != "OPEN" or v.headRefOid != `git rev-parse HEAD`:   # no PR, or one this run never pushed to
-  finish("✅ Done — stopped before the PR: sdlc:pull-request exited without opening or updating one (see its output above)")
+if ec != 0 or v.state != "OPEN":
+  finish("✅ Done — stopped before the PR: sdlc:pull-request exited without opening one (see its output above)")
+if v.headRefOid != `git rev-parse HEAD`:
+  finish("⚠️ PR #{v.number} {v.url} is open but HEAD is not on it — push {session.branch}, then re-run sdlc:pull-request")
 session.pr_number = v.number; session.pr_url = v.url
 goto End
 ```

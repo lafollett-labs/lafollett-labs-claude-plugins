@@ -12,7 +12,7 @@ preamble on EVERY menu:
 
 each menu is ONE AskUserQuestion; the chosen option's tag sets the entry phase (→ Phase N). Default first + "(recommended)".
 an option marked [resume] sets session.implement_mode = "--resume"; one marked [start-over] sets "--start-over".
-either run ends at Phase 1 when sdlc:implement adds no commit; only a new commit goes on to review.
+every run ends at Phase 1 when sdlc:implement adds no commit; only a new commit goes on to review.
 
 Menu A — feature branch, 0 commits ahead (implement interrupted before any commit)
   AskUserQuestion → "Resume {ticket_key} — branch has no commits yet. What next?"; options:
