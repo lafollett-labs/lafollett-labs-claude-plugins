@@ -16,7 +16,7 @@ Requests a GitHub Copilot code review on a pull request, waits for Copilot to re
 ## How it works
 
 1. **Request**: asks Copilot to review the PR, unless Copilot already reviewed the current head or a request is already pending. When the Copilot review quota is exhausted it says so and stops; nothing else is affected. A rate limit (HTTP 429) or an outage (HTTP 503) is reported as an error to retry later.
-2. **Wait**: polls until Copilot's review of the current head commit appears (up to about 12 minutes).
+2. **Wait**: polls until Copilot's review of the current head commit appears (up to about 12 minutes). When Copilot posts "unable to review this pull request" instead, for exhausted quota or another reason, it says so and stops.
 3. **Judge**: rates each open Copilot thread with the `sdlc:review` severity scale and picks a disposition: `fix`, `advisory`, `defer`, `already-fixed`, `copilot-wrong` (only with a command or test that proves it), or `needs-human`.
 4. **Act**: after one confirmation it commits and pushes fixes, opens a `status:todo` issue for each deferral, replies to each thread, and resolves it. A `needs-human` thread is left open for the reviewer.
 
@@ -35,9 +35,9 @@ Under `--auto`, LOW/INFO threads are answered and resolved without asking, and t
 
 ## Script
 
-`bin/copilot-review.js` holds the mechanics (`request`, `wait`, `threads`, `reply`, `resolve`, `pushed`), prints JSON, and exits 0 on success, 1 when it stopped cleanly (quota exhausted, wait timed out), 2 on an error. Its offline suite is `bin/test/run-copilot-review-tests.sh`.
+`bin/copilot-review.js` holds the mechanics (`request`, `wait`, `threads`, `reply`, `resolve`, `pushed`), prints JSON, and exits 0 on success, 1 when it stopped cleanly (quota exhausted, Copilot refused, wait timed out), 2 on an error. Its offline suite is `bin/test/run-copilot-review-tests.sh`.
 
-The Copilot reviewer login and the coverage wording it parses are marked unverified in the script until they are checked against a live Copilot review.
+Copilot's reviewer login and review wording were checked against public Copilot reviews in November 2026. The current overview format (`ccr-overview-v2`) does not say which files Copilot reviewed, so coverage reads `unknown` unless Copilot says it cut the review short (`partial`). The older `## Pull request overview` format still parses.
 
 ## Related skills
 

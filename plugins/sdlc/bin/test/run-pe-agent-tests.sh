@@ -553,6 +553,14 @@ mutant agent-two-digit-issue-narration \
   'printf "\n- since #20 merged (a regression from #17)\n" >> agents/pe-go.md' 'pe-go: ticket narration'
 mutant agent-adjacent-issue-narration \
   'printf "\n- this reverts #20 #17\n" >> agents/pe-go.md' ':#17'
+mutant agent-glued-issue-narration \
+  'printf "\n- see ##30 and #20#17\n" >> agents/pe-go.md' ':#20'
+allowed agent-glued-issue-second \
+  'printf "\n- see ##30 and #20#17\n" >> agents/pe-go.md' ':#17'
+allowed agent-doubled-hash \
+  'printf "\n- see ##30 and #20#17\n" >> agents/pe-go.md' ':#30'
+mutant review-reference-issue-narration \
+  'printf "\n(fixed in #4321)\n" >> skills/review/references/checkout.md' 'review: ticket narration: references/'
 allowed agent-entity-and-colour \
   'printf "\n- an em dash &#8212; and the colour #5319e7\n" >> agents/pe-go.md' 'pe-go: ticket narration'
 allowed agent-placeholder-keys \

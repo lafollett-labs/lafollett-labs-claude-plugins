@@ -175,6 +175,10 @@ if [ $# -eq 0 ]; then
   if [ "$(check_ticket_history "$P")" = "$(printf 'skills/deliver/SKILL.md:%s:#%s\n' "$n" 20 "$n" 17)" ]; then
     pass "adjacent issue refs both reported as <file>:<line>:#<n>"
   else fail "adjacent issue refs not both reported as <file>:<line>:#<n>"; fi
+  seed; echo 'See ##30 and #20#17.' >> "$P/skills/deliver/SKILL.md"; out="$(check_ticket_history "$P")"
+  if [ "$(printf '%s\n' "$out" | grep -c .)" -eq 1 ] && [ "${out##*:}" = "#20" ]; then
+    pass "a doubled # and a # glued to a number are skipped; only #20 reported"
+  else fail "##30 / #20#17 reported [$out], expected one line ending :#20"; fi
   seed; echo 'Refs #42, #57, #123 and #1234 are examples.' >> "$P/skills/deliver/SKILL.md"; silent "example issues #42 #57 #123 #1234" check_ticket_history
   seed; echo 'An em dash &#8212; and the colour #5319e7.' >> "$P/skills/plan/SKILL.md"; silent "entity &#8212; and hex colour with a letter" check_ticket_history
   seed; echo 'Hash it with SHA-256 and stamp ISO-8601 dates.' >> "$P/skills/plan/SKILL.md"; silent "standard terms SHA-256 and ISO-8601" check_ticket_history

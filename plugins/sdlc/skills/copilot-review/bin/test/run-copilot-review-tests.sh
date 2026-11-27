@@ -69,7 +69,16 @@ check "  spends no quota (no POST)" "$(calls 'copilot-code-review')" 0
 stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-a.json' "$POST|0|requested.json"
 check "request --force re-requests at a reviewed head" "$(run request --pr 7 --force)" 0
 check "  status requested" "$(j .status)" requested
-check "  --force skips the reviews read" "$(calls '/reviews')" 0
+check "  --force still reads reviews, for after_review_id" "$(calls '/reviews')" 1
+check "  after_review_id is the newest Copilot review" "$(j .after_review_id)" 103
+
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-refused.json' "$POST|0|requested.json"
+check "request: a refusal at the head is not a review → exit 0" "$(run request --pr 7)" 0
+check "  status requested, after the refusal" "$(j '[.status, .after_review_id] | map(tostring) | join(",")')" "requested,120"
+
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-human.json' "$POST|0|requested.json"
+check "request: no Copilot review at all → after_review_id 0" "$(run request --pr 7)" 0
+check "  after_review_id" "$(j .after_review_id)" 0
 
 stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-human.json' "$POST|1|quota.stderr"
 check "request: 422 NO_QUOTA_REMAINING → exit 1" "$(run request --pr 7)" 1
@@ -135,6 +144,25 @@ stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-human.json'
 check "wait: a human review at head does not count" "$(run wait --pr 7 --interval 0 --timeout 0)" 1
 check "  latest_reviewed_sha is null" "$(j .latest_reviewed_sha)" null
 
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-refused.json'
+check "wait: Copilot posts a quota refusal at the head → exit 1" "$(run wait --pr 7 --interval 0 --timeout 60)" 1
+check "  status quota_exhausted, no review" "$(j '[.status, .review] | map(tostring) | join(",")')" "quota_exhausted,null"
+check "  message is the refusal sentence" "$(j .message)" "Copilot was unable to review this pull request because the user who requested the review has insufficient remaining quota"
+check "  latest_reviewed_sha skips the refusal" "$(j .latest_reviewed_sha)" "$C"
+check "  returns on the first poll" "$(calls '/reviews')" 1
+
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-refused.json'
+check "wait --after the refusal's id: it predates the request → keeps waiting" "$(run wait --pr 7 --after 120 --interval 0 --timeout 0)" 1
+check "  status timeout" "$(j .status)" timeout
+
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-refused-other.json'
+check "wait: a refusal not about quota → exit 1" "$(run wait --pr 7 --interval 0 --timeout 0)" 1
+check "  status refused" "$(j .status)" refused
+
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-old.json'
+check "wait --after not an id → exit 2" "$(run wait --pr 7 --after 12a --interval 0 --timeout 0)" 2
+check "  no gh call" "$(calls '/reviews')" 0
+
 # --- threads ---
 stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-a.json' "$USER" "$THREADS"
 check "threads → exit 0" "$(run threads --pr 7)" 0
@@ -165,6 +193,19 @@ stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-files-skipped.json' "$
 check "threads: overview lists Files not reviewed → exit 0" "$(run threads --pr 7)" 0
 check "  coverage partial true" "$(j '.coverage.partial')" true
 check "  evidence is the heading" "$(j '.coverage.evidence')" "Files not reviewed (1)"
+
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-v2.json' "$USER" "$THREADS"
+check "threads: ccr-overview-v2 overview → exit 0" "$(run threads --pr 7)" 0
+check "  coverage unknown: v2 states none" "$(j '[.coverage.partial, .coverage.evidence] | map(tostring) | join(",")')" "null,null"
+
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-v2-cut.json' "$USER" "$THREADS"
+check "threads: v2 review cut short at the tier → exit 0" "$(run threads --pr 7)" 0
+check "  coverage partial true" "$(j '.coverage.partial')" true
+check "  evidence is the cut-short sentence" "$(j '.coverage.evidence')" "Copilot was unable to complete this review at the selected tier due to model policy or plan restrictions"
+
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-refused.json' "$USER" "$THREADS"
+check "threads: the latest Copilot post is a refusal → exit 0" "$(run threads --pr 7)" 0
+check "  review is the last real one, not the refusal" "$(j '[.review.id, .reviewed_head] | map(tostring) | join(",")')" "102,false"
 
 stub "$PRB" '^api --paginate .*/pulls/7/reviews|0|reviews-a.json' "$USER" "$THREADS"
 check "threads after a push → exit 0" "$(run threads --pr 7)" 0
@@ -217,6 +258,10 @@ stub 'resolveReviewThread|0|graphql-errors.json'
 check "resolve: GraphQL error → exit 2" "$(run resolve --thread PRRT_gone)" 2
 
 # --- pushed ---
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-refused.json'
+check "pushed: a refusal at the head is not a review of it" "$(run pushed --pr 7 --head "$A")" 0
+check "  reviewed_sha is the last real review's" "$(j '[.reviewed_sha, .moved] | map(tostring) | join(",")')" "$C,true"
+
 stub "$PRB" '^api --paginate .*/pulls/7/reviews|0|reviews-a.json'
 check "pushed: PR head is local HEAD, past Copilot's review → exit 0" "$(run pushed --pr 7 --head "$B")" 0
 check "  pushed true, moved true" "$(j '[.pushed, .moved] | map(tostring) | join(",")')" "true,true"

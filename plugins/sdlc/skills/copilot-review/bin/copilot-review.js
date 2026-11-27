@@ -7,24 +7,31 @@
  *
  * Usage:
  *   node copilot-review.js request --pr <N> [--effort <level>] [--force]
- *   node copilot-review.js wait    --pr <N> [--head <sha>] [--timeout <s>] [--interval <s>]
+ *   node copilot-review.js wait    --pr <N> [--head <sha>] [--after <review id>] [--timeout <s>] [--interval <s>]
  *   node copilot-review.js threads --pr <N>
  *   node copilot-review.js reply   --thread <id> --body-file <path>
  *   node copilot-review.js resolve --thread <id>
  *   node copilot-review.js pushed  --pr <N> [--head <sha>]
  *
- * request  { status: requested | pending | already_reviewed | quota_exhausted, pr, head_sha, review_id?, message? }
+ * request  { status: requested | pending | already_reviewed | quota_exhausted, pr, head_sha, review_id?, after_review_id?,
+ *            message? }
  *          requested: HTTP 201, a review is queued · pending: HTTP 409, a request is already pending (no quota spent)
+ *          after_review_id (requested, pending): the newest Copilot review id at request time (0 if none); pass it
+ *          to wait --after
  *          already_reviewed: Copilot has a review at the PR head (review_id); nothing is requested (unless --force)
  *          quota_exhausted: the request was refused for quota (HTTP 422, NO_QUOTA_REMAINING or a quota message)
  *          HTTP 429 (rate limited) and 503 (unavailable) are errors that say to retry later
- * wait     { status: complete | timeout, pr, head_sha, review | null, latest_reviewed_sha, waited_s }
+ * wait     { status: complete | quota_exhausted | refused | timeout, pr, head_sha, review | null, latest_reviewed_sha,
+ *            waited_s, message? }
  *          complete when a Copilot review's commit_id is the head (--head, default the PR head at start)
+ *          quota_exhausted | refused: Copilot posted "unable to review" at the head (id > --after, default 0)
+ *          instead of a review; message is its sentence. Such posts never count as reviews in any command.
  * threads  { pr, head_sha, head_branch, base_branch, review, reviewed_head, coverage, local, threads }
  *          review   = Copilot's latest review { id, commit_id, state, submitted_at, body } | null
  *          coverage = { reviewed, total, partial, evidence } parsed from that review's body; partial is true when
- *                     Copilot reviewed fewer files than changed or lists "Files not reviewed", false when it reviewed
- *                     them all, null when the body states neither (or there is no review)
+ *                     Copilot reviewed fewer files than changed, lists "Files not reviewed" or says it could not
+ *                     complete the review, false when it reviewed them all, null when the body states none of these
+ *                     (the ccr-overview-v2 format never states coverage) or there is no review
  *          local    = { branch, head, on_pr }: on_pr = this checkout is the PR's head branch at the PR head
  *          threads  = review threads Copilot started (resolved ones included):
  *                     { thread_id, comment_id, path, line, resolved, outdated, commented_sha, current_head,
@@ -36,22 +43,26 @@
  *
  * gh is process.env.SDLC_GH || 'gh'; each call is killed after SDLC_GH_TIMEOUT_MS (default 60000).
  * Exit codes: 0 ok (request: requested | pending | already_reviewed) · 1 stopped cleanly (request: quota_exhausted;
- *             wait: timeout) · 2 error, { error } on stdout.
+ *             wait: quota_exhausted | refused | timeout) · 2 error, { error } on stdout.
  */
 'use strict';
 
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 
-// UNVERIFIED until a live Copilot review runs (quota resets ~Dec 1): REST reports the bot as
-// "copilot-pull-request-reviewer[bot]", GraphQL as "copilot-pull-request-reviewer". Any Bot whose login starts
-// "copilot" also counts, in case the login differs.
+// Checked against public Copilot reviews (2026-11): REST reports the bot as "copilot-pull-request-reviewer[bot]",
+// type Bot; GraphQL drops "[bot]". Any Bot whose login starts "copilot" also counts.
 const COPILOT_LOGIN = /^copilot-pull-request-reviewer(\[bot\])?$/;
 const COPILOT_BOT = /^copilot/i;
-// UNVERIFIED: Copilot's review body wording, e.g. "Copilot reviewed 3 out of 4 changed files in this pull request"
-// and a "Files not reviewed (1)" summary.
+// Review body wording, checked against public Copilot reviews (2026-11). The "## Pull request overview" format states
+// coverage ("Copilot reviewed 3 out of 4 changed files…", "Files not reviewed (1)"); the "ccr-overview-v2" format
+// states none, only "Copilot was unable to complete this review at the selected tier…" when it cut a review short.
 const COVERAGE = /Copilot reviewed (\d+) out of (\d+) changed files[^.\n]*/i;
 const NOT_REVIEWED = /Files not reviewed[^<\n]*/i;
+const CUT_SHORT = /Copilot was unable to complete this review[^.<\n]*/i;
+// What Copilot posts as a COMMENTED review when it reviewed nothing, e.g. "…because the user who requested the
+// review has insufficient remaining quota" or "…has reached their quota limit".
+const REFUSED = /Copilot was unable to review this pull request[^.<\n]*/i;
 const QUOTA = /NO_QUOTA_REMAINING|\bquota\b/i;
 const SUGGESTION = /```suggestion[^\n]*\n([\s\S]*?)\n```/;
 const SHA = /^[0-9a-f]{40}$/;
@@ -63,7 +74,7 @@ class CopilotError extends Error {}
 
 const COMMAND_OPTS = {
   request: { values: ['pr', 'effort'], flags: ['force'], pr: true },
-  wait: { values: ['pr', 'head', 'timeout', 'interval'], flags: [], pr: true },
+  wait: { values: ['pr', 'head', 'after', 'timeout', 'interval'], flags: [], pr: true },
   threads: { values: ['pr'], flags: [], pr: true },
   reply: { values: ['thread', 'body-file'], flags: [], pr: false },
   resolve: { values: ['thread'], flags: [], pr: false },
@@ -186,7 +197,9 @@ function reviews(pr) {
 // actor: a REST user { login, type } or a GraphQL author { login, __typename }
 const isCopilot = (actor) => Boolean(actor) && (COPILOT_LOGIN.test(actor.login || '')
   || ((actor.type || actor.__typename) === 'Bot' && COPILOT_BOT.test(actor.login || '')));
-const copilotReviews = (list) => list.filter((r) => r && isCopilot(r.user));
+const copilotReviews = (list) => list.filter((r) => r && isCopilot(r.user));   // refusals included
+const refused = (r) => REFUSED.test(r.body || '');
+const realReviews = (list) => copilotReviews(list).filter((r) => !refused(r));
 const latest = (list) => (list.length ? list[list.length - 1] : null); // the API lists reviews oldest first
 
 function reviewSummary(r) {
@@ -197,10 +210,11 @@ function coverage(review) {
   const body = review ? review.body || '' : '';
   const m = body.match(COVERAGE);
   const skipped = body.match(NOT_REVIEWED);
+  const cut = body.match(CUT_SHORT);
   const reviewed = m ? Number(m[1]) : null;
   const total = m ? Number(m[2]) : null;
-  const partial = skipped || (m && reviewed < total) ? true : m ? false : null;
-  const evidence = [m && m[0].trim(), skipped && skipped[0].trim()].filter(Boolean).join('; ') || null;
+  const partial = skipped || cut || (m && reviewed < total) ? true : m ? false : null;
+  const evidence = [m, skipped, cut].filter(Boolean).map((x) => x[0].trim()).join('; ') || null;
   return { reviewed, total, partial, evidence };
 }
 
@@ -223,21 +237,23 @@ function graphql(fields, label) {
 
 function requestCmd(pr, opts) {
   const head = prView(pr, 'headRefOid').headRefOid;
+  const mine = copilotReviews(reviews(pr));
   if (!opts.force) {
-    const at = copilotReviews(reviews(pr)).filter((r) => r.commit_id === head);
+    const at = mine.filter((r) => !refused(r) && r.commit_id === head);
     if (at.length) return { code: 0, body: { status: 'already_reviewed', pr: Number(pr), head_sha: head, review_id: latest(at).id } };
   }
+  const after = mine.reduce((n, r) => (Number.isSafeInteger(r.id) && r.id > n ? r.id : n), 0);
   const args = ['api', '-X', 'POST', `repos/{owner}/{repo}/pulls/${pr}/copilot-code-review`];
   if (opts.effort) args.push('-f', `review_effort=${opts.effort}`);
   const r = ghRun(args, 'api copilot-code-review');
-  if (r.status === 0) return { code: 0, body: { status: 'requested', pr: Number(pr), head_sha: head } };
+  if (r.status === 0) return { code: 0, body: { status: 'requested', pr: Number(pr), head_sha: head, after_review_id: after } };
   const text = `${r.stderr}\n${r.stdout}`;
   if (/NO_QUOTA_REMAINING/.test(text) || (/HTTP 422/.test(text) && QUOTA.test(text))) {
     const line = text.split('\n').find((l) => QUOTA.test(l)) || '';
     return { code: 1, body: { status: 'quota_exhausted', pr: Number(pr), head_sha: head, message: line.trim() } };
   }
   if (/HTTP 409/.test(text) || /REQUEST_CONFLICT/.test(text)) {
-    return { code: 0, body: { status: 'pending', pr: Number(pr), head_sha: head } };
+    return { code: 0, body: { status: 'pending', pr: Number(pr), head_sha: head, after_review_id: after } };
   }
   if (/HTTP 429/.test(text) || /RATE_LIMITED/.test(text)) {
     throw new CopilotError(`Copilot review request rate limited (HTTP 429); retry later: ${firstLine(r.stderr) || firstLine(r.stdout)}`);
@@ -262,15 +278,23 @@ function sleep(s) {
 function waitCmd(pr, opts) {
   const timeout = seconds(opts, 'timeout', 600);
   const interval = seconds(opts, 'interval', 30);
+  if (opts.after !== undefined && !/^(0|[1-9][0-9]*)$/.test(opts.after)) throw new CopilotError('--after must be a review id (a non-negative integer)');
+  const after = Number(opts.after || 0);
   const head = opts.head || prView(pr, 'headRefOid').headRefOid;
   const start = Date.now();
   for (;;) {
     const mine = copilotReviews(reviews(pr));
+    const real = mine.filter((r) => !refused(r));
     const waited = Math.round((Date.now() - start) / 1000);
-    const at = mine.filter((r) => r.commit_id === head);
-    const last = latest(mine);
+    const at = real.filter((r) => r.commit_id === head);
+    const last = latest(real);
     const base = { pr: Number(pr), head_sha: head, latest_reviewed_sha: last ? last.commit_id || null : null, waited_s: waited };
     if (at.length) return { code: 0, body: { status: 'complete', ...base, review: reviewSummary(latest(at)) } };
+    const no = latest(mine.filter((r) => refused(r) && r.commit_id === head && Number(r.id) > after));
+    if (no) {
+      const message = no.body.match(REFUSED)[0].trim();
+      return { code: 1, body: { status: QUOTA.test(message) ? 'quota_exhausted' : 'refused', ...base, review: null, message } };
+    }
     if ((Date.now() - start) / 1000 >= timeout) return { code: 1, body: { status: 'timeout', ...base, review: null } };
     process.stderr.write(`copilot-review: waiting for Copilot on #${pr} at ${head.slice(0, 7)} (${waited}s)\n`);
     sleep(interval);
@@ -303,7 +327,7 @@ function normaliseThread(t, head, me) {
 function threadsCmd(pr) {
   const view = prView(pr, 'number,headRefOid,headRefName,baseRefName,state');
   const head = view.headRefOid;
-  const review = latest(copilotReviews(reviews(pr)));
+  const review = latest(realReviews(reviews(pr)));
   const me = firstLine(ghOk(['api', 'user', '--jq', '.login'], 'api user')) || null;
   const pages = graphql(['--paginate', '-F', 'owner={owner}', '-F', 'repo={repo}', '-F', `number=${pr}`,
     '-f', `query=${THREADS_QUERY}`], 'api graphql reviewThreads');
@@ -356,7 +380,7 @@ function pushedCmd(pr, opts) {
   const head = opts.head || gitOut(['rev-parse', '--verify', '-q', 'HEAD']);
   if (!head) throw new CopilotError('pushed: no local HEAD commit (pass --head)');
   const prHead = prView(pr, 'headRefOid').headRefOid;
-  const last = latest(copilotReviews(reviews(pr)));
+  const last = latest(realReviews(reviews(pr)));
   const reviewed = last ? last.commit_id || null : null;
   const moved = reviewed !== prHead;
   return { code: 0, body: { pushed: moved && prHead === head, moved, head, pr_head: prHead, reviewed_sha: reviewed } };

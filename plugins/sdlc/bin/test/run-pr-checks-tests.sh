@@ -209,6 +209,11 @@ check "--settle returns none at once with no pull_request workflow" 0 'o.state =
 if [ "$(reads)" -eq 1 ]; then pass "no pull_request workflow means one read"; else fail "no pull_request workflow read $(reads) times"; fi
 
 newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json
+run --settle 600
+check "--settle 600, the maximum, is accepted" 0 'o.state === "none"'
+if [ "$(reads)" -eq 1 ]; then pass "--settle 600 with no pull_request workflow means one read"; else fail "--settle 600 read $(reads) times"; fi
+
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json
 RUN_DIR="$W/pr-yml" run --settle 0
 check "--settle 0 reads once" 0 'o.state === "none"'
 newcase; head_is pr-view.json; checks_are 0 checks-pending.json,checks-passed.json

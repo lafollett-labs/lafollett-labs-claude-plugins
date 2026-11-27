@@ -33,9 +33,11 @@ loop:
   if exit 1: report "Copilot review quota exhausted — {q.message}"; finish with status = quota_exhausted
   if exit 2: report "Copilot review request failed: {q.error}"; finish with status = error
   repeat up to 3 times:                          # ~12 min in all, each call inside the Bash tool limit
-    w = CLI wait --pr <N> --head <q.head_sha> --timeout 240     # Bash timeout 420000 ms; progress on stderr
+    w = CLI wait --pr <N> --head <q.head_sha> --after <q.after_review_id or 0> --timeout 240   # Bash timeout 420000 ms
     if exit 2, killed, or no JSON: report "Copilot wait failed: <error>"; finish with status = error
-    if w.status == complete: break
+    if w.status != timeout: break
+  if w.status == quota_exhausted: report "Copilot review quota exhausted — {w.message}"; finish with status = quota_exhausted
+  if w.status == refused: report "Copilot did not review #<N>: {w.message}"; finish with status = error
   if w.status != complete:
     report "Copilot review not posted yet — run `/sdlc:copilot-review #<N>` later."; finish with status = timeout
   d = CLI threads --pr <N>
