@@ -22,6 +22,8 @@
 #   RELEASE_BRANCH       release PR head branch (default release/next)
 #   RELEASE_GH           gh binary (default gh)
 #   RELEASE_CI_WORKFLOW  workflow dispatched on the release branch (default ci.yml); "" skips
+#   RELEASE_WORKFLOW     this workflow's file; the commit that added it anchors the first seed
+#                        (default .github/workflows/release.yml)
 #   RELEASE_MERGE_WAIT   seconds to wait for the release PR to merge (default 600); 0 skips
 #   RELEASE_MERGE_POLL   seconds between polls (default 20)
 #   RELEASE_DATE         changelog date (default: today, UTC)
@@ -36,6 +38,7 @@ MAIN="${RELEASE_MAIN_REF:-main}"
 BRANCH="${RELEASE_BRANCH:-release/next}"
 GH="${RELEASE_GH:-gh}"
 CI_WORKFLOW="${RELEASE_CI_WORKFLOW-ci.yml}"
+WORKFLOW="${RELEASE_WORKFLOW:-.github/workflows/release.yml}"
 WAIT="${RELEASE_MERGE_WAIT:-600}"
 POLL="${RELEASE_MERGE_POLL:-20}"
 TODAY="${RELEASE_DATE:-$(date -u +%Y-%m-%d)}"
@@ -72,8 +75,8 @@ fetch_state() {
 
 newest_tag() { git tag -l "${TAG_PREFIX}[0-9]*" --sort=-v:refname | head -n 1; }
 
-# GitHub refuses a workflow token any ref (git push or REST API) on a commit whose .github/workflows
-# differs from the default branch's: that needs the workflows permission, which GITHUB_TOKEN cannot get.
+# GitHub refused this token a new tag (REST, HTTP 403, run 45939130910) on a commit whose
+# .github/workflows differs from main's; GITHUB_TOKEN cannot get the workflows permission.
 same_workflows() { git diff --quiet "$1" "$MAIN_SHA" -- .github/workflows; }
 
 # by_hand <tag> <sha>: the command a maintainer runs to create the tag this token may not.
@@ -90,20 +93,22 @@ create_tag() {
   git tag "$1" "$2" || die "failed to create local tag $1"
 }
 
-# First run: seed the baseline at the first parent of the merge that activated this workflow, so
-# that merge's own change is the first thing stamped and history before it is never re-released.
-# If that parent's workflows differ from main's, the token may not tag it: seed on main itself when
-# that skips no release, else stop for a human.
+# First run: seed the baseline at the parent of the commit that added this workflow, so that
+# commit's own change is the first thing stamped and history before it is never re-released.
+# Every first run picks the same parent. When the token may not tag it, seed on main itself if
+# nothing since the parent releases, else stop for a human.
 seed_baseline() {
-  local seed v tag
-  seed="$(git rev-parse -q --verify "$MAIN_SHA^1")" || die "cannot seed: $MAIN has no first parent"
-  git show "$seed:$MARKETPLACE" > "$WORK/seed.json" 2>/dev/null || die "no $MARKETPLACE at $MAIN^1"
+  local act seed v tag
+  act="$(git log -1 --format=%H --diff-filter=A "$MAIN_SHA" -- "$WORKFLOW")"
+  [ -n "$act" ] || die "cannot seed: no commit on $MAIN adds $WORKFLOW"
+  seed="$(git rev-parse -q --verify "$act^1")" || die "cannot seed: $act, which adds $WORKFLOW, has no parent"
+  git show "$seed:$MARKETPLACE" > "$WORK/seed.json" 2>/dev/null || die "no $MARKETPLACE at $seed"
   v="$(engine read-version "$WORK/seed.json")" || die "cannot read the seed marketplace version"
   tag="$TAG_PREFIX$v"
   if ! same_workflows "$seed"; then
     plan "$seed"
-    if releases; then die "cannot seed $tag at $MAIN^1 ($seed): its .github/workflows differs from $MAIN's, and seeding on $MAIN would skip releasing its changes; $(by_hand "$tag" "$seed")"; fi
-    seed="$MAIN_SHA"   # it changed no plugin or marketplace entry, so the version is the same
+    if releases; then die "cannot seed $tag at $seed, the parent of $act: its .github/workflows differs from $MAIN's, and seeding on $MAIN would skip releasing what followed; $(by_hand "$tag" "$seed")"; fi
+    seed="$MAIN_SHA"   # nothing since the parent releases, so the version is the same
   fi
   create_tag "$tag" "$seed"
   log "first run: seeded baseline $tag at $seed"
