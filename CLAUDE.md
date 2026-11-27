@@ -29,7 +29,7 @@ Optional: `git config core.hooksPath scripts/hooks` runs gitleaks on each commit
 ### Versions and changelog — HARD RULE
 
 Never edit an existing `version` in a plugin.json or marketplace.json, or CHANGELOG.md. The release workflow writes all three after merge, and CI fails a version edit.
-Title every PR as a conventional commit; a single-commit PR's commit must release at the title's level (same type, `!` and `BREAKING CHANGE:` footer). CI fails the PR otherwise.
+Title every PR as a conventional commit; a single-commit PR's commit must be one too, at the title's level (same type, `!` and `BREAKING CHANGE:` footer). CI fails the PR otherwise.
 Check before pushing: `bash scripts/ci/check-pr.sh origin/main HEAD` (`upstream/main` in a fork).
 
 ```

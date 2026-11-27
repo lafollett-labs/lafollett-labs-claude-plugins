@@ -18,7 +18,8 @@ version a branch writes. After a PR merges, the release workflow bumps each plug
 its squash subject (`feat` minor, `fix`/`chore`/… patch, `!` or a `BREAKING CHANGE:` footer in a
 commit message major), bumps the marketplace, folds the fragments into `CHANGELOG.md`, and tags the
 release. CI fails a PR that edits a version, changes a plugin without a fragment, or has a
-non-conventional title, or whose only commit's message releases at another level than the title.
+non-conventional title. A one-commit PR also fails when that commit's subject is not conventional or
+its message releases at another level than the title.
 Check before pushing: `bash scripts/ci/check-pr.sh origin/main HEAD` (`upstream/main` in a fork).
 
 Optional local hooks: `git config core.hooksPath scripts/hooks` runs gitleaks v8.19+ on the staged

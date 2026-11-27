@@ -112,7 +112,7 @@ reconcile() {
     # Only the release workflow's squash carries the Base: trailer; a look-alike subject is a plain commit.
     built_on="$(git log -1 --format=%b "$sha" | sed -n 's/^Base: \([0-9a-f]\{40\}\)$/\1/p' | head -n 1)"
     if [ -z "$built_on" ]; then
-      echo "::warning::$sha is titled like a release but has no Base: trailer, so it is not tagged"
+      echo "::warning::$sha is titled like a release but has no Base: trailer, so it is not tagged. If it is the release PR's squash, release it by hand (gh release create $TAG_PREFIX$v --target $sha), or the next stamp bumps its plugins again"
       continue
     fi
     git show "$sha:$MARKETPLACE" > "$WORK/at.json" 2>/dev/null || die "no $MARKETPLACE at $sha"
@@ -236,7 +236,8 @@ fi
   cat "$WORK/entry.md"
   echo
   echo "Merging tags \`$TAG\` and publishes its GitHub Release. Edit nothing here: the next merge to"
-  echo "\`$MAIN\` regenerates this branch."
+  echo "\`$MAIN\` regenerates this branch. Merge it without editing the squash message: its \`Base:\`"
+  echo "trailer marks the release, and a release squash without one is not tagged."
 } > "$WORK/body.md"
 
 PR="$(open_pr "$TITLE" "$WORK/body.md")" || exit 1

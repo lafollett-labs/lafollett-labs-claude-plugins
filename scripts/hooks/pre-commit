@@ -5,6 +5,8 @@
 # is refused. Only CI checks the allow-list's shape. commit-msg scans the message. Enable once per clone:
 #   git config core.hooksPath scripts/hooks
 #   git config labs.denylistScan /path/to/private/scan.sh   # optional; never commit that file
+# The scanner gets two files and must exit non-zero on a hit; when it prints file:line for each hit,
+# the hook names the staged path or the path:line of the added line.
 set -u
 rc=0
 hint="gitleaks git --pre-commit --staged --redact --ignore-gitleaks-allow ."
@@ -34,16 +36,27 @@ case $? in
 esac
 if [ -n "$scan" ]; then
   [ -x "$scan" ] || { echo "pre-commit: labs.denylistScan is set but $scan is missing or not executable" >&2; exit 1; }
-  staged="$(mktemp)"
-  trap 'rm -f "$staged"' EXIT
-  { git -c core.quotePath=false diff --cached --name-only --no-renames --diff-filter=d
-    git diff --cached -U0 --no-color --no-ext-diff --no-renames \
-      | awk '/^diff --git /{h=1} /^@@/{h=0; next} !h && /^\+/{print substr($0, 2)}'
-  } > "$staged"
-  # The scanner's file:line output would name this temp file, so it is dropped; the hint locates a hit.
-  if ! "$scan" "$staged" /dev/null >/dev/null; then
+  paths="$(mktemp)"
+  lines="$(mktemp)"
+  where="$(mktemp)"
+  out="$(mktemp)"
+  trap 'rm -f "$paths" "$lines" "$where" "$out"' EXIT
+  git -c core.quotePath=false diff --cached --name-only --no-renames --diff-filter=d > "$paths"
+  # Each added line goes to $lines, and its path:line to the same line of $where.
+  git -c core.quotePath=false diff --cached -U0 --no-color --no-ext-diff --no-renames --src-prefix=a/ --dst-prefix=b/ \
+    | awk -v where="$where" '
+        /^diff --git / { h = 1; next }
+        h && /^\+\+\+ / { f = substr($0, 5); if (f ~ /^"/) f = substr(f, 2, length(f) - 2); sub(/^b\//, "", f); next }
+        /^@@/ { h = 0; split($3, a, ","); n = substr(a[1], 2) + 0; next }
+        !h && /^\+/ { print substr($0, 2); print f ":" n > where; n++ }' > "$lines"
+  if ! "$scan" "$paths" "$lines" > "$out"; then
     echo "pre-commit: private denylist hit in the staged paths or added lines" >&2
-    printf '  locate: git diff --cached --name-only --diff-filter=d -z | xargs -0 %q /dev/null\n' "$scan" >&2
+    awk -v paths="$paths" -v lines="$lines" -v where="$where" '
+      BEGIN { while ((getline l < paths) > 0) p[++np] = l; while ((getline l < where) > 0) w[++nw] = l }
+      index($0, paths ":") == 1 { n = substr($0, length(paths) + 2) + 0; if (n in p) { print "  staged path: " p[n]; hit = 1 } }
+      index($0, lines ":") == 1 { n = substr($0, length(lines) + 2) + 0; if (n in w) { print "  added line:  " w[n]; hit = 1 } }
+      END { exit !hit }' "$out" >&2 \
+      || printf '  locate: cd %q && git diff --cached --name-only --diff-filter=d -z | xargs -0 %q /dev/null\n' "$PWD" "$scan" >&2
     rc=1
   fi
 fi

@@ -3,13 +3,13 @@
 # Each [[allowlists]] entry clears ONE known-safe value in ONE file:
 #   description  why the value is safe (required)
 #   condition    "AND" — the path AND the value must both match
-#   paths        exactly one file, anchored (no directory globs)
-#   regexes      ONE pattern on one line: ^, then 8+ literal characters (escape punctuation as \.),
-#                then an optional $; the exact line (regexTarget = "line") or value (regexTarget = "secret")
-# scripts/ci/security/secret-scan.sh refuses any other shape: a .gitleaksignore file, stopwords, an
-# allow-list outside a top-level [[allowlists]] table (legacy, per-rule, dotted key or inline),
-# disabledRules, and any [extend] key but useDefault = true.
-# Inline gitleaks:allow comments are ignored.
+#   paths        exactly one file: ^, literal characters (\. for a dot), $
+#   regexes      exactly one value: ^, 8+ literal characters (escape punctuation, e.g. \.), $; the
+#                whole line (regexTarget = "line") or the detected secret (regexTarget = "secret")
+# [extend] stays exactly useDefault = true. scripts/ci/security/check-allowlist.py parses this file and
+# refuses anything else: other keys or tables ([[rules]], stopwords, disabledRules, a legacy
+# [allowlist], a second config), in any TOML spelling. A .gitleaksignore file is refused, and inline
+# gitleaks:allow comments are ignored.
 
 [extend]
 useDefault = true

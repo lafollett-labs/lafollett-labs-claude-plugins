@@ -5,8 +5,8 @@
 # skipped. With no usable base (empty, all zeros on a first push, or absent from the clone) it scans the
 # whole working tree, so a run never passes without a scan.
 #
-# .gitleaks.toml is the only allow-list. Before scanning, the script refuses (exit 2) the allow-list
-# shapes checked below and any .gitleaksignore file; inline gitleaks:allow comments are ignored.
+# .gitleaks.toml is the only allow-list. Before scanning, the script refuses (exit 2) a config that
+# check-allowlist.py rejects and any .gitleaksignore file; inline gitleaks:allow comments are ignored.
 # Exit: gitleaks' status (0 clean, 1 finding), or 2 when the inputs or the allow-list are invalid.
 set -u
 
@@ -15,67 +15,23 @@ zero=0000000000000000000000000000000000000000
 before="${SCAN_BASE:-}"
 head="${SCAN_HEAD:-}"
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 die() { echo "secret-scan: $1" >&2; exit 2; }
 
 [ -n "$head" ] || die "missing SCAN_HEAD"
 case "$head$before" in *[!0-9a-f]*) die "SCAN_BASE and SCAN_HEAD must be commit SHAs" ;; esac
 [ -f "$config" ] || die "missing gitleaks config $config"
 
-# Every [[allowlists]] entry: a description, condition = "AND", one exact value (a single regex: ^, then
-# at least 8 literal or backslash-escaped punctuation characters, then an optional $; no stopwords), and
-# exactly one anchored single-file path on the `paths =` line. [extend] may only set useDefault = true
-# (no second config). No other allow-list form (legacy or per-rule tables, dotted keys, inline arrays),
-# and no disabled default rule.
-problems="$(awk -v q="'" \
-  -v LIT='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_=:/ ,@%&~#"<>!;-' \
-  -v PUNCT='.[](){}*+?|^$/-' '
-  function flush() {
-    if (!inblock) return
-    if (!desc)       print "entry at line " start ": no description"
-    if (!cond)       print "entry at line " start ": condition must be \"AND\""
-    if (!val)        print "entry at line " start ": no exact value (one regexes pattern)"
-    if (paths != 1)  print "entry at line " start ": needs exactly one paths line naming one anchored file"
-  }
-  /^[[:space:]]*#/ { next }
-  /^[[:space:]]*$/ { next }
-  {
-    key = $0; sub(/=.*/, "", key)
-    if (tolower(key) ~ /allowlist/ && $0 !~ /^[[:space:]]*\[\[allowlists\]\][[:space:]]*(#.*)?$/)
-      print "line " NR ": an allow-list outside a top-level [[allowlists]] table is not allowed"
-    if (key ~ /^[[:space:]]*"?extend"?[[:space:]]*\./)
-      print "line " NR ": a dotted extend key is not allowed"
-  }
-  /^[[:space:]]*disabledRules[[:space:]]*=/ { print "line " NR ": disabling default rules is not allowed" }
-  /^[[:space:]]*\[extend\][[:space:]]*(#.*)?$/ { flush(); inblock = 0; inextend = 1; next }
-  /^[[:space:]]*\[\[allowlists\]\]/ { flush(); inextend = 0; inblock = 1; desc = cond = val = paths = 0; start = NR; next }
-  /^[[:space:]]*\[/ { flush(); inblock = 0; inextend = 0; next }
-  inextend && $0 !~ /^[[:space:]]*useDefault[[:space:]]*=[[:space:]]*true[[:space:]]*(#.*)?$/ {
-    print "line " NR ": [extend] may only set useDefault = true"
-  }
-  inblock && /^[[:space:]]*description[[:space:]]*=[[:space:]]*"[^"]+"/ { desc = 1 }
-  inblock && /^[[:space:]]*condition[[:space:]]*=[[:space:]]*"AND"[[:space:]]*$/ { cond = 1 }
-  inblock && /^[[:space:]]*stopwords[[:space:]]*=/ { print "entry at line " start ": stopwords are not allowed; use one exact regex" }
-  inblock && /^[[:space:]]*regexes[[:space:]]*=/ {
-    one = "^[[:space:]]*regexes[[:space:]]*=[[:space:]]*\\[" q q q "\\^[^" q "]+" q q q "\\][[:space:]]*$"
-    pat = $0; sub("^[^" q "]*" q q q, "", pat); sub(q q q ".*$", "", pat)
-    ok = 1; n = 0                              # after ^: literal chars, or \ + punctuation; a last bare $ anchors
-    for (i = 2; i <= length(pat); i++) {
-      ch = substr(pat, i, 1)
-      if (ch == "\\") { i++; ch = substr(pat, i, 1); if (ch == "" || index(PUNCT, ch) == 0) ok = 0 }
-      else if (ch == "$" && i == length(pat)) continue
-      else if (index(LIT, ch) == 0) ok = 0
-      n++
-    }
-    if ($0 ~ one && ok && n >= 8) val = 1
-    else print "entry at line " start ": regexes must be one pattern: ^, 8+ literal characters (escape punctuation), optional $"
-  }
-  inblock && /^[[:space:]]*paths[[:space:]]*=/ {
-    one = "^[[:space:]]*paths[[:space:]]*=[[:space:]]*\\[" q q q "\\^[A-Za-z0-9_./\\\\-]+[$]" q q q "\\][[:space:]]*$"
-    if ($0 ~ one) paths++; else paths += 2
-  }
-  END { flush() }' "$config")"
-[ -z "$problems" ] || die "$config allow-list is broader than one exact value in one file:
-$problems"
+# The allow-list shape (one exact value in one exact file, no rules, [extend] only useDefault = true)
+# is checked on the parsed TOML by check-allowlist.py, so no spelling of a key gets past it.
+command -v python3 >/dev/null 2>&1 || die "python3 (3.11+) is required to check $config"
+problems="$(python3 "$HERE/check-allowlist.py" "$config" 2>&1)"
+case $? in
+  0) ;;
+  1) die "$config is outside the allowed shape (one exact value in one exact file; see check-allowlist.py):
+$problems" ;;
+  *) die "cannot check $config: $problems" ;;
+esac
 
 ignorefiles="$(find . -name .gitleaksignore -not -path './.git/*' 2>/dev/null)"
 [ -z "$ignorefiles" ] || die "remove the .gitleaksignore file(s); allow-list in $config instead: $ignorefiles"
