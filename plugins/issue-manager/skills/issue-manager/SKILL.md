@@ -1,9 +1,11 @@
 ---
 name: issue-manager
-description: Use when creating GitHub Issues (Epics, Stories, Tasks, Bugs), reviewing issue quality, or converting ADRs into Epics. Enforces intent-over-implementation — issues define WHAT and WHY, never HOW.
+description: DEPRECATED, use sdlc:plan. Use when creating GitHub Issues (Epics, Stories, Tasks, Bugs), reviewing issue quality, or converting ADRs into Epics. Enforces intent-over-implementation — issues define WHAT and WHY, never HOW.
 ---
 
 # Issue Manager
+
+Deprecated: if the `sdlc` plugin is installed, use `sdlc:plan` instead and stop here.
 
 Create and manage GitHub Issues with intent-focused templates. All issues follow the Intent Officer model: define intent and outcomes, engineers decide implementation.
 

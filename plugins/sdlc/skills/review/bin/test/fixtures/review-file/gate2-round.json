@@ -1,0 +1,44 @@
+{
+  "name": "42",
+  "branch": "feat/42-login-lockout",
+  "title": "Lock an account after repeated failed logins",
+  "date": "2026-10-13",
+  "pr": { "number": 7, "url": "https://github.com/octo-org/octo-repo/pull/7", "author": "octocat" },
+  "reviewer": "hubot",
+  "agents": [
+    { "pe": "pe-go", "model": "opus", "tier": "DEEP" },
+    { "pe": "pe-vue", "model": "opus", "tier": "STANDARD" }
+  ],
+  "head_sha": "5d6e7f8",
+  "gate_status": "MERGEABLE — all Gate 2 reviewers approved on current HEAD",
+  "tier": "STANDARD",
+  "tier_source": "classifier",
+  "model_by_tier": true,
+  "model_by_tier_source": "CLI flag",
+  "deep_guard_note": "DEEP guard: engineer confirmed",
+  "tier_escalations": [
+    { "pe": "pe-go", "from": "STANDARD", "to": "DEEP", "justification": "the limiter is shared by the API and the worker" }
+  ],
+  "routing_rationale": ["web/src/components/LoginForm.vue → pe-vue (content: lockout message)"],
+  "convergence_reasons": ["peer round recorded; Gate 1 streak unaffected"],
+  "files_changed": 3,
+  "lines_added": 124,
+  "lines_removed": 9,
+  "summary": "Peer review on the PR. The bound query holds; one advisory note on logging.",
+  "ac_skip_reason": "AC conformance skipped: Gate 2 peer round (author-owned)",
+  "findings": [
+    {
+      "severity": "INFO", "in_scope": true, "category": "general",
+      "title": "Username is logged at debug", "location": "internal/auth/limiter.go:31",
+      "domains": ["pe-go"], "description": "Usernames reach debug logs.",
+      "recommendation": "Log the username length instead of the username."
+    }
+  ],
+  "dismissed": [
+    { "title": "Missing index hint", "rationale": "the planner already picks the index scan", "original_severity": "MEDIUM", "outcome": "dropped" }
+  ],
+  "receipts": [
+    { "claim": "indeterminate", "title": "Worker passes trusted input", "location": "internal/auth/store.go", "attestation": "The issue says the worker passes usernames from the session table.", "missing_source": "the worker service" }
+  ],
+  "category_fallbacks": ["pe-go: 'Username is logged at debug' — category missing/invalid, recorded as general"]
+}

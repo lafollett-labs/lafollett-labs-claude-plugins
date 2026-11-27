@@ -1,0 +1,18 @@
+{
+  "name": "sdlc",
+  "version": "1.0.0",
+  "description": "GitHub-native SDLC loop: plan issues and sub-issues, implement on a conventional branch, review with Principal Engineer agents (pe-go, pe-vue, pe-csharp, pe-angular, pe-sql-server, pe-aws-infra, pe-github-actions, pe-governance, pe-general-purpose) under a five-pass protocol, open the pull request, run a Copilot review, and deliver it end to end — skills plan, implement, review, pull-request, copilot-review and deliver, plus a plan-reviewer agent",
+  "author": {
+    "name": "LaFollett Labs"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/lafollett-labs/lafollett-labs-claude-plugins",
+  "keywords": [
+    "sdlc",
+    "github",
+    "issues",
+    "pull request",
+    "code review",
+    "ci"
+  ]
+}

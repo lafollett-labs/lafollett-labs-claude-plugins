@@ -1,0 +1,5 @@
+feat: add title search (#42)
+fix(api): handle a null config
+test: cover the title search
+refactor!: drop the v1 client
+ci(lint)!: pin actionlint

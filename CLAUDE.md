@@ -13,8 +13,9 @@ See [README.md](./README.md) for the full plugin list and repository tree.
 plugins/
   code-reviewer/            # PE-powered five-pass code reviews + review moves
   context-handoff/          # /handoff-context + /resume-context
-  issue-manager/            # GitHub Issue management
+  issue-manager/            # GitHub Issue management (deprecated: use sdlc:plan)
   plugin-janitor/           # Plugin cache cleanup
+  sdlc/                     # Plan → implement → review → PR → Copilot loop on GitHub
   session-analyzer/         # JSONL session analysis
   ux-designer/              # UX design harness
   watchwith/                # Watch a video, write down what was on screen

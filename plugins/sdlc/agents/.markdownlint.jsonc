@@ -1,0 +1,5 @@
+// Agent bodies are model-facing prose: long lines are intended, and the title lives in front matter.
+{
+  "MD013": false,
+  "MD041": { "front_matter_title": "^\\s*(name|title)\\s*[:=]" }
+}

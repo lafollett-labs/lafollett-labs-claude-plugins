@@ -13,3 +13,6 @@
 # Git config files
 .gitattributes text eol=lf
 .gitignore text eol=lf
+
+# CRLF test fixtures keep their bytes
+*-crlf.* -text

@@ -1,5 +1,21 @@
 # issue-manager
 
+> **Deprecated: use `sdlc:plan`** (`/plugin install sdlc`). It covers everything here,
+> links stories to their epic as GitHub sub-issues, and keeps your existing
+> `docs/epics/` folders and `.github-state.json` working.
+>
+> | issue-manager | sdlc:plan |
+> | - | - |
+> | `init --name "X"` | `/sdlc:plan init --name "X"` |
+> | `create --docs-path <dir>` | `/sdlc:plan create --docs-path <dir>` (children become sub-issues) |
+> | `update --docs-path <dir>` | `/sdlc:plan update --docs-path <dir>` |
+> | `import --epic <N>` | `/sdlc:plan import --epic <N>` |
+> | `status --docs-path <dir>` | `/sdlc:plan status --docs-path <dir>` |
+> | quality checklist review | `/sdlc:plan validate --file <f>` or `--issue <N>` |
+> | ADR → epic | `/sdlc:plan init --name "X" --from <adr>` |
+>
+> Run `create` once on a folder issue-manager made to turn its children into sub-issues.
+
 Create and manage GitHub Issues that define **what** and **why**, never **how**.
 Author locally in markdown, push to GitHub, edit and push again without creating
 duplicates.
