@@ -2294,4 +2294,451 @@ or be accepted.
 
 ---
 
+## Review Round 5
+
+**Verdict:** ⚠️ CHANGES REQUESTED
+
+| | |
+| - | - |
+| **Reviewer** | @Cali LaFollett |
+| **PR** | [#24](https://github.com/lafollett-labs/lafollett-labs-claude-plugins/pull/24) |
+| **Reviewed SHA** | `31ea5d5a065b30cb0ca623f5a5d5e2a099bb5cda` |
+| **Date** | 2026-11-27 |
+| **Fix cascade** | 1 / 14 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 7 spot-checked |
+
+### Summary
+
+Round 5 ran past the cap, on the owner's approval, with a brief to hunt the class the latest fix exposed: a parse of GitHub or gh output that was assumed rather than checked, and a non-success that reads as success. Every round-4 finding the PEs re-checked is fixed at this SHA. The shards checked about 30 external contracts against gh's source, GitHub's docs, read-only public data and scratch git repos; most hold. Two MEDIUM do not: pull-request's create step stops as a duplicate when gh opened the PR but could not request a reviewer, and plan's import tracks a sub-issue from another repository by number, so a later update edits an unrelated issue here. The LOWs are the same class at lower reach: an auth probe that fails on an unrelated account, a merged PR taken as open, a failed thread read counted as a complete Copilot round, a PE error body read as a clean review, a failed head lookup that Gate 2 approves past, a workflow that never started read as no CI, a wrong gh exit-code comment, and dropped issues counted as done. The copilot-review shard was stopped at the owner's request before it reported, so its domain has only the governance shard's coverage this round. No overlaps were merged and nothing was dismissed.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-Governance (all sdlc markdown) | targeted | skill-structure 32/0, pe-agent 148/0 from /; the deliver t0 stop reproduced in a temp repo; gh source read for pr create, pr view and auth status |
+| PE-DevTools (review scripts) | lint-only | 6 suites from / → 622 checks, 0 failed; shellcheck clean; 9 mutations, 7 caught, 1 survived, 1 equivalent |
+| PE-DevTools (external contracts) | lint-only | 10 suites from / → 599 checks, 0 failed; 7 mutations; the cross-repo sub-issue overwrite reproduced with stub-gh |
+| PE-DevTools (copilot-review) | — | MISSING — stopped at the owner's request before it reported |
+| Primary | n/a | `bash scripts/ci/run-shell-tests.sh` green at a7f7b2c; CI run 46063122479 green |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-Governance | 7 receipts, 6 restatements, 11 gh pr view / auth sites | deliver → implement → review → pull-request → copilot-review, rounds 1–2 | every wait, request, result, gate and coverage value to its consumer | deliver :243 both ways; gh pr view and auth status in gh source | 6 failure paths | n/a — no test in this shard | 9 contracts |
+| PE-DevTools (review scripts) | 7 receipts, 2 spot-checked; same_code → 5 callers | 4 state flows | 5 scope modes × 3 shapes; 4 malformed PE outputs | 6 guards both ways | 8 failure paths | 9 mutations, 1 survivor | reviews shape, pagination, comment URL, review exit |
+| PE-DevTools (contracts) | 3 test hunks; 9 siblings of 3 contracts | settle loop, create resume, import → update, reparent | sub-issue shapes, 5 buckets, revert subjects, branch keys | 5 guards against real output | 6 failure paths | 7 mutants | 20 contracts, 17 hold |
+| Primary | 7 ripple receipts at 31ea5d5 | n/a | n/a | n/a | n/a | n/a | Copilot wording checked on ~85 public reviews before this round |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 2 | 0 |
+| 🟢 LOW | 9 | 0 |
+| ℹ️ INFO | 3 | 0 |
+
+### In Scope Findings
+
+#### 🟡 MEDIUM-001: When a reviewer request fails, gh pr create has already opened the PR. pull-request's retry then fails as a duplicate and STOPs, skipping CI, Copilot, labels and Slack
+
+**Domains:** [Governance] · **Move:** M7
+**Location:** `plugins/sdlc/skills/pull-request/references/push-and-create.md:97`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/pull-request/references/push-and-create.md:93`, `plugins/sdlc/skills/pull-request/references/push-and-create.md:99`, `plugins/sdlc/skills/pull-request/references/push-and-create.md:100`, `plugins/sdlc/skills/deliver/SKILL.md:462`
+
+The reviewer-failure arm assumes that a failed `gh pr create` opened no PR. gh does not work that
+way on github.com. api/queries_pr.go CreatePullRequest runs createPullRequest first, then sets
+assignees, then calls RequestReviewsByLogin. A reviewer error returns `pr, err`. create.go:1143-1150
+then prints pr.URL on stdout and exits 1 with "pull request update failed: …".
+Trace: CODEOWNERS names a team that has no access to the repo, or a user who has left. reviewers.md
+keeps the owner because it matches TEAM or LOGIN. gh pr create opens the PR and exits 1, and stderr
+names the reviewer. Line 99 re-runs the command without --reviewer. gh now refuses with "a pull
+request for branch … already exists" (create.go:532), and the step says "❌ Error — gh pr create
+failed; STOP".
+The PR is open, but no CI gate runs, no Copilot review is requested, there is no status:in-review
+label or progress comment, and no Slack post goes out. Lines 100-102 (add each reviewer with
+`gh pr edit`) never run. Under sdlc:deliver, Phase 7 (deliver/SKILL.md:459-465) then finds an OPEN
+PR at HEAD and prints "✅ Done — delivered", so the error above reads as success. Under --auto this
+happens unattended.
+This is the class from the latest fix: an external tool's non-zero exit is read as "nothing
+happened" without checking what it actually did.
+
+**Recommendation:**
+Bind the PR from stdout before branching on the exit code:
+```
+run it, capturing stdout + stderr + exit code
+url = the https://github.com/<owner>/<repo>/pull/<N> line of stdout, else null   # gh prints it even when a post-create step fails
+if url:
+  session.pr_url = url; session.pr_number = its trailing integer
+  if exit != 0: ⚠️ Warning — PR opened, but gh could not finish it: {first stderr line}
+  for r in session.reviewers missing from the PR: `gh pr edit {session.pr_number} --add-reviewer '{r}'`; on failure ⚠️ Warning
+elif session.reviewers and stderr names a reviewer:   # GHES resolves reviewer IDs before creating
+  re-run without --reviewer …                         # as today
+else:
+  ❌ Error — gh pr create failed (exit {exit}); STOP, print stderr
+```
+Post-create verification (line 111) already reports any reviewer that is still missing.
+
+#### 🟡 MEDIUM-002: import tracks sub-issues from other repositories by number alone, so a later update overwrites an unrelated issue with the same number in this repository
+
+**Domains:** [DevTools] · **Move:** M3
+**Location:** `plugins/sdlc/skills/plan/bin/gh-issues.js:613`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/plan/bin/gh-issues.js:423`, `plugins/sdlc/skills/plan/bin/gh-issues.js:645`, `plugins/sdlc/skills/plan/bin/gh-issues.js:216`, `plugins/sdlc/skills/plan/bin/gh-issues.js:710`, `plugins/sdlc/skills/plan/bin/gh-issues.js:207`
+
+GitHub lets a parent issue have sub-issues in other repositories of the same owner. The REST docs require
+only that the sub-issue "belong to the same repository owner as the parent issue". GET .../sub_issues
+returns those items mixed in with same-repo ones. On a public epic I checked, 5 of its 6 listed sub-issues
+had a repository_url pointing at a different repository. gh-issues.js reads only `.number` from each item
+and never checks `repository_url`.
+Reproduced with stub-gh:
+  - octo-org/octo-repo#41 lists #42 (same repo) and #7 (repository_url .../octo-org/other-repo).
+  - `import --epic 41` writes 02-Story-Other-Repo-Work.md, stores {"02-Story-Other-Repo-Work.md": 7},
+    and prints "✅ Done — imported epic #41 + 2 child issue(s)".
+  - `update --docs-path … --yes` then runs `gh issue edit 7 --title "Other repo work" --body-file -`
+    against octo-org/octo-repo. That replaces the title and body of an unrelated octo-repo#7 and prints
+    "✅ Done — 3 issue(s) re-synced".
+The same number-only keying also affects:
+  - create's linked set (:423) and status's linked set (:645). A cross-repo sub-issue that shares a number
+    with a local child makes that child look linked, so create never links it and status never warns.
+  - parentOf (:216) returns the parent's number only. If the parent is #N in another repository,
+    `reparent --parent N` reports "already under #N; nothing changed" (:710).
+Normal use reaches this whenever someone imports an org-level epic whose children live in several repos.
+The outcome is a silent, outward-facing overwrite of a real issue.
+
+**Recommendation:**
+Keep only same-repo items wherever sub-issues are read, and name the rest:
+  const sameRepo = (i) => String(i.repository_url || '').toLowerCase()
+    .endsWith(`/repos/${repo().slug.toLowerCase()}`);
+  function subIssues(num) { … const all = pages.flat(); return { local: all.filter(sameRepo), foreign: all.filter((i) => !sameRepo(i)) }; }
+In import, skip each foreign child with "⏭ #N is in <owner/repo>, not this repository; not imported", and
+do not count it in the ✅ total. In parentOf, treat a parent whose repository_url is not this repo's as
+"another repository's #N", never as equal to --parent.
+Add a gh-issues.test.js case that routes one cross-repo item and asserts:
+  - it is absent from .github-state.json;
+  - a following `update` issues no `issue edit` for that item's number.
+
+#### 🟢 LOW-001: `gh auth status` exits 1 when any account on any host is unhealthy, so a working session is reported as 'not authenticated' and pull-request, plan and the implement issue read STOP
+
+**Domains:** [Governance] · **Move:** M7
+**Location:** `plugins/sdlc/references/github-preflight.md:6`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/pull-request/references/nudge.md:14`, `plugins/sdlc/skills/pull-request/SKILL.md:129`, `plugins/sdlc/skills/implement/SKILL.md:147`, `plugins/sdlc/skills/plan/SKILL.md:50`
+
+The preflight treats a zero exit from `gh auth status` as "the account gh will use is
+authenticated". Its --help says otherwise: "If an account on any host … has authentication issues,
+the command will exit with 1". status.go sets finalErr for non-active accounts unless --active is
+given, and checks every known host unless --hostname is given.
+Trace: the engineer's active github.com account works. A second account, or an old Enterprise host,
+has a revoked token. session.gh_ok is false. pull-request then STOPs with "gh is not authenticated"
+(pull-request/SKILL.md:129-131), plan STOPs, implement STOPs reading the issue, and review skips its
+GitHub steps. `gh auth login` is the advice given, and it does not fix the account that is broken.
+This needs a multi-account or multi-host setup with a stale token, so it is LOW. It fails closed,
+but the message is wrong.
+
+**Recommendation:**
+Probe the account the skills actually use:
+`session.gh_ok = (`gh api user --jq .login` exits 0 and prints a login)`.
+`gh auth status --active --hostname github.com` also works, but it pins the host.
+Apply the same change at nudge.md:14.
+
+#### 🟢 LOW-002: copilot-review's no-number fallback takes `gh pr view`'s number without checking state, so a merged or closed PR is reviewed as if it were open
+
+**Domains:** [Governance] · **Move:** M1
+**Location:** `plugins/sdlc/skills/copilot-review/SKILL.md:21`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/deliver/SKILL.md:170`, `plugins/sdlc/skills/deliver/SKILL.md:460`, `plugins/sdlc/skills/pull-request/SKILL.md:154`
+
+The line promises "the open PR for the current branch", but `gh pr view --json number --jq .number`
+does not filter by state. finder.go findForRefs queries every state, sorts OPEN first, and returns a
+CLOSED or MERGED PR when no open one exists. The default-branch exception does not apply to a
+feature branch.
+Every other no-argument `gh pr view` in the plugin checks `v.state == "OPEN"` (deliver:170 and :460,
+pull-request:154). This one does not.
+Run `/sdlc:copilot-review` with no number on a branch whose PR has merged. If Copilot never reviewed
+the final head, the skill POSTs a Copilot review request on the merged PR, which can spend quota.
+Then it judges threads and offers fixes and pushes that no PR will pick up. `pushed` will report
+false, so nothing is falsely marked fixed.
+This is LOW: it needs an interactive run without #N on a finished branch.
+
+**Recommendation:**
+Match the siblings:
+```
+(v, ec) = `gh pr view --json number,state`
+if ec != 0 or v.state != "OPEN": stop — "no open PR for this branch"
+N = v.number
+```
+
+#### 🟢 LOW-003: The result-block status rule ('complete if any round completed') can override round 1's explicit status = error after a threads failure, and the consumer then reports 'nothing new to act on'
+
+**Domains:** [Governance] · **Move:** M3
+**Location:** `plugins/sdlc/skills/copilot-review/SKILL.md:104`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/copilot-review/SKILL.md:44`, `plugins/sdlc/skills/copilot-review/SKILL.md:48`, `plugins/sdlc/skills/copilot-review/SKILL.md:118`, `plugins/sdlc/skills/pull-request/references/copilot-review.md:19`, `plugins/sdlc/skills/pull-request/references/copilot-review.md:25`
+
+copilot_rounds is defined as "rounds whose review completed" (line 118). The status rule says
+`complete` if any round completed, else the status that ended the run. Round 1 can reach a
+completed wait and then end with an explicit error, in two ways: `threads` exits 2 (line 44), or a
+checkout mismatch outside --auto (line 48). The two rules then disagree. Under the literal reading,
+status is `complete`, findings is [], and gate is still null, because no round reached the gate
+(line 29).
+pull-request/references/copilot-review.md:19-28 then prints "0 finding(s): nothing new to act on".
+Its gate match has no arm for null. Slack gets "Copilot: 1 round(s) · 0 fixed". A failed read of
+Copilot's threads is announced as a clean Copilot review.
+Rounds 2-3 are fine: there the earlier round's real findings justify `complete`. This is LOW because
+it needs a gh or GraphQL failure between two calls, or a mismatched interactive checkout.
+
+**Recommendation:**
+Count a round as completed only once its threads were read and classified, and say which rule wins:
+"`status` is `complete` if a round's threads were classified, else the status that ended the run".
+Alternatively, in the consumer, treat `complete` with `gate == null` as the else arm.
+
+#### 🟢 LOW-004: findings.js validate reads a PE output that has no findings list (e.g. an error body) as a clean, zero-finding review
+
+**Domains:** [DevTools] · **Move:** M5
+**Location:** `plugins/sdlc/skills/review/bin/findings.js:74`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/review/references/finding-schema.md:51`, `plugins/sdlc/skills/review/references/pe-protocol.md:259`, `plugins/sdlc/skills/review/bin/test/run-findings-tests.sh:75`
+
+validate builds each output's findings from `(raw.findings || [])`. A PE reply that has no findings
+key passes with nothing to re-dispatch and contributes zero findings. For example, a reply that holds
+only an error field saying the diff command could not run. Reproduced:
+  echo '{"outputs":{"go":{"pe":"pe-go","error":"could not run the diff command"}}}' | node findings.js validate
+  → {"outputs":{"go":{...,"findings":[]}},"redispatch":[],...}  exit 0
+  dedup on the same input → {"consolidated":[]}  exit 0
+A string or an object in findings crashes with exit 2, so only the absent key and null fail open.
+Downstream, convergence.js record receives [] and records a clean Gate 1 round. Two such rounds lock
+Gate 1, and under --auto no human looks at the reply. finding-schema.md:51 accepts a missing
+verification_receipts[] on purpose. It has no rule for a missing findings[], and pe-protocol.md:259
+makes `findings: []` the explicit clean answer. So an absent list is an unhandled shape, not a
+documented default. This needs a PE to break its output contract, so it is not normal use. That is
+why it is LOW. It is the class this round hunts: an error result read as clean.
+Surfaced via Pass 4 / silence_check.
+
+**Recommendation:**
+In validate, treat a findings value that is not an array as a schema violation, as the other kinds are:
+  findings: Array.isArray(raw.findings) ? ... : null
+  bad.shape = Array.isArray(raw.findings) ? [] : [{ title: '(no findings list)' }]
+Re-dispatch once with the note "return `findings: []` when clean, or your findings". After that one
+re-dispatch, throw a CliError ("output <name> has no findings list"). SKILL.md:34 then stops the
+round instead of recording it clean. Add a run-findings-tests.sh case beside line 75: an output with
+only { pe, error } must re-dispatch, and after its re-dispatch must exit 2.
+
+#### 🟢 LOW-005: Gate 2's 'not approving unreviewed code' check passes when the head lookup fails, because same_code with an empty SHA compares against the clean worktree
+
+**Domains:** [DevTools] · **Move:** M4
+**Location:** `plugins/sdlc/skills/review/references/publish.md:147`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/review/SKILL.md:53`, `plugins/sdlc/skills/review/references/publish.md:62`, `plugins/sdlc/skills/review/references/round-state.md:82`, `plugins/sdlc/skills/review/references/round-state.md:101`
+
+Before `gh pr review --approve`, publish.md:147 binds head_now from
+`gh pr view N --json headRefOid --jq .headRefOid`, then checks `same_code(head_now, session.head_sha)`.
+When that gh call fails (a timeout, a 502, a rate limit), head_now is empty. The same_code template
+at SKILL.md:53 interpolates without quotes: `git -C root diff --quiet {a} {b} -- . ':!docs/code-reviews/'`.
+With a empty, the command becomes `git diff --quiet <head_sha> -- .`, which compares the working
+tree against head_sha. Checked in a temp repo:
+  a=""; git diff --quiet $a $H -- . ':!docs/code-reviews/'  → exit 0 (same code)
+  git diff --quiet "" $H …                                   → fatal: bad revision '' (exit 128)
+The review worktree sits clean at head_sha, so the guard reports "same code" and the approval is
+posted. GitHub records it on whatever the PR head is now, which is exactly the case the guard exists
+to stop. If the model instead quotes the empty value, the guard fails closed, but it prints
+"PR head  changed code since the review", which misreads a gh error as a push. review-file.js's own
+sameCode refuses a non-SHA (review-file.js:130); only the skill's template lacks that check. The
+other callers (publish.md:62, round-state.md:82/101) pass SHAs parsed from the review file, which
+are null only in a hand-edited round. This needs a gh failure on the lookup followed by a gh success
+on the review. That is rare, so it is LOW.
+
+**Recommendation:**
+Validate before comparing, at publish.md:147-149:
+  head_now = `gh pr view {session.pr.number} --json headRefOid --jq .headRefOid`
+  if exit != 0 or head_now does not match ^[0-9a-f]{40}$:
+    ⚠️ PR head unreadable ({stderr}) — not approving; re-run Gate 2: {session.pr.url}
+  elif not same_code(head_now, session.head_sha): …
+Also quote both operands in SKILL.md:53 (`diff --quiet "{a}" "{b}"`) so an empty or null SHA is a
+git error (not same code) at every caller.
+
+#### 🟢 LOW-006: The review-doc-only case never asserts its stop text; a mutant that labels it 'no changes against the base' passes all 52 checks
+
+**Domains:** [DevTools] · **Move:** M6
+**Location:** `plugins/sdlc/skills/review/bin/test/run-scope-tests.sh:127`
+**Introduced by:** LOW-002
+**Siblings:** `plugins/sdlc/skills/review/bin/scope.js:209`
+
+The LOW-002 fix splits exit 3 into three reasons. The new checks pin "nothing staged" and "no changes
+against the base". The older check for the excluded-only case is
+'o.stop && o.excluded.includes(...)', which accepts any truthy stop. On a temp copy, replacing
+`excluded.length ? 'only excluded files changed — …'` with `false ? 'x'` relabels a review-doc-only
+diff as "no changes against the base — nothing to review". All 52 checks still pass. The other 3
+mutants (staged arm dropped, old single message restored, exit 3 → 4) are caught. Only the label
+would be wrong, and scope.js:209 is correct today.
+
+**Recommendation:**
+At run-scope-tests.sh:127, assert the exact reason:
+  'o.stop === "only excluded files changed — nothing to review" && o.excluded.includes("docs/code-reviews/42-code-review.md")'
+
+#### 🟢 LOW-007: A pull_request workflow that fails to start produces no check at all, so pr-checks reports 'none' and Gate 2 approves without CI
+
+**Domains:** [DevTools] · **Move:** M5
+**Location:** `plugins/sdlc/bin/pr-checks.js:175`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/review/references/ci-gate.md:34`, `plugins/sdlc/skills/review/README.md:31`, `plugins/sdlc/skills/review/SKILL.md:491`, `plugins/sdlc/bin/pr-checks.js:13`
+
+gh pr checks reads only check runs and status contexts (aggregate.go at v2.103.1). A workflow run that ends
+in startup_failure creates a check suite with no check runs. On public data, 2 such suites had
+check-runs total_count 0. `gh run list --commit <sha>` does list those runs (3 startup_failure runs on
+one public head). Common causes are an invalid workflow edit in the PR or a reusable workflow that cannot
+be reached.
+When that workflow is the repo's only CI:
+  - gh exits 1 with "no checks reported".
+  - --settle polls for 30 s, because prWorkflow() is true, then prints state none.
+  - ci-gate.md:34 maps none to "no CI finding", so Gate 2 can go MERGEABLE and post an approval on a head
+    whose CI never ran.
+The script has the evidence: a pull_request workflow exists and no check registered within the settle
+window. It discards that evidence, so 'none' means the same thing as "this repo has no CI".
+pull-request's gate maps none to 'unvalidated' and so fails closed. Only Gate 2 reads it as a pass.
+This is rare, so LOW.
+
+**Recommendation:**
+After the settle loop, if prWorkflow() is true and the state is still none, run one more read:
+  gh run list --commit <head> --json conclusion,status,name,databaseId --limit 50
+If any run concluded startup_failure or failure, return state failed, listing those runs in failed_checks
+with their run_id. Otherwise keep none, but say in the reason that a pull_request workflow exists and
+nothing registered within <s>s.
+Add a stub case: checks_are 1 no-checks.stderr, plus a run list that returns one startup_failure run.
+Assert state failed.
+
+#### 🟢 LOW-008: The comment says gh pr checks --json exits 8 when checks are pending and 1 when one failed; with --json it exits 0 in both cases
+
+**Domains:** [DevTools] · **Move:** M7
+**Location:** `plugins/sdlc/bin/pr-checks.js:44`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/bin/test/run-pr-checks-tests.sh:102`, `plugins/sdlc/bin/test/run-pr-checks-tests.sh:111`, `plugins/sdlc/bin/test/run-pr-checks-tests.sh:147`
+
+In gh v2.103.1, pkg/cmd/pr/checks/checks.go returns `opts.Exporter.Write(...)` before it reaches the
+SilentError (failed) and PendingError (exit 8) returns. So with --json, gh exits 0 whether checks failed,
+are pending or passed. v2.60.0 has the same early return. Only the no-checks error (exit 1, empty stdout)
+and real errors exit non-zero.
+The [0, 1, 8] tolerance is harmless: exit 1 or 8 with empty stdout still throws. But the comment states a
+false fact, and run-pr-checks-tests.sh:102/111 model gh exits that never happen. With the list set to [0],
+matching real gh, those 2 checks fail. No behaviour changes in normal use.
+
+**Recommendation:**
+Change the comment to: "gh pr checks --json exits 0 whatever the buckets; 1 and 8 are accepted only as a
+guard for other gh versions." Change the two test names to say they model a non-default gh. Or set the
+list to [0] and drop those two cases.
+
+#### 🟢 LOW-009: status counts an issue closed as not planned or as a duplicate as done
+
+**Domains:** [DevTools] · **Move:** M4
+**Location:** `plugins/sdlc/skills/plan/bin/gh-issues.js:626`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/plan/references/status-and-reparent.md:19`, `plugins/sdlc/skills/plan/bin/test/gh-issues.test.js:206`
+
+stageOf returns 'done' for any CLOSED issue. GitHub records why an issue was closed: gh issue view --json
+lists stateReason, and REST returns state_reason (completed on public sub-issues). A story closed as
+not planned or as a duplicate when scope is cut counts toward "N/M done (P%)" with a ✅ glyph. The rollup
+overstates progress.
+Only the report is affected. Nothing gates on it, and status-and-reparent.md:19 documents "closed" as done,
+so the code matches its doc. The doc rule itself reads a non-success as success.
+
+**Recommendation:**
+Request stateReason in cmdStatus's issue view and branch on it in stageOf:
+  if CLOSED and stateReason in (NOT_PLANNED, DUPLICATE): stage = 'dropped' (glyph ⛔), excluded from total
+  elif CLOSED: 'done'
+Add a 'dropped' row to status-and-reparent.md:19 and a stageOf case beside gh-issues.test.js:206.
+
+#### ℹ️ INFO-001: Convergence signal: round-4 MEDIUM-001, LOW-001 and LOW-003 (governance sibling) are fixed at 31ea5d5, and the Copilot refusal and coverage contract holds at the skill level
+
+**Domains:** [Governance] · **Move:** none
+**Location:** `plugins/sdlc/skills/deliver/SKILL.md:243`
+**Introduced by:** new
+**Siblings:** none
+
+Verified fixed (see prior_findings_verified).
+The new wait statuses are each handled at copilot-review/SKILL.md:38-42: quota_exhausted →
+quota_exhausted, refused → error, timeout → timeout. pull-request's consumer maps each to a
+non-complete line with no Slack Copilot line. No refusal path can reach `complete`.
+The coverage wording ("did not fully review") matches CUT_SHORT across SKILL.md:100, README:40 and
+pull-request/references/copilot-review.md:21.
+The fix diff adds no justification prose.
+The new MEDIUM is in pull-request's create step, unchanged since round 1. It is the same "external
+result assumed" class the owner asked to hunt, not a regression from this round's fixes.
+
+**Recommendation:**
+Fix MEDIUM-001 (one block in push-and-create.md). The LOWs can go in the planned diet PR or be
+accepted.
+
+#### ℹ️ INFO-002: Convergence signal: both round-4 findings in this shard are fixed at 31ea5d5; nothing new here changes a decision in normal use
+
+**Domains:** [DevTools] · **Move:** none
+**Location:** `docs/code-reviews/feat-sdlc-code-review.md:1969`
+**Introduced by:** new
+**Siblings:** none
+
+Round 4 had 2 LOW in this shard (LOW-002, LOW-003). Both are fixed and checked by probe, suite and
+mutant (prior_findings_verified). This round adds 3 LOW and nothing at MEDIUM or above.
+  - LOW-003 is a test gap in the guard the fix added. It belongs to the same closed set as round-4
+    LOW-004/LOW-005 and round-3 LOW-011.
+  - LOW-001 and LOW-002 are new. Both come from the owner's hunt for error results that are read as
+    success. Both were present at 4d27366 and are outside the fix diff. Each needs an upstream
+    failure (a PE that breaks its output contract, or a failed gh lookup during the approval check).
+The external contracts this shard depends on hold against reality. The gh review JSON shape, review
+pagination, the gh comment URL on stdout, gh review exit codes, and the git porcelain formats were all
+verified (M7). gate2 already ignores COMMENTED reviews, so a quota-refusal post cannot count as an approval.
+
+**Recommendation:**
+Do not run another round for this shard. Fix LOW-001 and LOW-002 (a few lines each) in this PR or in
+the planned follow-up. Fold LOW-003 into the follow-up.
+
+#### ℹ️ INFO-003: Convergence signal: both round-4 findings in this shard are fixed; the new findings come from the requested external-contract hunt, not from edge cases of prior fixes
+
+**Domains:** [DevTools] · **Move:** none
+**Location:** `docs/code-reviews/feat-sdlc-code-review.md:1969`
+**Introduced by:** new
+**Siblings:** none
+
+Round 4 left 2 LOW in this shard (LOW-004, LOW-005). Both are fixed and killed by mutation at 31ea5d5.
+Severity rises (2 LOW → 1 MEDIUM + 3 LOW), but none of these findings refines a prior fix. Each one is an
+assumption about GitHub's output that public data or gh's source contradicts. This is the class the owner
+asked this round to hunt. Of the 20 contracts checked, 17 hold (listed under M7).
+
+**Recommendation:**
+Fix MEDIUM-001 before merge. LOW-001 to LOW-003 can go into the planned follow-up PR or be accepted.
+No further round is needed for this shard after MEDIUM-001.
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+
+#### Should Fix
+
+- [ ] MEDIUM-001: fix `plugins/sdlc/skills/pull-request/references/push-and-create.md:97` + 4 siblings
+- [ ] MEDIUM-002: fix `plugins/sdlc/skills/plan/bin/gh-issues.js:613` + 5 siblings
+
+#### Consider
+
+- [ ] LOW-001: fix `plugins/sdlc/references/github-preflight.md:6` + 4 siblings
+- [ ] LOW-002: fix `plugins/sdlc/skills/copilot-review/SKILL.md:21` + 3 siblings
+- [ ] LOW-003: fix `plugins/sdlc/skills/copilot-review/SKILL.md:104` + 5 siblings
+- [ ] LOW-004: fix `plugins/sdlc/skills/review/bin/findings.js:74` + 3 siblings
+- [ ] LOW-005: fix `plugins/sdlc/skills/review/references/publish.md:147` + 4 siblings
+- [ ] LOW-006: fix `plugins/sdlc/skills/review/bin/test/run-scope-tests.sh:127` + 1 siblings
+- [ ] LOW-007: fix `plugins/sdlc/bin/pr-checks.js:175` + 4 siblings
+- [ ] LOW-008: fix `plugins/sdlc/bin/pr-checks.js:44` + 3 siblings
+- [ ] LOW-009: fix `plugins/sdlc/skills/plan/bin/gh-issues.js:626` + 2 siblings
+- [ ] INFO-001: fix `plugins/sdlc/skills/deliver/SKILL.md:243` + 0 siblings
+- [ ] INFO-002: fix `docs/code-reviews/feat-sdlc-code-review.md:1969` + 0 siblings
+- [ ] INFO-003: fix `docs/code-reviews/feat-sdlc-code-review.md:1969` + 0 siblings
+
+### Merge Eligibility
+
+**Locked to SHA:** `31ea5d5a065b30cb0ca623f5a5d5e2a099bb5cda`
+**Status:** ⚠️ Not mergeable — 0 HIGH and 2 MEDIUM findings open. Any commit after this SHA requires re-review.
+
+---
+
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
