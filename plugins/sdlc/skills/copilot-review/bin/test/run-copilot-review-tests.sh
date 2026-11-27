@@ -43,7 +43,7 @@ calls() { grep -c -- "$1" "$S/calls" || true; }
 PRA='^pr view 7 |0|pr-view-a.json'
 PRB='^pr view 7 |0|pr-view-b.json'
 USER='^api user|0|user.json'
-THREADS='reviewThreads\(first|0|threads-pages.json'
+THREADS='reviewThreads\(first|0|threads-pages.jsonl'
 POST='^api -X POST repos/\{owner\}/\{repo\}/pulls/7/copilot-code-review'
 
 echo "=== copilot-review tests ==="
@@ -106,11 +106,11 @@ check "  status timeout" "$(j .status)" timeout
 check "  reports the sha Copilot last reviewed" "$(j .latest_reviewed_sha)" "$C"
 check "  --head skips pr view" "$(calls '^pr view')" 0
 
-stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-paged.json'
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-paged.jsonl'
 check "wait: reviews across two pages → exit 0" "$(run wait --pr 7 --interval 0 --timeout 0)" 0
 check "  finds the review on page 1 of 2" "$(j '.review.id')" 103
 
-stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-split.json'
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-split.jsonl'
 check "wait: Copilot's review on page 2 of 2 → exit 0" "$(run wait --pr 7 --interval 0 --timeout 0)" 0
 check "  finds it" "$(j '.review.id')" 103
 
