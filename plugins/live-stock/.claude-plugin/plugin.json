@@ -1,0 +1,18 @@
+{
+  "name": "live-stock",
+  "version": "0.1.0",
+  "description": "herd: a goal-driven conductor that runs GitHub issues or local story codes from a work plan as parallel Claude Code lanes in herdr, merges approved pull requests behind a head-SHA guard and closes each issue as completed. Needs the sdlc plugin from this marketplace.",
+  "author": {
+    "name": "LaFollett Labs"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/lafollett-labs/lafollett-labs-claude-plugins",
+  "keywords": [
+    "github",
+    "pull request",
+    "herdr",
+    "parallel",
+    "work plan",
+    "sdlc"
+  ]
+}

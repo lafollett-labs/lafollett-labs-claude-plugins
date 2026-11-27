@@ -1,0 +1,1 @@
+{ "state": "passed", "head": "a87e4241f294c7a1ec7a30426f2e266693b4657c", "checks": [ { "name": "test", "workflow": "ci", "state": "SUCCESS", "bucket": "pass", "link": "https://github.com/octo-org/octo-repo/actions/runs/1001/job/2001" } ], "failed_checks": [], "reason": "all checks passed" }

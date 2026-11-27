@@ -14,6 +14,7 @@ plugins/
   code-reviewer/            # PE-powered five-pass code reviews + review moves
   context-handoff/          # /handoff-context + /resume-context
   issue-manager/            # GitHub Issue management (deprecated: use sdlc:plan)
+  live-stock/               # herd: parallel sdlc lanes in herdr, merged and finished
   plugin-janitor/           # Plugin cache cleanup
   sdlc/                     # Plan → implement → review → PR → Copilot loop on GitHub
   session-analyzer/         # JSONL session analysis

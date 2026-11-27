@@ -1,0 +1,1 @@
+{ "sha": "80ea3bd71f9cc687650ca059f963d7716d652d7a", "files": [ { "filename": "src/widget-cache.js", "status": "modified" }, { "filename": "test/widget-cache.test.js", "status": "modified" } ] }

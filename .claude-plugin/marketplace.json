@@ -31,6 +31,13 @@
       "homepage": "https://github.com/lafollett-labs/lafollett-labs-claude-plugins"
     },
     {
+      "name": "live-stock",
+      "description": "herd: a goal-driven conductor that runs a work plan's GitHub issues or story codes as parallel Claude Code lanes in herdr, each going implement \u2192 review \u2192 pull request on sdlc, then merges and finishes them",
+      "source": "./plugins/live-stock",
+      "category": "developer-tools",
+      "homepage": "https://github.com/lafollett-labs/lafollett-labs-claude-plugins"
+    },
+    {
       "name": "plugin-janitor",
       "description": "Remove cached plugin versions that no install points at \u2014 marketplace updates copy each bumped plugin into the cache and never sweep, so every version ever installed stays on disk",
       "source": "./plugins/plugin-janitor",
