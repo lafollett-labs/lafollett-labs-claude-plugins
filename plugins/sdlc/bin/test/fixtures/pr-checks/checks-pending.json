@@ -1,0 +1,5 @@
+[
+  {"name":"build","workflow":"CI","state":"SUCCESS","bucket":"pass","link":"https://github.com/octo-org/octo-repo/actions/runs/1001/job/2001"},
+  {"name":"test","workflow":"CI","state":"IN_PROGRESS","bucket":"pending","link":"https://github.com/octo-org/octo-repo/actions/runs/1001/job/2002"},
+  {"name":"e2e","workflow":"E2E","state":"CANCELLED","bucket":"cancel","link":"https://github.com/octo-org/octo-repo/actions/runs/1004/job/2005"}
+]

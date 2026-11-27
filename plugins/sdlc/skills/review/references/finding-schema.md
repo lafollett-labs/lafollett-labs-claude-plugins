@@ -1,0 +1,56 @@
+# Finding Schema
+
+Loaded by SKILL.md at Phase 4, before `findings.js validate`. The model transcribes each PE's YAML block into the JSON that `findings.js` reads — field for field, no edits.
+
+## YAML Schema
+
+PE sub-agents return findings in this exact format. `findings.js validate` enforces it.
+
+```yaml
+expert: pe-go|pe-vue|pe-aws-infra|pe-governance|pe-csharp|pe-angular|pe-sql-server|pe-github-actions|pe-general-purpose
+tier_escalation:                          # OPTIONAL — only when the dispatched TIER cannot reach what the diff touches
+  requested_tier: STANDARD|DEEP           # must rank strictly above the dispatched TIER
+  justification: "one line: what the diff touches that the dispatched tier cannot reach"
+findings:
+  - id: "CRITICAL-001"
+    severity: CRITICAL|HIGH|MEDIUM|LOW|INFO
+    in_scope: true|false
+    is_pattern: true|false                  # true → triggers bug-shape grep in Phase 4
+    category: data-integrity|migration|auth|secrets|security|correctness|concurrency|error-handling|performance|test-coverage|maintainability|docs|general   # REQUIRED — feeds the findings-ledger fingerprint + severity floor
+    title: "Brief issue title"
+    location: "src/full/path/from/repo/root.ts:123"
+    locations: []                           # additional sites populated by Phase 4 bug-shape grep
+    description: |
+      Full description of the issue.
+    recommendation: |                       # REQUIRED — concrete fix, not "consider X"
+      How to fix it with code example if helpful.
+    verification_receipt: |                 # Pass 5 receipt — grep result, test output, code reference
+      Confirmed by `grep -rn "..." src/` returning N matches; tests at tests/foo.spec.ts:42 cover this path.
+verification_receipts:                       # non-gating — items failing the PE REPORTING BAR + positive attestations; no recommendation
+  - id: "RECEIPT-001"
+    claim: absence|positive|below_bar|indeterminate   # REQUIRED — set by the PE; only absence is proof-checked (Phase 5)
+    title: "Verified no other sites of bug-shape X"
+    location: "src/"
+    attestation: |
+      No other sites of the bug shape exist; both known sites fixed in commit abc123.
+    evidence: |                              # REQUIRED when claim: absence (Phase 5 § Negative-receipt proof check)
+      $ grep -rn "bug-shape-X" src/
+      src/a.ts:12  src/b.ts:40   (2 matches — both fixed)
+    missing_source: "billing-api repo"      # REQUIRED when claim: indeterminate because the source is outside SEARCH_ROOTS; never proof-checked
+    category: auth                          # set on absence receipts (same enum as findings); receipts remain non-gating
+```
+
+## Schema enforcement
+
+```text
+finding without a concrete recommendation:  → re-dispatch the PE once, then demote to a below_bar receipt (findings.js)
+finding with an invalid severity:           → normalized first ("🔴 CRITICAL" → CRITICAL); else re-dispatch once, then record as MEDIUM (findings.js)
+finding category outside the enum:                             → re-dispatch once, then record as general + note it (findings.js)
+receipt without a valid claim:                                 → re-dispatch once, then treat as claim: absence (findings.js)
+verification_receipts[] missing/empty:                         → ACCEPT (default to [])
+finding without a verification_receipt proving the problem:     → DEMOTE to a receipt with the original claim + missing proof, never dropped; disproven → dismissed (Phase 5)
+finding with vague recommendation surviving validation:        → DEMOTE to verification_receipts[] (Phase 5)
+absence receipt without whole-claim evidence:                  → re-dispatch PE once, then retain as a receipt unless a finding proves an actual problem (Phase 5)
+indeterminate receipt (missing_source set):                    → ACCEPT; never proof-checked or promoted (Phase 5)
+tier_escalation present:                                       → handled by the tier escalation check (not a violation)
+```

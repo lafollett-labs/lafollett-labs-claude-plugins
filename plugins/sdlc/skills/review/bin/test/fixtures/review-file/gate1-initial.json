@@ -1,0 +1,58 @@
+{
+  "name": "42",
+  "branch": "feat/42-login-lockout",
+  "title": "Lock an account after repeated failed logins",
+  "date": "2026-10-11",
+  "pr": null,
+  "reviewer": "octocat",
+  "agents": [
+    { "pe": "pe-go", "model": "opus", "tier": "STANDARD" },
+    { "pe": "pe-go", "model": "opus", "tier": "STANDARD" },
+    { "pe": "pe-vue", "model": "opus", "tier": "STANDARD" }
+  ],
+  "head_sha": "1a2b3c4",
+  "gate_status": "OPEN — need 2 more consecutive clean round(s)",
+  "tier": "STANDARD",
+  "tier_source": "classifier",
+  "model_by_tier": false,
+  "model_by_tier_source": "default",
+  "tier_escalations": [],
+  "routing_rationale": [],
+  "convergence_reasons": [],
+  "files_changed": 3,
+  "lines_added": 120,
+  "lines_removed": 8,
+  "changed_files": ["internal/auth/limiter.go", "internal/auth/store.go", "web/src/components/LoginForm.vue"],
+  "summary": "Adds a failed-login counter that locks the account. One gating issue: the username is concatenated into a SQL query.",
+  "ac_results": [
+    { "ac": "#1 Lock the account after five failed attempts", "verdict": "satisfied", "evidence": "`internal/auth/limiter.go:40`" },
+    { "ac": "#2 The lockout clears after 15 minutes", "verdict": "not-verifiable", "evidence": "the clock is injected by the caller, outside the diff" }
+  ],
+  "findings": [
+    {
+      "severity": "LOW", "in_scope": true, "category": "maintainability",
+      "title": "Magic attempt limit", "location": "internal/auth/limiter.go:22",
+      "domains": ["pe-go"], "description": "The limit 5 is inlined.",
+      "recommendation": "Move it to a named constant."
+    },
+    {
+      "severity": "HIGH", "in_scope": true, "category": "security",
+      "title": "Username concatenated into a SQL query", "location": "internal/auth/store.go:14",
+      "locations": ["internal/auth/store.go:31"],
+      "domains": ["pe-go"],
+      "description": "The username is appended to the query string, so a crafted username runs arbitrary SQL.",
+      "recommendation": "Pass the username to QueryRowContext as a bind parameter."
+    },
+    {
+      "severity": "MEDIUM", "in_scope": false, "category": "performance",
+      "title": "Attempts table has no username index", "location": "db/migrations/001_attempts.sql:3",
+      "domains": ["pe-go"], "description": "Pre-existing.", "recommendation": "Add an index on username."
+    }
+  ],
+  "dismissed": [],
+  "rebuttals": [],
+  "receipts": [
+    { "claim": "positive", "title": "Store closes its rows", "location": "internal/auth/store.go:18", "attestation": "defer rows.Close() follows the query." }
+  ],
+  "category_fallbacks": []
+}

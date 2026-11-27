@@ -1,0 +1,5 @@
+feat: add vendor search (#42)
+fix(api): handle a null owner
+test: cover search
+refactor!: drop the v1 client
+ci(lint)!: pin actionlint

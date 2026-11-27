@@ -25,7 +25,7 @@
     },
     {
       "name": "issue-manager",
-      "description": "GitHub Issue management with intent-over-implementation templates \u2014 Epics, Stories, Tasks, Bugs with quality gates and CLI automation",
+      "description": "DEPRECATED, use sdlc:plan. GitHub Issue management with intent-over-implementation templates \u2014 Epics, Stories, Tasks, Bugs with quality gates and CLI automation",
       "source": "./plugins/issue-manager",
       "category": "developer-tools",
       "homepage": "https://github.com/lafollett-labs/lafollett-labs-claude-plugins"
@@ -34,6 +34,13 @@
       "name": "plugin-janitor",
       "description": "Remove cached plugin versions that no install points at \u2014 marketplace updates copy each bumped plugin into the cache and never sweep, so every version ever installed stays on disk",
       "source": "./plugins/plugin-janitor",
+      "category": "developer-tools",
+      "homepage": "https://github.com/lafollett-labs/lafollett-labs-claude-plugins"
+    },
+    {
+      "name": "sdlc",
+      "description": "GitHub-native delivery loop \u2014 plan issues, implement with TDD, review with principal-engineer agents, open the pull request, triage Copilot review, or run the whole loop with deliver",
+      "source": "./plugins/sdlc",
       "category": "developer-tools",
       "homepage": "https://github.com/lafollett-labs/lafollett-labs-claude-plugins"
     },
