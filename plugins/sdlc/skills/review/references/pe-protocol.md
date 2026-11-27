@@ -26,7 +26,7 @@ The dispatch prompt provides metadata; the PE pulls its own diff and reads full 
 - **Build root** — where front-end installs, builds, and tests run (Constraints says which): a disposable worktree of the reviewed changes or the review worktree (install there), or the engineer's checkout (never install; each BUILD PLAN command writes its output to a scratch directory); `none` means run none of them and review statically
 - **Build plan** (optional) — one entry per Angular / Vue project, its `dir` inside BUILD ROOT: `run` → run its command from `dir` exactly as given; `skip` → no build, a receipt with its reason; `introspect` → read the project's package.json scripts and the repo README / CLAUDE.md for its non-production build; `ask` → the direction rule under Constraints
 - **Project subdir** (optional) — where this PE's files live; default repo root
-- **Prior review / prior ledger** (round 2+) — prior findings with their raw title + category
+- **Prior review / prior ledger** (round 2+) — prior findings with their raw title + category. The PRIOR REVIEW and PRIOR LEDGER files named in the dispatch are inputs: read them wherever they are; the boundary applies to searches and every other read.
 - **Tier + TIER_CONTRACT + SEARCH_ROOTS** — review depth (TRIVIAL | STANDARD | DEEP); the contract scopes WHICH files enter the review, the search boundary, and the tool budget — never the five passes, never partial reads of opened files; below DEEP, SEARCH_ROOTS bounds every search and read in every pass, including the cross-verification and blind_spot_scan blocks; emit `tier_escalation` if insufficient
 - **Lenses** — attention augmentations in the dispatch prompt; hold all of them through every pass and re-apply each explicitly in Pass 4
 

@@ -6,7 +6,7 @@ Loaded by SKILL.md Phase 6 (§ Persist). `review-file.js` is the single reader (
 | - | - | - |
 | Gate 1 review | `{session.review_root}/docs/code-reviews/{session.name}-code-review.md`, committed on the author's branch (publish.md Step 3) | `review-file.js render` (Phase 6), `review-file.js override` (round-state.md § Engineer override) |
 | Gate 1 findings ledger | `{session.review_root}/docs/code-reviews/{session.name}-findings-ledger.json`, committed with it | `convergence.js record` (Phase 6) |
-| Gate 2 review, the reviewer's own | `~/.claude/sdlc/reviews/{owner}/{repo}/{session.name}-code-review.md`, never committed and outside every worktree; the round's record for others is the PR comment and `gh pr review` | `review-file.js render` (Phase 6) |
+| Gate 2 review, the reviewer's own | `~/.claude/sdlc/reviews/{owner}/{repo}/{session.name}-pr{N}-code-review.md` (keyed by PR), never committed and outside every worktree; the round's record for others is the PR comment and `gh pr review` | `review-file.js render` (Phase 6) |
 
 ## Persist (Phase 6)
 

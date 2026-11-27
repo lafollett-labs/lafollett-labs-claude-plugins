@@ -3,3 +3,4 @@ fix(api): handle a null config
 test: cover the title search
 refactor!: drop the v1 client
 ci(lint)!: pin actionlint
+Revert "feat: add title search (#42)"

@@ -21,14 +21,18 @@ SKILLS="review pull-request deliver implement plan copilot-review"
 HISTORY_SKILLS="pull-request deliver implement plan copilot-review"
 # Example keys and standard terms the docs may use; anything else matching <PROJECT>-<n> is ticket history.
 EXAMPLE_KEYS='^(LT-[0-9]+|ABC-123|ABC-1234|TICKET-123|UTF-8|SHA-[0-9]+|ISO-[0-9]+)$'
-# Example issue numbers; any other #NNN (3+ digits) is ticket history.
-EXAMPLE_ISSUES=':#(123|1234)$'
+# Example issue numbers; any other #NN (2+ digits) is ticket history.
+EXAMPLE_ISSUES=':#(42|57|123|1234)$'
 
 # Markdown the model reads as instructions (READMEs and fixtures excluded).
 instruction_docs() {
   find "$1/skills" "$1/references" "$1/assets" -type f -name '*.md' \
     -not -path '*/bin/test/fixtures/*' -not -name 'README.md' 2>/dev/null | sort
 }
+
+# issue_refs <file> — ":#<n>" for each issue number of two or more digits; a # glued to a word, an entity
+# (&#8212;) or a hex colour (#5319e7) is not one. Same rule as run-pe-agent-tests.sh.
+issue_refs() { tr -c '[:alnum:]#&' '\n' < "$1" | grep -E '^#[0-9]{2,}$' | sed 's|^|:|'; }
 
 # strip_frontmatter <file> — the body without the leading --- … --- block
 strip_frontmatter() { awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {fm=0; next} !fm' "$1"; }
@@ -70,7 +74,7 @@ check_ticket_history() {
     for f in "$1/skills/$s/SKILL.md" "$1/skills/$s/references/"*.md; do
       [ -f "$f" ] || continue
       grep -nE '[Ss]tory [0-9]+|IMPLEMENTED' "$f" | sed "s|^|${f#"$1"/}:|"
-      grep -noE '#[0-9]{3,}' "$f" | grep -vE "$EXAMPLE_ISSUES" | sed "s|^|${f#"$1"/}:|"
+      issue_refs "$f" | grep -vE "$EXAMPLE_ISSUES" | sed "s|^|${f#"$1"/}:|"
       for k in $(tr -c '[:alnum:]_-' '\n' < "$f" | grep -oE '^[A-Z][A-Z0-9]+-[0-9]+(-|$)' | sed 's/-$//' | sort -u); do
         [[ "$k" =~ $EXAMPLE_KEYS ]] || echo "${f#"$1"/} names ticket $k"
       done
@@ -154,7 +158,9 @@ if [ $# -eq 0 ]; then
   seed; echo 'Read ${CLAUDE_PLUGIN_ROOT}/references/settings.md first.' >> "$P/skills/deliver/references/override.md"; fires "capitalised Read of a shared reference" check_reference_depth
   seed; echo 'Loads ${CLAUDE_PLUGIN_ROOT}/skills/implement/references/spike.md' >> "$P/skills/implement/references/stash-restore.md"; fires "capitalised Loads of a skill reference" check_reference_depth
   seed; echo 'Since #517 merged this step changed.' >> "$P/skills/deliver/SKILL.md";  fires "#NNN issue history" check_ticket_history
-  seed; echo 'Refs #123 and #1234 are examples.' >> "$P/skills/deliver/SKILL.md";   silent "example issues #123 and #1234" check_ticket_history
+  seed; echo 'Since #20 merged (a regression from #17).' >> "$P/skills/deliver/SKILL.md"; fires "#20 two-digit issue history" check_ticket_history
+  seed; echo 'Refs #42, #57, #123 and #1234 are examples.' >> "$P/skills/deliver/SKILL.md"; silent "example issues #42 #57 #123 #1234" check_ticket_history
+  seed; echo 'An em dash &#8212; and the colour #5319e7.' >> "$P/skills/plan/SKILL.md"; silent "entity &#8212; and hex colour" check_ticket_history
   seed; echo 'Hash it with SHA-256 and stamp ISO-8601 dates.' >> "$P/skills/plan/SKILL.md"; silent "standard terms SHA-256 and ISO-8601" check_ticket_history
 fi
 

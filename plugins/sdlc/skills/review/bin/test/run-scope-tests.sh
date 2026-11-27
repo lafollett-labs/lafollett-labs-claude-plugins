@@ -140,7 +140,8 @@ put "$R" .claude/rules/a/b.md 1; put "$R" Dockerfile.api 1
 put "$R" plugins/x/agents/a.md 1; put "$R" plugins/x/commands/c.md 1
 put "$R" CLAUDE.md 1; put "$R" persona.code.md 1
 put "$R" AGENTS.md 1; put "$R" svc/AGENTS.md 1; put "$R" .github/copilot-instructions.md 1
-put "$R" .github/instructions/go.instructions.md 1; put "$R" .github/instructions/notes.md 1
+put "$R" .github/instructions/go.instructions.md 1; put "$R" .github/instructions/backend/api.instructions.md 1
+put "$R" .github/instructions/notes.md 1
 mkdir -p "$R/ng"; echo '{}' > "$R/ng/angular.json"; put "$R" ng/src/app/a.component.ts 1; put "$R" ng/src/app/a.component.html 1
 put "$R" tools/plain.ts 1
 commit "$R"
@@ -153,7 +154,7 @@ check "a workflow-like file outside .github/workflows is not claimed" "$out" 'o.
 check "governance globs route to pe-governance (root and nested)" "$out" \
   '["plugins/x/skills/y/SKILL.md","plugins/x/README.md","plugins/x/references/style.md","plugins/x/assets/t.md",".claude/rules/a/b.md","plugins/x/agents/a.md","plugins/x/commands/c.md","CLAUDE.md","persona.code.md"].every(f => o.routing[f] === "pe-governance")'
 check "AGENTS.md and Copilot instruction files route to pe-governance" "$out" \
-  '["AGENTS.md","svc/AGENTS.md",".github/copilot-instructions.md",".github/instructions/go.instructions.md"].every(f => o.routing[f] === "pe-governance") && o.routing[".github/instructions/notes.md"] === "pe-general-purpose"'
+  '["AGENTS.md","svc/AGENTS.md",".github/copilot-instructions.md",".github/instructions/go.instructions.md",".github/instructions/backend/api.instructions.md"].every(f => o.routing[f] === "pe-governance") && o.routing[".github/instructions/notes.md"] === "pe-general-purpose"'
 check "the repo-root README and unmatched files fall back to pe-general-purpose" "$out" \
   'o.routing["README.md"] === "pe-general-purpose" && o.routing["scripts/run.sh"] === "pe-general-purpose"'
 check "*.ts under an Angular project routes to pe-angular; elsewhere it does not" "$out" \

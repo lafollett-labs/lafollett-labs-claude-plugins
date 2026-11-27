@@ -457,6 +457,14 @@ test('update --key refuses a number that differs from the tracked one, before an
     assert.equal(same.code, 0, same.out + same.err);
 });
 
+test('update --key refuses a number another file tracks, naming that file, before any write', (t) => {
+    const box = sandbox(t, { ...epicFiles(), [`${EPIC_DIR}/.github-state.json`]: JSON.stringify({ epic: 41, issues: { '01-Story-Search-By-Title.md': 42 } }) });
+    const r = box.run('update', '--docs-path', EPIC_DIR, '--file', '02-Story-Place-A-Hold.md', '--key', '42');
+    assert.equal(r.code, 1);
+    assert.match(r.last, /^❌ Error — #42 is tracked as 01-Story-Search-By-Title\.md; updating it from 02-Story-Place-A-Hold\.md would overwrite it/);
+    assert.deepEqual(box.calls(), []);
+});
+
 test('update never creates: an untracked file is skipped', (t) => {
     const box = sandbox(t, epicFiles());
     const r = box.run('update', '--file', `${EPIC_DIR}/01-Story-Search-By-Title.md`);

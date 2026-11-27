@@ -21,6 +21,9 @@ OVERRIDE_JSON
 if ec != 0:                                           # 2: unknown / Gate 2 / already-overridden round, or an id not in scope there
   ❌ Error — could not record the override (exit {ec}): {o.error}; the review file is unchanged
   return to the fix loop
-commit the review-file update (an ordinary commit; CI runs on it)
+top = `git rev-parse --show-toplevel`
+`git -C "{top}" add -- '{session.review_file}'`                 # it may be untracked: the engineer can decline review's Gate 1 commit
+(_, ec) = `git -C "{top}" commit -m "docs: {session.name} review override" -- '{session.review_file}'`   # only the review file, never other staged changes; CI runs on it
+if ec != 0: ⚠️ Warning — the override is recorded but not committed ({stderr}); commit {session.review_file} yourself
 goto Phase 6.5                                        # Gate 1 closed by recorded override
 ```

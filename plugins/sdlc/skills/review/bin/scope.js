@@ -96,7 +96,7 @@ function routingTable(root) {
     [anyOf([
       '**/SKILL.md', '**/agents/*.md', '**/commands/*.md',
       '**/CLAUDE.md', '**/CLAUDE.*.md', '**/*.code.md', '**/*.ceo.md',
-      '**/AGENTS.md', '.github/copilot-instructions.md', '.github/instructions/*.instructions.md',
+      '**/AGENTS.md', '.github/copilot-instructions.md', '.github/instructions/**/*.instructions.md',
       '.claude/rules/**/*.md',
       '**/skills/**/references/*.md', 'plugins/**/references/*.md',
       '**/skills/**/assets/*.md', 'plugins/**/assets/*.md',

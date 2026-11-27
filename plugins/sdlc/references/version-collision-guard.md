@@ -22,9 +22,17 @@ json_at(ref, path):           # the parsed file at ref, or null when it is absen
   return null if it exits non-zero else json(raw)
 market_version(m):            # metadata.version, else the top-level version
   return m.metadata.version if m.metadata has "version" else m.version
-plugin_json(p):               # the plugin.json path of a marketplace entry, or null for a remote source
-  if p.source is not a string starting with "./": return null
-  dir = p.source without the leading "./" and any trailing "/"
+plugin_json(p, m):            # the repo-relative plugin.json of marketplace m's entry p, or null
+  s = p.source
+  if s is not a string or s contains "://": return null           # remote source: no file in this repo
+  if s in [".", "./"]: dir = ""                                     # the marketplace root itself
+  elif s starts with "./": dir = s without the leading "./"
+  elif m.metadata.pluginRoot is a string:                           # a bare name under pluginRoot
+    r = m.metadata.pluginRoot
+    root = "" if r in [".", "./"] else (r without a leading "./" and any trailing "/")
+    dir = root + "/" + s if root else s
+  else: return null
+  dir = dir without any trailing "/"
   return (dir + "/" if dir else "") + ".claude-plugin/plugin.json"
 
 edits = []
@@ -37,7 +45,7 @@ compare(MARKETPLACE, market_version(base_m), market_version(head_m))
 for p in head_m.plugins:
   q = the entry in base_m.plugins with q.name == p.name, else null
   if q: compare("{MARKETPLACE} plugins[{p.name}].version", q.version, p.version)
-  path = plugin_json(p)
+  path = plugin_json(p, head_m)
   if path and path in changed:
     compare(path, (json_at(branch_cut, path) or {}).version, (json_at("HEAD", path) or {}).version)
 

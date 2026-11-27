@@ -30,22 +30,29 @@ When C# calls a stored procedure, the procedure body and its declared contract (
 Run from `<worktree>/<db_subdir>` for each affected database root:
 
 ```bash
-# DB project build (if .sqlproj exists — Visual Studio Database Project / SDK-style); builds the schema model offline
-dotnet build <worktree>/<db_subdir>/*.sqlproj /p:NetCoreBuild=true 2>/dev/null || true
+tmp="$(mktemp -d)"
 
-# T-SQL parse check, offline, one changed file at a time — parses only: no name resolution, nothing executes
-for f in <changed_sql_files>; do
-  echo "== $f"; sqlfluff parse --dialect tsql "$f" 2>&1 | grep -E 'PRS|unparsable' | head -20
+# DB project build (Visual Studio Database Project / SDK-style); builds the schema model offline
+for p in <worktree>/<db_subdir>/*.sqlproj; do
+  [ -f "$p" ] || { echo "no .sqlproj — no model build ran"; break; }
+  echo "== $p"; dotnet build "$p" /p:NetCoreBuild=true; echo "exit=$?"
 done
 
-# SQL lint (if the project uses sqlfluff)
-sqlfluff lint <worktree>/<db_subdir> --dialect tsql 2>/dev/null || true
+# T-SQL parse check, offline, one changed file at a time — parses only: no name resolution, nothing executes
+command -v sqlfluff >/dev/null || echo "sqlfluff not installed — no parse or lint ran"
+for f in <changed_sql_files>; do
+  echo "== $f"; sqlfluff parse --dialect tsql "$f" > "$tmp/sqlfluff.out" 2>&1; echo "exit=$?"
+  grep -E 'PRS|unparsable' "$tmp/sqlfluff.out" | head -20
+done
+
+# SQL lint (when the project configures sqlfluff)
+sqlfluff lint <worktree>/<db_subdir> --dialect tsql > "$tmp/lint.out" 2>&1; echo "exit=$?"; head -40 "$tmp/lint.out"
 
 # Migration ordering check — verify migration filenames are sequential
 ls <worktree>/<db_subdir>/migrations/ | sort -n | tail -5
 ```
 
-Read the exit code and the first error lines (rule or message code, line, object), not just whether output appeared. Both checks run without a database: the `.sqlproj` build validates the schema model and reports unresolved references inside the project, while `sqlfluff parse` only parses (no name resolution, no type checking) and its T-SQL grammar is incomplete, so a `PRS` violation or an `unparsable` node is a lead to confirm by reading that statement, not a finding on its own. Never send a reviewed file to `sqlcmd`, `Invoke-Sqlcmd`, or any other server connection, a local or disposable instance included: a file can switch `PARSEONLY` or `NOEXEC` off and run its later batches. When neither a `.sqlproj` nor `sqlfluff` is available, record a receipt that no parse ran and review statically. A state-based object repo (one file per object, no `.sqlproj`, no `migrations/` folder, no build step) gives the build and ordering commands nothing to find; that absence is expected, not a failure. When the repo has its own lint command for SQL, assume it passes and spend the review on what it cannot see.
+Read each `exit=` line and the first error lines (rule or message code, line, object), not just whether output appeared; an `exit=127` or a "not installed" line means that check never ran. Both checks run without a database: the `.sqlproj` build validates the schema model and reports unresolved references inside the project, while `sqlfluff parse` only parses (no name resolution, no type checking) and its T-SQL grammar is incomplete, so a `PRS` violation or an `unparsable` node is a lead to confirm by reading that statement, not a finding on its own. Never send a reviewed file to `sqlcmd`, `Invoke-Sqlcmd`, or any other server connection, a local or disposable instance included: a file can switch `PARSEONLY` or `NOEXEC` off and run its later batches. When a check did not run (no `.sqlproj`, `sqlfluff` not installed, a build that cannot restore its SDK), record a receipt naming that check and review statically. A state-based object repo (one file per object, no `.sqlproj`, no `migrations/` folder, no build step) gives the build and ordering commands nothing to find; that absence is expected, not a failure. When the repo has its own lint command for SQL, assume it passes and spend the review on what it cannot see.
 
 ## Stack Heuristics
 

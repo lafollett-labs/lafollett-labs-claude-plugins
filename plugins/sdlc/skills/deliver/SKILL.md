@@ -90,12 +90,11 @@ Invoke AskUserQuestion only when the user must act, one call per decision, in th
 `review-file.js parse` is the one reader of the review; `sdlc:pull-request` reads verdict, round, and SHA from the same call.
 
 ```text
+finish(line):    # every terminal path before End: the line, then the auto log, then exit
+  print line; if session.auto_decisions: print "Auto log:\n" + join(session.auto_decisions, "\n"); exit
 read_review():   # binds session.review_file
   (r, ec) = node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/review-file.js" parse --root "$(git rev-parse --show-toplevel)" --name '{session.name}'
-  if ec != 0:      # 127 = no Node; 2 = unreadable file ({r.error})
-    🛑 Hard stop — cannot read the review (exit {ec}): {r.error}; fix it, then re-run sdlc:deliver {session.ticket_key}
-    if session.auto_decisions: print "Auto log:\n" + join(session.auto_decisions, "\n")
-    exit
+  if ec != 0: finish("🛑 Hard stop — cannot read the review (exit {ec}): {r.error}; fix it, then re-run sdlc:deliver {session.ticket_key}")   # 127 = no Node; 2 = unreadable
   session.review_file = "docs/code-reviews/" + session.name + "-code-review.md"; return r
 gate1_round(r): return the round in r.rounds whose n == r.gate1.round, else null   # never a legacy Gate 2 round
 parse_latest_round():
@@ -168,7 +167,9 @@ if session.issue_number:
 
 ```text
 resolve_base():                          # PR base > branch.<b>.sdlc-base (implement writes it) > origin/HEAD > main
-  (r, ec) = node "${CLAUDE_PLUGIN_ROOT}/bin/git-conventions.js" base
+  (v, ec) = `gh pr view --json number,state`            # the current branch's PR, if any
+  pr = " --pr {v.number}" if ec == 0 and v.state == "OPEN" else ""
+  (r, ec) = node "${CLAUDE_PLUGIN_ROOT}/bin/git-conventions.js" base{pr}
   if ec != 0: ⚠️ Warning — cannot resolve the base ({r.error}); using main
   return r.base if ec == 0 else "main"
 ```
@@ -238,17 +239,14 @@ session.commits_ahead       = `git rev-list --count 'origin/{session.base}..HEAD
 session.spike_present       = (Glob("docs/spikes/" + session.key_slug + "-*.md") is non-empty)
 session.code_outside_spikes = `git diff --name-only 'origin/{session.base}...HEAD'` has any path NOT under docs/spikes/
 
-if start_over and session.commits_ahead > 0 and `git rev-parse HEAD` == head_before:   # still on the old branch: implement stopped
-  ✅ Done — start over did not happen (sdlc:implement stopped); re-run sdlc:deliver {session.ticket_key} when ready
-  exit
+if session.implement_mode and `git rev-parse HEAD` == head_before:   # a resume or start over that stopped before committing
+  finish("✅ Done — sdlc:implement added no commits on {session.branch}{" (start over did not happen)" if start_over}; re-run sdlc:deliver {session.ticket_key} when ready")
 
 if session.spike_present and not session.code_outside_spikes:
   goto Phase S
 if session.commits_ahead == 0:
   ⚠️ Warning — implement produced no commits (you likely stopped at a gate)
-  ✅ Done — nothing to deliver yet; re-run sdlc:deliver {session.ticket_key} when ready
-  if session.auto_decisions: print "Auto log:\n" + join(session.auto_decisions, "\n")
-  exit
+  finish("✅ Done — nothing to deliver yet; re-run sdlc:deliver {session.ticket_key} when ready")
 goto Phase 2
 ```
 
@@ -292,15 +290,15 @@ goto Phase 3
 session.fix_round = session.fix_round or 0
 
 loop:
+  if read_review().gate1.state == "none":   # review recorded no round (scope abort, nothing to review)
+    finish("✅ Done — sdlc:review recorded no Gate 1 round; re-run sdlc:deliver {session.ticket_key} when ready")
   (verdict, gate_status, gate1, counts, findings, version_advisory) = parse_latest_round()
 
   if gate1 in ("locked", "overridden"):
     goto Phase 6.5                                  # Gate 1 closed: 2 consecutive clean, or recorded override
 
   if gate_status starts with "HUMAN_GATE — convergence controller error":   # a controller fault — the errored round never reached the ledger
-    🛑 Hard stop — {gate_status}; see {session.review_file}; fix the ledger / input, remediate that round's findings, then re-run sdlc:deliver {session.ticket_key}
-    if session.auto_decisions: print "Auto log:\n" + join(session.auto_decisions, "\n")
-    exit
+    finish("🛑 Hard stop — {gate_status}; see {session.review_file}; fix the ledger / input, remediate that round's findings, then re-run sdlc:deliver {session.ticket_key}")
 
   if gate_status starts with "HUMAN_GATE" and session.auto:   # review's controller escalated — never auto-resolved
     🤖 Auto-resolved — HALT: {gate_status}
@@ -355,9 +353,7 @@ loop:
 
   match user_response:
     case stop:
-      ✅ Done — stopped mid-loop; open findings remain in {session.review_file}; PR not created
-      if session.auto_decisions: print "Auto log:\n" + join(session.auto_decisions, "\n")
-      exit
+      finish("✅ Done — stopped mid-loop; open findings remain in {session.review_file}; PR not created")
     case override:
       goto Engineer Override
     case yes:                                         # default; auto always lands here
@@ -440,11 +436,9 @@ match user_response:
     session.fix_round = 0                           # RESET — new work re-enters the loop, drives back to a locked gate
     goto Phase 2
   case (c):
-    ✅ Done — stopped at the verification gate
+    finish("✅ Done — stopped at the verification gate
       branch {session.branch} · verdict {verdict} · review {session.review_file}
-      PR NOT created
-    if session.auto_decisions: print "Auto log:\n" + join(session.auto_decisions, "\n")
-    exit
+      PR NOT created")
 ```
 
 There is no cap on Phase 6.5 ↔ review/fix-loop cycles; inside the loop, `sdlc:review`'s convergence controller (round cap 8 per cycle, reset after each lock; reopen-guard) guarantees each review cycle terminates in a lock or `HUMAN_GATE`.
@@ -461,11 +455,9 @@ invoke skill sdlc:pull-request with $ARGUMENTS = join_nonempty([("--auto" if ses
 # needs a decision), status:in-review + the progress comment, and the optional Slack announcement.
 # deliver adds no gate and re-asks nothing here.
 
-(v, ec) = `gh pr view --json number,url,state`      # the current branch's PR; no branch name reaches the shell
-if ec != 0 or v.state != "OPEN":
-  ✅ Done — stopped before the PR: sdlc:pull-request exited without opening one (see its output above)
-  if session.auto_decisions: print "Auto log:\n" + join(session.auto_decisions, "\n")
-  exit
+(v, ec) = `gh pr view --json number,url,state,headRefOid`   # the current branch's PR; no branch name reaches the shell
+if ec != 0 or v.state != "OPEN" or v.headRefOid != `git rev-parse HEAD`:   # no PR, or one this run never pushed to
+  finish("✅ Done — stopped before the PR: sdlc:pull-request exited without opening or updating one (see its output above)")
 session.pr_number = v.number; session.pr_url = v.url
 goto End
 ```

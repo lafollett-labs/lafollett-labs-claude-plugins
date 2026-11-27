@@ -180,6 +180,8 @@ prompt contract:
    command in every pass — including cross-*-verification and blind_spot_scan —
    targets a path inside SEARCH_ROOTS. Never run find or grep -r over a parent
    of a SEARCH_ROOT (a repos root, $HOME, a drive root, /).
+   The PRIOR REVIEW and PRIOR LEDGER files named in the dispatch are inputs:
+   read them wherever they are; the boundary applies to searches and every other read.
    A claim about a system whose source is not inside SEARCH_ROOTS: emit one
    verification_receipts[] entry with claim: indeterminate and missing_source:
    naming that system, then stop — do not search for it."

@@ -8,10 +8,12 @@
  * and a pure termination policy over that ledger decides the Gate 1 outcome.
  *
  * Usage:
- *   node convergence.js record --ledger <path> --target <branch> --round <n> --sha <sha> [--gate "Gate 1"|"Gate 2"]  < findings.json
- *   node convergence.js status --ledger <path> [--target <branch>] [--round <n>]
+ *   node convergence.js record --ledger <path> --target <branch> --round <n> --sha <sha> [--gate "Gate 1"|"Gate 2"] [--skip <n,n>]  < findings.json
+ *   node convergence.js status --ledger <path> [--target <branch>] [--round <n>] [--skip <n,n>]
  *     --target: only that branch's rounds count toward locked / streak
  *     --round:  the round about to run — a round missing before it (errored, never recorded) breaks the lock
+ *     --skip:   review-file round numbers that are not branch rounds (Files / Folder / Ad-hoc); missing from
+ *               the ledger by design, so never a gap (may be empty)
  *
  *   findings.json = [{ location: "path:line", severity, title, category?, in_scope? }, ...]
  *
@@ -66,8 +68,8 @@ function fingerprint(file, category, summary) {
 
 // Options each command accepts — anything else (a typo like --gat) fails closed, never defaults.
 const COMMAND_OPTS = {
-  record: new Set(['ledger', 'target', 'round', 'sha', 'gate']),
-  status: new Set(['ledger', 'target', 'round']),
+  record: new Set(['ledger', 'target', 'round', 'sha', 'gate', 'skip']),
+  status: new Set(['ledger', 'target', 'round', 'skip']),
 };
 
 function parseArgs(argv) {
@@ -90,6 +92,19 @@ function parseArgs(argv) {
 function parseRound(value) {
   if (!/^[1-9]\d*$/.test(value)) throw new ControllerError(`--round must be a positive integer, got "${value}"`);
   return Number(value);
+}
+
+function parseSkip(value) {
+  if (value === undefined || value === '') return new Set();
+  if (!/^[1-9]\d*(,[1-9]\d*)*$/.test(value)) throw new ControllerError(`--skip must be comma-separated round numbers, got "${value}"`);
+  return new Set(value.split(',').map(Number));
+}
+
+// Round numbers strictly between a and b that are neither recorded nor skipped — an errored round's findings are unknown.
+function missingBetween(a, b, skip) {
+  const out = [];
+  for (let n = a + 1; n < b; n++) if (!skip.has(n)) out.push(n);
+  return out;
 }
 
 function requireOpts(opts, names) {
@@ -206,12 +221,14 @@ function buildHistory(rounds) {
 }
 
 // Gate 1 clean streak. A dirty Gate 2 (peer) round breaks it; a clean one neither breaks nor extends it.
-// A round-number gap (an errored round never reached the ledger) also breaks it — its findings are unknown.
+// A round-number gap (an errored round never reached the ledger) also breaks it — its findings are unknown;
+// a skipped (partial-scope) round number is not a gap.
 // So does a round on another target: a ledger inherited from an earlier branch never lends its streak.
-function trailingCleanCount(rounds, nextRound = rounds.length ? rounds[rounds.length - 1].round + 1 : 1, target = null) {
+function trailingCleanCount(rounds, nextRound = rounds.length ? rounds[rounds.length - 1].round + 1 : 1, target = null, skip = new Set()) {
   let n = 0;
   let expected = nextRound - 1;
   for (let i = rounds.length - 1; i >= 0; i--, expected--) {
+    while (skip.has(expected) && expected > rounds[i].round) expected--;
     if (rounds[i].round !== expected) break;
     if (target !== null && rounds[i].target !== target) break;
     if (rounds[i].gate === 'Gate 2' && rounds[i].clean) continue;
@@ -283,6 +300,7 @@ function decide({ gate, cycleRound, findings, priorClean, gap = false }) {
 function record(opts, stdin) {
   requireOpts(opts, ['ledger', 'target', 'round', 'sha']);
   const roundNumber = parseRound(opts.round);
+  const skip = parseSkip(opts.skip);
   const gate = opts.gate ?? 'Gate 1';
   if (!GATES.has(gate)) throw new ControllerError(`--gate must be "Gate 1" or "Gate 2", got "${gate}"`);
   const { findings: incoming, notes } = parseFindings(stdin);
@@ -333,17 +351,15 @@ function record(opts, stdin) {
     findings.push(...carried.values());
   }
 
-  const gap = Boolean(previous) && roundNumber - previous.round > 1;
+  const missing = previous ? missingBetween(previous.round, roundNumber, skip) : [];
+  const gap = missing.length > 0;
   const result = decide({
     gate, findings, gap,
     cycleRound: cycleRoundCount(prior, opts.target),
-    priorClean: trailingCleanCount(prior, roundNumber, opts.target),
+    priorClean: trailingCleanCount(prior, roundNumber, opts.target, skip),
   });
   if (replaced.length) result.reasons.unshift(`replaced ledger round(s) ${replaced.join(', ')}`);
-  if (gap) {
-    const missing = previous.round + 1 === roundNumber - 1 ? `${roundNumber - 1}` : `${previous.round + 1}-${roundNumber - 1}`;
-    result.reasons.push(`round(s) ${missing} missing from ledger — clean streak reset`);
-  }
+  if (gap) result.reasons.push(`round(s) ${missing.join(', ')} missing from ledger — clean streak reset`);
   if (previous && previous.target !== opts.target) {
     result.reasons.push(`target changed ${previous.target} → ${opts.target} — clean streak and round cap restart`);
   }
@@ -390,7 +406,7 @@ function status(opts) {
   // --round = the round about to run: a round missing between the ledger tail and it breaks the streak.
   const nextRound = opts.round === undefined ? undefined : parseRound(opts.round);
   // Unscoped: count only the newest round's target, as record does.
-  const streak = trailingCleanCount(rounds, nextRound, rounds.length ? rounds[rounds.length - 1].target : null);
+  const streak = trailingCleanCount(rounds, nextRound, rounds.length ? rounds[rounds.length - 1].target : null, parseSkip(opts.skip));
   return {
     rounds: rounds.length,
     // A lock holds only while its clean streak is unbroken (no gap since, no later dirty round).

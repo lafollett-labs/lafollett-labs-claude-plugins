@@ -23,8 +23,8 @@ fails=0
 pass() { checks=$((checks + 1)); echo "PASS: $1"; }
 fail() { checks=$((checks + 1)); fails=$((fails + 1)); echo "FAIL: $1"; }
 
-# Placeholder keys examples may use: #123/#1234, ABC-123/ABC-1234, and story codes LT-NN (LT-02).
-PLACEHOLDERS=':(#(123|1234)|[A-Z][A-Z0-9]+-(123|1234)|LT-[0-9]{2})$'
+# Placeholder keys examples may use: #42/#57/#123/#1234, ABC-123/ABC-1234, and story codes LT-NN (LT-02).
+PLACEHOLDERS=':(#(42|57|123|1234)|[A-Z][A-Z0-9]+-(123|1234)|LT-[0-9]{2})$'
 
 
 # section <file> <heading-regex> — lines under a "## " heading, up to the next "## " heading.
@@ -43,16 +43,20 @@ unproven_branch() {
   docs_block '^#+ Negative-receipt proof check' "$@" | awk '/no reply == unproven/{on=1} on && /^[[:space:]]*else:/{exit} on{print}'
 }
 
+# issue_refs <file>... — "<file>:#<n>" for each issue number of two or more digits; a # glued to a word,
+# an entity (&#8212;) or a hex colour (#5319e7) is not one. Same rule as run-skill-structure-tests.sh.
+issue_refs() { local f; for f in "$@"; do tr -c '[:alnum:]#&' '\n' < "$f" | grep -E '^#[0-9]{2,}$' | sed "s|^|$f:|"; done; }
+
 # narration <file>... — ticket keys / story numbers, ignoring finding and receipt ids (MEDIUM-001, RECEIPT-002)
 # and the PLACEHOLDERS example keys
 narration() {
-  grep -noE '#[0-9]{3,}|[A-Z][A-Z0-9]+-[0-9]+|[Ss]tor(y|ies) [0-9]+|(^|[^A-Za-z])AC[0-9]+|# 0[0-9]( |$)' "$@" \
+  { grep -noE '[A-Z][A-Z0-9]+-[0-9]+|[Ss]tor(y|ies) [0-9]+|(^|[^A-Za-z])AC[0-9]+|# 0[0-9]( |$)' "$@"; issue_refs "$@"; } \
     | grep -vE ':(CRITICAL|HIGH|MEDIUM|LOW|INFO|RECEIPT)-[0-9]+$' | grep -vE "$PLACEHOLDERS"
 }
 
 # ticket_refs <file> — the narrower ticket regex the agent and protocol checks use, same exemptions
 ticket_refs() {
-  grep -noE '#[0-9]{3,}|[A-Z][A-Z0-9]+-[0-9]+|[Ss]tory [0-9]+' "$1" \
+  { grep -noE '[A-Z][A-Z0-9]+-[0-9]+|[Ss]tory [0-9]+' "$1"; issue_refs "$1"; } \
     | grep -vE ':(CRITICAL|HIGH|MEDIUM|LOW|INFO|RECEIPT)-[0-9]+$' | grep -vE "$PLACEHOLDERS"
 }
 
@@ -533,6 +537,10 @@ mutant agent-narration \
   'printf "\n- added in ABC-1790\n" >> agents/pe-general-purpose.md' 'pe-general-purpose: ticket narration'
 mutant agent-issue-narration \
   'printf "\n- added in #4321\n" >> agents/pe-go.md' 'pe-go: ticket narration'
+mutant agent-two-digit-issue-narration \
+  'printf "\n- since #20 merged (a regression from #17)\n" >> agents/pe-go.md' 'pe-go: ticket narration'
+allowed agent-entity-and-colour \
+  'printf "\n- an em dash &#8212; and the colour #5319e7\n" >> agents/pe-go.md' 'pe-go: ticket narration'
 allowed agent-placeholder-keys \
   'printf "\n- a branch such as feat/42-add-login, feat/LT-02-tuner, #123, #1234, ABC-1234\n" >> agents/pe-go.md' 'pe-go: ticket narration'
 allowed shared-placeholder-keys \

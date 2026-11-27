@@ -3,11 +3,15 @@
 Loaded by Phase 6 for a Gate 2 round, before the severity-gated verdict. Gate 2 never approves over failed checks on HEAD's code: it binds `session.ci` (read by `gate2` and by `publish.md` Step 4) and, when a check on HEAD failed, adds a CRITICAL finding to `consolidated`.
 
 ```text
-(ci, ec) = `cd "{session.review_root}" && node "${CLAUDE_PLUGIN_ROOT}/bin/pr-checks.js" check --pr {session.pr.number} --head {session.head_sha}`
-if ec != 0 or ci is not JSON:                      # fail closed — unread checks never clear the gate (includes "HEAD is not the PR head")
-  session.ci = {state: "unreadable", reason: ci.error if ci and ci.error else trim(stderr) or "pr-checks.js exit {ec}"}
-else:
-  session.ci = {state: ci.state, reason: ci.reason, failed_checks: ci.failed_checks}
+read_ci():
+  (ci, ec) = `cd "{session.review_root}" && node "${CLAUDE_PLUGIN_ROOT}/bin/pr-checks.js" check --pr {session.pr.number} --head {session.head_sha}`
+  if ec != 0 or ci is not JSON:                    # fail closed — unread checks never clear the gate (includes "HEAD is not the PR head")
+    return {state: "unreadable", reason: ci.error if ci and ci.error else trim(stderr) or "pr-checks.js exit {ec}"}
+  return {state: ci.state, reason: ci.reason, failed_checks: ci.failed_checks}
+
+session.ci = read_ci()
+if session.ci.state == "none" and `grep -qsE 'pull_request' "{session.review_root}"/.github/workflows/*.yml "{session.review_root}"/.github/workflows/*.yaml` exits 0:
+  wait 30 seconds; session.ci = read_ci()         # checks register a few seconds after a push: read once more before accepting none
 
 if session.ci.state == "failed":
   logs = []
@@ -31,7 +35,7 @@ render "  🔎 CI: {session.ci.state} — {session.ci.reason}"
 
 | `session.ci.state` | Gate 2 effect |
 | - | - |
-| `passed`, `none` | no CI finding; MERGEABLE follows the reviewers' GitHub reviews |
+| `passed`, `none` | no CI finding; MERGEABLE follows the reviewers' GitHub reviews. `none` counts only after one re-read ~30s later when a workflow under `.github/workflows/` has a `pull_request` trigger |
 | `failed` | CRITICAL finding → 🚫 BLOCKED; `gate2` returns `OPEN — Gate 2 CI failed: …` |
 | `pending`, `incomplete` | no finding; `gate2` returns `OPEN — Gate 2 waiting on CI: …`; no PR approval |
 | `unreadable` | no finding; `gate2` returns `OPEN — Gate 2 CI status unreadable: …`; no PR approval |

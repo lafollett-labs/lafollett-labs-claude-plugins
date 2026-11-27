@@ -25,7 +25,7 @@ Hand these to their owner and leave them out of findings:
 | `*.go`, `go.mod`, `go.sum` | pe-go |
 | `*.vue`, `nuxt.config.*` under a Vue/Nuxt project; its `tailwind.config.*` | pe-vue |
 | `cdk.json`, `*.tf`, `Dockerfile*`, CloudFormation/SAM templates, Cloudflare configs | pe-aws-infra |
-| model-read instruction files (`SKILL.md`, `agents/*.md`, `commands/*.md`, CLAUDE/persona files, `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, rules, skill references, plugin READMEs) | pe-governance |
+| model-read instruction files (`SKILL.md`, `agents/*.md`, `commands/*.md`, CLAUDE/persona files, `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, rules, skill references, plugin READMEs) | pe-governance |
 
 ## Commands
 

@@ -27,8 +27,8 @@ tool:      mcp__plugin_slack_slack__slack_send_message   # converts standard mar
 - Never put a URL directly against an `:emoji:` shortcode or any other non-whitespace token: a bare URL's auto-link absorbs the trailing characters, across line breaks too.
 
 ```text
-❌ :link: https://github.com/octo-org/octo-repo/pull/51        (bare URL; a :ticket: on the next line joins the href)
-✅ [PR #51](https://github.com/octo-org/octo-repo/pull/51) · [#42](https://github.com/octo-org/octo-repo/issues/42)
+❌ :link: https://github.com/octo-org/octo-repo/pull/57        (bare URL; a :ticket: on the next line joins the href)
+✅ [PR #57](https://github.com/octo-org/octo-repo/pull/57) · [#42](https://github.com/octo-org/octo-repo/issues/42)
 ```
 
 ## Channel Resolution

@@ -506,6 +506,24 @@ check "status after lock → locked"      "$(jget "$(node "$CTL" status --ledger
 S="$(node "$CTL" status --ledger "$WORK/missing.json" 2>/dev/null)"
 check "status on missing ledger → zero" "$(jget "$S" 'j.consecutive_clean_rounds+":"+j.last_clean')" "0:null"
 
+# --- --skip: Files / Folder / Ad-hoc round numbers in the review file are never a ledger gap ---
+L="$WORK/skip.json"
+rec "$L" 1 "[]"
+OUT="$(printf '[]' | node "$CTL" record --ledger "$L" --target feat/42-t --round 3 --sha sha3 --skip 2 2>/dev/null)"
+check "skip: a skipped partial round is no gap → LOCKED" "$(jget "$OUT" 'j.decision')" "LOCKED"
+check "skip: no gap reason" "$(jget "$OUT" 'j.reasons.some(r => r.includes("missing from ledger"))')" "false"
+check "skip: status --round past a skipped round keeps the lock" \
+  "$(jget "$(node "$CTL" status --ledger "$L" --round 5 --skip 2,4 2>/dev/null)" 'j.locked+":"+j.consecutive_clean_rounds')" "true:2"
+check "skip: status --round past an unskipped round breaks the lock" \
+  "$(jget "$(node "$CTL" status --ledger "$L" --round 5 --skip 2 2>/dev/null)" 'j.locked')" "false"
+check "skip: an empty list is accepted" "$(node "$CTL" status --ledger "$L" --skip '' >/dev/null 2>&1; echo $?)" "0"
+L="$WORK/skip-gap.json"
+rec "$L" 1 "[]"
+OUT="$(printf '[]' | node "$CTL" record --ledger "$L" --target feat/42-t --round 4 --sha sha4 --skip 2 2>/dev/null)"
+check "skip: an unskipped missing round is still a gap" "$(jget "$OUT" 'j.decision+":"+j.reasons.join()')" "CONTINUE:round(s) 3 missing from ledger — clean streak reset"
+printf '[]' | node "$CTL" record --ledger "$L" --target feat/42-t --round 5 --sha sha5 --skip 'x' >/dev/null 2>&1
+check "skip: a malformed list fails closed (exit 2)" "$?" "2"
+
 echo "=================================="
 echo "$total checks, $fails failed"
 [ "$total" -gt 0 ] && [ "$fails" -eq 0 ]

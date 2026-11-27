@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Git conventions for the sdlc skills: branch-name parse and build, Conventional Commits subject check,
- * ticket-key extraction, and commit-description sanitizing. One implementation so implement,
- * pull-request, deliver, and review agree.
+ * ticket-key extraction, commit-description sanitizing, and PR base resolution. One implementation so
+ * implement, pull-request, deliver, and review agree.
  *
  * Ticket keys come in two kinds:
  *   issue  GitHub issue: `#42` (a bare `42` is accepted as input)  → ticket_key "#42", key_slug "42", issue_number 42
@@ -18,8 +18,9 @@
  *   node git-conventions.js sanitize [--max <n>] [--fallback <s>]    < text
  *   node git-conventions.js base    [--branch <b>] [--pr <N>]
  *
- * Untrusted text (user arguments, branch names) goes in on stdin through a quoted heredoc, so no shell
- * quoting is involved; one trailing newline is dropped.
+ * Untrusted text (user arguments, branch names, titles) goes in on stdin through a quoted heredoc, so no shell
+ * quoting is involved; one trailing newline is dropped. `base` reads no stdin: its --branch is an argument
+ * and must be a plain ref name (below), else exit 2.
  *
  * Output: one JSON object on stdout. KEY = ticket_key, key_kind ("issue" | "story"), issue_number, key_slug
  * (all null when no key was found).
@@ -27,7 +28,8 @@
  *             on_feature = the branch starts <type>/<key_slug> and no letter or digit follows the key (looser
  *             than ok, which also checks the description): feat/42_x is on a feature branch, feat/2fa-login is not
  *   commits → {ok, count, offenders: [{subject, error}], error?}
- *             subject = <type>[(scope)][!]: <description>; no ticket key required
+ *             subject = <type>[(scope)][!]: <description>, or git's revert subject Revert "<subject>";
+ *             no ticket key required
  *   key     → {ok, KEY, error?}
  *             --anchored: the whole (trimmed) text must be a key: #42, 42, or a story code in any ASCII case
  *             (returned uppercased). Otherwise the first #42 found wins, else the first uppercase story code
@@ -43,7 +45,9 @@
  *                         writes it when it cuts the branch)
  *             origin-head git symbolic-ref --quiet --short refs/remotes/origin/HEAD, minus "origin/"
  *             default     "main"
- *             A base that is not a plain ref name (letters, digits, . _ / -; no "..", "//", leading "-") is an error.
+ *             A --branch or base that is not a plain ref name is an error. Plain = at most 255 characters
+ *             of letters, digits, . _ / -; starts with a letter or digit; no "..", "//" or "/."; no
+ *             component ending ".lock"; does not end with "/" or ".".
  *
  * Exit codes: 0 valid · 1 invalid (JSON still carries the reason) · 2 usage error, or a base error, ({error})
  */
@@ -63,6 +67,8 @@ const KEY_SLUG = `${ISSUE}|${STORY}`;
 const BRANCH_RE = new RegExp(`^(${TYPE_ALT})/(${KEY_SLUG})(-[a-z0-9-]+)?$`);
 const ON_FEATURE_RE = new RegExp(`^(${TYPE_ALT})/(${KEY_SLUG})(?![A-Za-z0-9])`);
 const COMMIT_RE = new RegExp(`^(${COMMIT_ALT})(\\([^()\\s]+\\))?!?: \\S`);
+// git revert's default subject.
+const REVERT_RE = /^Revert ".+"$/;
 const ISSUE_ANCHORED_RE = new RegExp(`^#?(${ISSUE})$`);
 const STORY_ANCHORED_RE = new RegExp(`^${STORY}$`);
 // No `u` flag on purpose: /i then folds ASCII only, so lookalikes such as `lıt-2` (dotless i) stay rejected.
@@ -152,7 +158,8 @@ function sanitize(text, max, fallback) {
 
 function checkCommits(text) {
   const subjects = text.split(/\r?\n/).filter((s) => s !== '');
-  const offenders = subjects.filter((s) => !COMMIT_RE.test(s)).map((s) => ({ subject: s, error: commitReason(s) }));
+  const offenders = subjects.filter((s) => !COMMIT_RE.test(s) && !REVERT_RE.test(s))
+    .map((s) => ({ subject: s, error: commitReason(s) }));
   const result = { ok: offenders.length === 0, count: subjects.length, offenders };
   if (!result.ok) result.error = `${offenders.length} commit(s) don't match Conventional Commits format`;
   return result;

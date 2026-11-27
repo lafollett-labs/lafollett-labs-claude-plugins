@@ -57,14 +57,12 @@ review_file_url = "https://github.com/{session.repo}/blob/{session.pushed_sha}/{
 Writes the Phase 5.5 result (`session.ac_results`) as the `ac-conformance` section of the issue's progress comment — once per reviewed code, never once per round. Reuses Phase 5.5 output verbatim; runs no new analysis.
 
 ```text
-# Bound before either step's guards: Step 3.6 dedupes on it even when Step 3.5 skips.
+# Bound before either step's guards: Step 3.6 dedupes on them even when Step 3.5 skips.
 session.rounds_now = (stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/review-file.js" parse --file "{output_path}"`).rounds if session.review_committed else []
+prior_same = [r for r in session.rounds_now[:-1] if same_code(r.reviewed_sha, session.head_sha)]   # once-per-code dedupe: the on-disk review file is the only signal that survives fresh invocations
 
 if session.ticket_key is null OR session.ac_results is empty OR not session.review_committed:
   skip Step 3.5                 # no ticket / no Phase 5.5 output / review not durably recorded → no comment, no error
-
-# Once-per-code dedupe: the on-disk review file is the only signal that survives fresh review invocations.
-prior_same = [r for r in session.rounds_now[:-1] if same_code(r.reviewed_sha, session.head_sha)]
 if prior_same is non-empty:
   skip Step 3.5                 # this code was already handled in an earlier round (a declined preview included)
 
@@ -122,6 +120,7 @@ if user_response == yes:
   write to "{tmp}/review-comment.md":
     verdict line + gate status
     "CI: {session.ci.state} — {session.ci.reason}" (Gate 2 only)
+    "{session.gate1_skip_note}" if session.gate1_skip_note
     in-scope counts by severity        # in-scope basis matches the Slack {issues_list}
     "[Review file]({review_file_url})" if review_file_url else "Gate 2 review — this comment is the round's record" if session.gate == "Gate 2" else "Review file not pushed — see {output_path} on the reviewer's machine"
     key in-scope findings (one line each, CRITICAL/HIGH/MEDIUM only)

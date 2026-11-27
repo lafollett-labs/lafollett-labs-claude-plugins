@@ -129,7 +129,7 @@ update(args):
 | - | - | - |
 | `--docs-path <dir>` | batch mode | re-syncs every file in its `.github-state.json` |
 | `--file <md>` | single mode | one file; its number comes from state (`--docs-path`, else the file's folder) |
-| `--key <N>` | no | the issue for an untracked `--file`; refused when the file is tracked as another number |
+| `--key <N>` | no | the issue for an untracked `--file`; refused when the file is tracked as another number, or another file tracks `N` |
 
 ## bdd — Scaffold an Issue Template
 

@@ -2,7 +2,8 @@
 
 Loaded by SKILL.md Phase 2 when `found` (this ticket's branches, local first, else origin's) is not empty. It
 returns `resume`, with the branch checked out and `session.branch_name`, `branch_type`, `slug` and `base_branch`
-set, or `fresh`, and Phase 2 goes on to the base prompt and cuts a new branch.
+set, or `fresh`, and Phase 2 goes on to the base prompt and cuts a new branch. Every name in `found` passed
+SKILL.md's safe-ref check (`^[A-Za-z0-9._/-]+$`, no leading `-`), so it is safe inside the single quotes below.
 
 ```text
 current = `git branch --show-current`
@@ -31,6 +32,7 @@ else:
 if choice == "resume":
   if b is only on origin: git checkout --track 'origin/{b}'
   else:                   git checkout '{b}'
+  if the checkout fails: ❌ Error — cannot check out {b}: {git's message}; STOP
   p    = node "${CLAUDE_PLUGIN_ROOT}/bin/git-conventions.js" branch <<'BRANCH'
 {b}
 BRANCH

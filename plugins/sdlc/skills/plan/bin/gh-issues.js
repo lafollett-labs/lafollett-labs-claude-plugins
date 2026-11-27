@@ -17,7 +17,8 @@
  *   gh-issues.js create --docs-path <dir> [--yes]
  *   gh-issues.js create-standalone --file <md> [--type Story|Task|Bug] [--docs-path <dir>] [--yes]
  *   gh-issues.js update (--docs-path <dir> | --file <md> [--key <N>] [--docs-path <dir>]) [--yes]
- *                                       (--key: an untracked file's issue; refused when it differs from the tracked one)
+ *                                       (--key: an untracked file's issue; refused when it differs from the file's
+ *                                        tracked number, or another file tracks it)
  *   gh-issues.js import --epic <N> [--docs-path <dir>] [--force]
  *   gh-issues.js status --docs-path <dir>
  *   gh-issues.js reparent --key <N> [--parent <N>]          (no --parent: clear the parent)
@@ -504,6 +505,10 @@ function cmdUpdate(a) {
         const tracked = state.issues[t.fname];
         if (key && tracked && tracked !== key) {
             throw new CliError(`${t.fname} is tracked as #${tracked}; --key #${key} would overwrite #${key} with it — drop --key, or fix ${STATE_FILE}`);
+        }
+        const owner = key && Object.keys(state.issues).find((f) => f !== t.fname && state.issues[f] === key);
+        if (owner) {
+            throw new CliError(`#${key} is tracked as ${owner}; updating it from ${t.fname} would overwrite it — drop --key, or fix ${STATE_FILE}`);
         }
         const num = key || tracked;
         if (!num) {

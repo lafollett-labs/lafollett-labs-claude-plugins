@@ -214,7 +214,7 @@ bind changed_files, files_changed, lines_added, lines_removed, diff_cmd, signals
 session.tier = scope.tier; session.tier_source = scope.tier_source; session.tier_signals = scope.tier_signals; session.routing = scope.routing; session.matched_pes = scope.matched_pes; session.ledger = scope.ledger
 ```
 
-`pe-governance` owns model-audience instruction files (skills, agents, commands, the CLAUDE.md family, `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, rules, skill references and model-consumed assets, plugin READMEs); `pe-github-actions` owns workflows and composite actions; human docs and structured data route to `pe-general-purpose`, the last-resort fallback. The primary agent never reviews code itself.
+`pe-governance` owns model-audience instruction files (skills, agents, commands, the CLAUDE.md family, `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, rules, skill references and model-consumed assets, plugin READMEs); `pe-github-actions` owns workflows and composite actions; human docs and structured data route to `pe-general-purpose`, the last-resort fallback. The primary agent never reviews code itself.
 
 ### Gate detection
 
@@ -380,7 +380,7 @@ round_input = [{location, severity: f.severity_reported or f.severity, title, ca
 if session.ledger:
   write round_input as JSON to "{session.ledger_path}.round.json"
   session.convergence = stdout of
-    `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/convergence.js" record --ledger "{session.ledger_path}" --target "$(git -C "{session.review_root}" rev-parse --abbrev-ref HEAD)" --round {session.round_n} --sha {session.head_sha} --gate "{session.gate}" < "{session.ledger_path}.round.json"`
+    `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/convergence.js" record --ledger "{session.ledger_path}" --target "$(git -C "{session.review_root}" rev-parse --abbrev-ref HEAD)" --round {session.round_n} --sha {session.head_sha} --gate "{session.gate}" --skip "{session.skip_rounds}" < "{session.ledger_path}.round.json"`
   delete "{session.ledger_path}.round.json"
 
 if session.gate == "Gate 1" and not session.ledger:
@@ -437,7 +437,7 @@ elif d == "HUMAN_GATE" or session.verdict != "✅ APPROVED":
   q = "🛑 {session.gate_status}" if d == "HUMAN_GATE" else "🟡 {len(v.gating)} gating finding(s) open (listed above)"
   AskUserQuestion → "Round {session.round_n}: {q}. How to proceed?"; options:
     (a) "remediate + re-review (recommended) — two consecutive clean rounds lock Gate 1"
-    (b) "engineer override — proceed with findings open"
+    (b) "engineer override — proceed with findings open"   # offered only when session.ledger: a Files / Folder / Ad-hoc round is never part of Gate 1
     (c) "abort — the round is persisted; the gate stays OPEN"
   match user_response:
     case (a): pass                                         # the engineer remediates and re-invokes
@@ -493,4 +493,4 @@ This table is the one gating definition; PE severity definitions supply rating c
 - **Standalone** — works without `deliver` and without GitHub for a branch review with a local story; deliver invokes review, review never requires deliver.
 - **Automated author review-loop replies are brief pointers** — use `assets/slack-templates.md` → **Author Review-Loop Reply**, only when a PR Announcement thread already exists and Slack is enabled.
 - **Worktree isolation is PR-Review-only** — interactive runs default to in-place; `--auto` always takes the worktree path, which reuses the primary checkout when the PR branch is already checked out there; teardown defaults to KEEP and never auto-removes. Front-end installs, builds, and tests run where the engineer chose (a disposable worktree, their checkout without installing, or nowhere — `off` applies everywhere); otherwise a review worktree builds in itself, and in place `--auto` takes the disposable worktree unless the branch remembers a choice — never an install or build output in the engineer's checkout, never a production configuration.
-- **Validate PR-sourced identifiers before shell interpolation** — `pr_number` must match `^[0-9]+$`; branch names must match `^[A-Za-z0-9._/-]+$` and not start with `-` (Phase 1 `safe_branch`; checkout.md § Fetch + PR metadata refuses an unsafe PR head or base before any checkout, worktree, or push); interpolate quoted with the options terminator after the ref (`git checkout "{branch}" --`). Free-text and PR-JSON values are untrusted input; branch names reach `git-conventions.js` on stdin through a quoted heredoc.
+- **Validate PR-sourced identifiers before shell interpolation** — `pr_number` must match `^[0-9]+$`; branch names must match `^[A-Za-z0-9._/-]+$` and not start with `-` (Phase 1 `safe_branch`; checkout.md § Fetch + PR metadata refuses an unsafe PR head or base before any checkout, worktree, or push); interpolate quoted with the options terminator after the ref (`git checkout "{branch}" --`). Free-text and PR-JSON values are untrusted input; a branch name reaches `git-conventions.js branch` on stdin through a quoted heredoc, and `git-conventions.js base` as a quoted `--branch` argument only after `safe_branch`.

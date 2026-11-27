@@ -7,7 +7,7 @@
  *   node review-file.js render   --file <path> [--root <dir>]          < round.json
  *   node review-file.js parse    --file <path>
  *   node review-file.js parse    --root <dir> --name <key_slug>
- *   node review-file.js parse    --local <owner/repo> --name <key_slug>
+ *   node review-file.js parse    --local <owner/repo> --pr <N> --name <key_slug>
  *   node review-file.js override --file <path>                         < override.json
  *   node review-file.js verdict                                        < findings.json
  *   node review-file.js gate2    --pr <N> --head <sha> --root <dir>    < current.json
@@ -20,17 +20,20 @@
  * parse    Prints { rounds: [{ n, verdict, gate_status, reviewed_sha, engineer_reviewer, sdlc_version,
  *          counts: { in, out }, in_scope_findings: [{ id, severity, title, location, domains, recommendation }],
  *          advisory }], latest, next_round,
- *          gate1: { state, round, sha }, version_advisories: { findings, gate2 } }.
- *          gate1 is the latest Gate 1 round — a round whose gate_status starts neither MERGEABLE nor
- *          "OPEN — Gate 2": state locked (starts LOCKED) | overridden (starts OVERRIDDEN) | open | none (no round).
+ *          gate1: { state, round, sha }, partial_rounds: [n], version_advisories: { findings, gate2 } }.
+ *          gate1 is the latest Gate 1 branch round — a round whose gate_status starts with none of MERGEABLE,
+ *          "OPEN — Gate 2", "OPEN — not a branch review": state locked (starts LOCKED) | overridden
+ *          (starts OVERRIDDEN) | open | none (no round). partial_rounds are the Files / Folder / Ad-hoc rounds
+ *          ("OPEN — not a branch review"): convergence.js --skip takes them, so they are never a ledger gap.
  *          --root/--name reads <root>/docs/code-reviews/<name>-code-review.md (the committed Gate 1 review);
- *          --local/--name reads ~/.claude/sdlc/reviews/<owner>/<repo>/<name>-code-review.md (a Gate 2 reviewer's
- *          own, never committed). Both are empty when the file is absent and add { markdown_path, ledger_path }.
+ *          --local/--pr/--name reads ~/.claude/sdlc/reviews/<owner>/<repo>/<name>-pr<N>-code-review.md (a Gate 2
+ *          reviewer's own, never committed; keyed by PR, so two PRs for one ticket never share it). Both are empty
+ *          when the file is absent and add { markdown_path, ledger_path }.
  *          Tolerates hand-written files from before this script existed.
  * override stdin: { round, reviewer, reason, findings: [{ id, title }] }. Inside that Gate 1 round, before the
  *          next round or the footer, inserts an "Overridden Findings" section and sets the round's Gate Status
- *          to "OVERRIDDEN — <reason>". Every id must be an in-scope finding of the round; a Gate 2 round or a
- *          round already overridden is refused. Prints { path, round, gate_status }.
+ *          to "OVERRIDDEN — <reason>". Every id must be an in-scope finding of the round; a Gate 2 round, a
+ *          Files / Folder / Ad-hoc round, or a round already overridden is refused. Prints { path, round, gate_status }.
  * verdict  stdin: findings array (or { findings }). Prints { verdict, counts, gating, advisory }.
  * gate2    stdin: { reviewer, verdict, ci: { state, reason } } for the round being recorded (ci.state: passed |
  *          none | failed | pending | incomplete | unreadable). Any ci.state but passed / none holds the round OPEN
@@ -78,6 +81,7 @@ const MERGEABLE = 'MERGEABLE — all Gate 2 reviewers approved on current HEAD';
 const GATE2_OPEN = 'OPEN — Gate 2 reviewer(s) outstanding or not on current HEAD';
 const GATE2_STATUS = /^(MERGEABLE|OPEN — Gate 2)/;
 const CLOSED_STATUS = /^(LOCKED|OVERRIDDEN)/;
+const PARTIAL_STATUS = /^OPEN — not a branch review/; // Files / Folder / Ad-hoc rounds: never part of the Gate 1 record
 const CI_HOLD = {
   failed: 'OPEN — Gate 2 CI failed: ',
   pending: 'OPEN — Gate 2 waiting on CI: ',
@@ -113,6 +117,7 @@ function readJson(text) {
 }
 
 const isGate2 = (status) => GATE2_STATUS.test(status || '');
+const isPartial = (status) => PARTIAL_STATUS.test(status || '');
 const oneLine = (s) => String(s ?? '').replace(/\s*\r?\n\s*/g, ' ').trim();
 // Short and full SHAs both appear in review files: one being a prefix of the other is a match.
 const sameSha = (a, b) => Boolean(a && b) && (a.startsWith(b) || b.startsWith(a));
@@ -353,16 +358,17 @@ function beforeFooter(text) {
   return at === -1 ? text.replace(/\n*$/, '\n') : text.slice(0, at);
 }
 
-// The heading note: only a Gate 1 round after a clean Gate 1 round that has not closed the gate.
+// The heading note: only a branch Gate 1 round after a clean branch Gate 1 round that has not closed the gate.
 function roundNote(prior, r, root) {
-  if (isGate2(r.gate_status) || isGate2(prior.gate_status) || CLOSED_STATUS.test(prior.gate_status || '')) return '';
+  if (!prior || isGate2(r.gate_status) || isPartial(r.gate_status)) return '';
+  if (isGate2(prior.gate_status) || CLOSED_STATUS.test(prior.gate_status || '')) return '';
   if (prior.verdict !== VERDICTS.approved) return '';
   return sameCode(root, prior.reviewed_sha, r.head_sha) ? NOTE_CONFIRM : NOTE_INVALIDATED;
 }
 
 // Appends round n to an LF review file's text and syncs the top Verdict line.
 function appendRound(text, r, v, n, root) {
-  const prior = parseText(text).latest;
+  const prior = parseText(text).rounds.filter((x) => !isPartial(x.gate_status)).at(-1);
   const block = renderRound(r, v, n, roundNote(prior, r, root));
   const synced = beforeFooter(text).replace(/^\*\*Verdict:\*\* .*$/m, `**Verdict:** ${v}`);
   const next = `${synced}\n${block}${FOOTER_BLOCK}`;
@@ -412,6 +418,7 @@ function override(opts, stdin) {
   if (k === -1) throw new CliError(`round ${o.round} is not in ${opts.file}`);
   const round = rounds[k];
   if (isGate2(round.gate_status)) throw new CliError(`round ${o.round} is a Gate 2 round; only a Gate 1 round is overridden`);
+  if (isPartial(round.gate_status)) throw new CliError(`round ${o.round} is not a branch review; only a branch round is overridden`);
   if (/^OVERRIDDEN/.test(round.gate_status || '')) throw new CliError(`round ${o.round} is already overridden`);
   const ids = new Set(round.in_scope_findings.map((f) => f.id));
   for (const f of o.findings) {
@@ -445,7 +452,7 @@ function override(opts, stdin) {
 
 // --- repo store and the reviewer's local store ------------------------------------
 // The Gate 1 review and its findings ledger are committed under docs/code-reviews/ on the reviewed branch.
-// A Gate 2 reviewer's own rounds stay under ~/.claude/sdlc/reviews/<owner>/<repo>/, outside every checkout.
+// A Gate 2 reviewer's own rounds stay under ~/.claude/sdlc/reviews/<owner>/<repo>/, keyed by PR, outside every checkout.
 
 const EMPTY = { rounds: [], latest: null, next_round: 1 };
 const slugOk = (s) => SLUG.test(s || '') && !/^\.+$/.test(s);
@@ -458,16 +465,19 @@ function storeDir(opts) {
     if (extra !== undefined || !slugOk(owner) || !slugOk(repo)) throw new CliError(`--local "${opts.local}" is not an owner/repo slug`);
     return path.join(os.homedir(), '.claude', 'sdlc', 'reviews', owner, repo);
   }
-  throw new CliError('parse needs --file, --root and --name, or --local and --name');
+  throw new CliError('parse needs --file, --root and --name, or --local, --pr and --name');
 }
 
 function parseStore(opts) {
   const dir = storeDir(opts);
   if (!opts.name) throw new CliError('parse --root/--local needs --name');
   if (!slugOk(opts.name)) throw new CliError(`--name "${opts.name}" is not a key slug`);
+  if (opts.local && !/^[1-9]\d*$/.test(opts.pr || '')) throw new CliError('parse --local needs --pr <N>');
+  if (!opts.local && opts.pr !== undefined) throw new CliError('--pr goes with --local');
+  const name = opts.local ? `${opts.name}-pr${opts.pr}` : opts.name;
   const p = {
-    markdown_path: path.join(dir, `${opts.name}-code-review.md`),
-    ledger_path: path.join(dir, `${opts.name}-findings-ledger.json`),
+    markdown_path: path.join(dir, `${name}-code-review.md`),
+    ledger_path: path.join(dir, `${name}-findings-ledger.json`),
   };
   const parsed = fs.existsSync(p.markdown_path) ? parseText(fs.readFileSync(p.markdown_path, 'utf8')) : EMPTY;
   return { ...parsed, ...p };
@@ -615,7 +625,7 @@ function parseText(raw) {
 }
 
 function gate1Of(rounds) {
-  const g = rounds.filter((r) => !isGate2(r.gate_status)).at(-1);
+  const g = rounds.filter((r) => !isGate2(r.gate_status) && !isPartial(r.gate_status)).at(-1);
   if (!g) return { state: 'none', round: null, sha: null };
   const s = g.gate_status || '';
   const state = s.startsWith('LOCKED') ? 'locked' : s.startsWith('OVERRIDDEN') ? 'overridden' : 'open';
@@ -653,7 +663,8 @@ function parse(opts) {
       version_advisories.gate2 = `Gate 1 round ${lock.n} used a newer SDLC version (${lock.sdlc_version}). ${running} Update before starting Gate 2.`;
     }
   }
-  return { ...review, gate1, version_advisories };
+  const partial_rounds = rounds.filter((r) => isPartial(r.gate_status)).map((r) => r.n);
+  return { ...review, gate1, partial_rounds, version_advisories };
 }
 
 // --- gate2 ---------------------------------------------------------------------

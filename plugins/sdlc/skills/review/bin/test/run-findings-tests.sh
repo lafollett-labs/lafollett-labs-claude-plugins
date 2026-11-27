@@ -49,6 +49,9 @@ done
 check "a concrete recommendation that starts with a vague word's stem passes" \
   "$(val '{"outputs":{"t1":{"pe":"pe-go","findings":[{"severity":"LOW","category":"docs","title":"x","location":"a:1","recommendation":"Considerations.md gets the new key."}]}}}')" \
   'o.redispatch.length === 0'
+check "a vague word mid-sentence is not a vague recommendation" \
+  "$(val '{"outputs":{"t1":{"pe":"pe-go","findings":[{"severity":"LOW","category":"docs","title":"x","location":"a:1","recommendation":"Bound the retry loop; consider a cap of 3."}]}}}')" \
+  'o.redispatch.length === 0'
 check "after its one re-dispatch, a still-vague finding is demoted to a receipt, not looped" \
   "$(val '{"outputs":{"t1":{"pe":"pe-go","findings":[{"severity":"LOW","category":"docs","title":"x","location":"a:1","recommendation":""}]}},"redispatched":{"recommendation":["t1"]}}')" \
   'o.redispatch.length === 0 && o.outputs.t1.findings.length === 0 && o.outputs.t1.verification_receipts[0].claim === "below_bar" && o.demoted.length === 1'

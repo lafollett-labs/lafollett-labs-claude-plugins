@@ -28,7 +28,7 @@ The mechanical steps are tested scripts in `bin/`, not model judgment: `scope.js
 
 **Gate 2 status:** the PR is MERGEABLE when every Gate 2 reviewer's latest GitHub review is an approval on code identical to the PR head (a commit that only touches `docs/code-reviews/` does not count as a change) and the head's checks passed or none are reported.
 
-**Gate 2 CI gate:** Gate 2 reads the checks on the PR head (`../../bin/pr-checks.js`). A failed check adds a CRITICAL finding with the failed-step log tail; checks still running, cancelled, or unreadable hold the round open and withhold the approval; a PR with no checks is not blocked.
+**Gate 2 CI gate:** Gate 2 reads the checks on the PR head (`../../bin/pr-checks.js`). A failed check adds a CRITICAL finding with the failed-step log tail; checks still running, cancelled, or unreadable hold the round open and withhold the approval; a PR with no checks is not blocked (when a workflow has a `pull_request` trigger, Gate 2 reads the checks once more about 30 seconds later first, since fresh checks take a moment to register).
 
 ## Usage examples
 
@@ -59,7 +59,7 @@ To accept open findings rather than fix them, choose **engineer override** at th
 | - | - |
 | Gate 1 review document (append-only, committed) | `docs/code-reviews/<key>-code-review.md` |
 | Findings ledger (Gate 1 convergence state, committed) | `docs/code-reviews/<key>-findings-ledger.json` |
-| Gate 2 reviewer notes (never committed) | `~/.claude/sdlc/reviews/<owner>/<repo>/<key>-code-review.md` |
+| Gate 2 reviewer notes (never committed, one per PR) | `~/.claude/sdlc/reviews/<owner>/<repo>/<key>-pr<N>-code-review.md` |
 | PR verdict | PR comment, plus approve / request changes when you are not the author |
 | Issue progress | the AC-conformance (and, for bugs, root-cause) section of the issue's progress comment |
 | Slack verdict | `slack.channel`, when enabled |

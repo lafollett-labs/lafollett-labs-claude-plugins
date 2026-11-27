@@ -263,11 +263,14 @@ Existing branch — this ticket's branch, local first, else origin's:
 
 ```text
 git fetch --quiet origin                                    # a failure is fine; local refs still count
-found = `git for-each-ref --format='%(refname:short)' 'refs/heads/*/{session.key_slug}-*' 'refs/heads/*/{session.key_slug}'`
+ticket_branches(refs) = each b in refs, in order, kept only when:      # runs before any shell command sees b
+  b matches ^[A-Za-z0-9._/-]+$ and does not start with "-"        # git allows $( ), backticks, quotes and ; in names
+    (else ⚠️ {session.ticket_key}: ignoring branch with unsafe characters)
+  and `node "${CLAUDE_PLUGIN_ROOT}/bin/git-conventions.js" branch` (b on stdin via a quoted heredoc)
+    reports on_feature and key_slug == session.key_slug
+found = ticket_branches(`git for-each-ref --format='%(refname:short)' 'refs/heads/*/{session.key_slug}-*' 'refs/heads/*/{session.key_slug}'`)
 if found is empty:
-  found = `git for-each-ref --format='%(refname:lstrip=3)' 'refs/remotes/origin/*/{session.key_slug}-*' 'refs/remotes/origin/*/{session.key_slug}'`
-keep each b in found whose `node "${CLAUDE_PLUGIN_ROOT}/bin/git-conventions.js" branch` (b on stdin via a quoted heredoc)
-  reports on_feature and key_slug == session.key_slug
+  found = ticket_branches(`git for-each-ref --format='%(refname:lstrip=3)' 'refs/remotes/origin/*/{session.key_slug}-*' 'refs/remotes/origin/*/{session.key_slug}'`)
 if found is not empty:
   load references/existing-branch.md; it returns resume | fresh
   if resume: goto Branch cut

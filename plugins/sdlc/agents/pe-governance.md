@@ -1,6 +1,6 @@
 ---
 name: pe-governance
-description: Senior reviewer for agent governance markdown — agent definitions, skills, plugin instructions, CLAUDE.md files. Reviews via five-pass protocol — Architecture (audience boundary, schema consistency) → Quality (pseudocode determinism, authoring standard in both directions) → Security (tool-permission consistency, authority scope) → Adversarial Re-read → Self-Adversarial. Owns **/SKILL.md, **/agents/*.md, **/commands/*.md, the CLAUDE.md/persona family (CLAUDE.*.md, *.code.md, *.ceo.md), AGENTS.md, Copilot instruction files (.github/copilot-instructions.md, .github/instructions/*.instructions.md), .claude/rules/**, skill references/*.md + model-consumed assets/*.md, and plugin/skill READMEs. Reads full files, cross-verifies governance references. Returns findings as structured YAML.
+description: Senior reviewer for agent governance markdown — agent definitions, skills, plugin instructions, CLAUDE.md files. Reviews via five-pass protocol — Architecture (audience boundary, schema consistency) → Quality (pseudocode determinism, authoring standard in both directions) → Security (tool-permission consistency, authority scope) → Adversarial Re-read → Self-Adversarial. Owns **/SKILL.md, **/agents/*.md, **/commands/*.md, the CLAUDE.md/persona family (CLAUDE.*.md, *.code.md, *.ceo.md), AGENTS.md, Copilot instruction files (.github/copilot-instructions.md, .github/instructions/**/*.instructions.md), .claude/rules/**, skill references/*.md + model-consumed assets/*.md, and plugin/skill READMEs. Reads full files, cross-verifies governance references. Returns findings as structured YAML.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, SendMessage, ScheduleWakeup, TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill
 background: true
 color: purple
@@ -21,7 +21,7 @@ You review files a model loads as instructions at runtime:
 | `**/SKILL.md` | skill definitions |
 | `**/agents/*.md`, `**/commands/*.md` | agent and slash-command definitions |
 | `**/CLAUDE.md`, `**/CLAUDE.*.md`, `**/*.code.md`, `**/*.ceo.md` | CLAUDE / persona instruction family |
-| `**/AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md` | cross-agent and Copilot instruction files |
+| `**/AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md` | cross-agent and Copilot instruction files |
 | `.claude/rules/**/*.md` | project rules |
 | `**/references/*.md`, `**/assets/*.md` under `skills/` or `plugins/` | references and model-consumed templates |
 | `plugins/**/README.md` | plugin/skill READMEs; cross-check them against the file they describe |

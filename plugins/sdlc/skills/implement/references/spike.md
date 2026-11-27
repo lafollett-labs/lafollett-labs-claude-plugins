@@ -17,6 +17,7 @@ if `git status --porcelain` shows changes outside `docs/spikes/`:
         "spike has produced shippable code; pick a new work_type:"
       )                                          # reuses the canonical 3-attempt-capped helper
       if new_type != session.branch_type:          # chore → chore keeps the branch as is
+        # session.branch_name is safe-ref checked: built by `new`, or kept by SKILL.md Phase 2's filter
         r = node "${CLAUDE_PLUGIN_ROOT}/bin/git-conventions.js" retype --type '{new_type}' --name '{session.branch_name}'
         if not r.ok:
           ❌ Error — cannot rename {session.branch_name}: {r.error}; ask the engineer how to proceed; STOP

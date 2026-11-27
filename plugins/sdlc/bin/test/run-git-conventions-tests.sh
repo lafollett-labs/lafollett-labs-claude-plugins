@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Fixture tests for git-conventions.js — branch-name parse and build, Conventional Commits subject check,
-# ticket-key extraction (issue #42 and story code LT-02), and commit-description sanitizing.
-# Each rejection must carry a specific reason. No npm packages — bash + node (+ python3 for parity).
+# ticket-key extraction (issue #42 and story code LT-02), commit-description sanitizing, and PR base
+# resolution (base: gh is the shared stub-gh.sh; git runs hermetically in throwaway repos).
+# Each rejection must carry a specific reason. No npm packages — bash + node + git (+ python3 for parity).
+# SDLC_TEST_TMP=<dir> keeps the base cases' repos there instead of a self-cleaning mktemp dir.
 # Exit 0 = all checks pass, 1 = any fail.
 # shellcheck disable=SC2016 # single-quoted JS checks and literal backticks are inputs, never shell expansions
 set -u
@@ -86,11 +88,12 @@ check "branch rejects an empty name" 1 '!o.ok && /empty/.test(o.error)'
 
 # --- commits ------------------------------------------------------------------
 run_stdin "$FIX/commits-valid.txt" commits
-check "commits accepts typed, scoped and breaking subjects with no key" 0 'o.ok && o.count === 5 && o.offenders.length === 0'
+check "commits accepts typed, scoped, breaking and revert subjects with no key" 0 'o.ok && o.count === 6 && o.offenders.length === 0'
 run_stdin "$FIX/commits-mixed.txt" commits
-check "commits reports the offender count" 1 '!o.ok && o.count === 9 && o.offenders.length === 8 && o.error === "8 commit(s) don'"'"'t match Conventional Commits format"'
+check "commits reports the offender count" 1 '!o.ok && o.count === 10 && o.offenders.length === 9 && o.error === "9 commit(s) don'"'"'t match Conventional Commits format"'
 check "commits names an unknown type" 1 'o.offenders.some(f => f.subject === "feature: add x" && /type `feature` is not one of/.test(f.error))'
 check "commits names an uppercase type as unknown" 1 'o.offenders.some(f => f.subject === "Feat: add x" && /type `Feat`/.test(f.error))'
+check "commits rejects a revert subject without the quoted original" 1 'o.offenders.some(f => f.subject === "Revert add x" && /missing `<type>: ` prefix/.test(f.error))'
 check "commits names a missing prefix" 1 'o.offenders.some(f => f.subject === "add title search" && /missing `<type>: ` prefix/.test(f.error))'
 check "commits names an empty scope" 1 'o.offenders.some(f => f.subject === "fix(): add x" && /scope `\(\)`/.test(f.error))'
 check "commits names a scope with a space" 1 'o.offenders.some(f => f.subject === "fix(my api): add x" && /scope `\(my api\)`/.test(f.error))'
@@ -385,6 +388,10 @@ base_in "$R" --pr x
 check "base --pr must be a positive integer" 2 '/--pr must be a positive integer/.test(o.error)'
 base_in "$R" --branch '../main'
 check "base --branch must be a plain branch name" 2 '/is not a plain branch name/.test(o.error)'
+base_in "$R" --branch -x
+check "base --branch may not start with a dash" 2 '/"-x" is not a plain branch name/.test(o.error)'
+base_in "$R" --branch feat/1-x.lock
+check "base --branch may not end in .lock" 2 '/"feat\/1-x\.lock" is not a plain branch name/.test(o.error)'
 base_in "$R" --pr
 check "base flag with no value is a usage error" 2 '/need a value/.test(o.error)'
 

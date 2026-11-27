@@ -19,7 +19,7 @@ Loaded by SKILL.md at Phase 2, after scope classification and gate detection. Bi
 read_review(args):
   (p, ec) = `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/review-file.js" parse {args}`
   if ec != 0: ❌ Error — {p.error}; restore_stash(); STOP
-  return p          # rounds, latest (null when none), next_round, gate1 {state, round, sha}, markdown_path, ledger_path, version_advisories
+  return p          # rounds, latest (null when none), next_round, gate1 {state, round, sha}, partial_rounds, markdown_path, ledger_path, version_advisories
 ```
 
 ## Round number
@@ -27,13 +27,14 @@ read_review(args):
 ```text
 session.head_sha = `git -C "{session.review_root}" rev-parse HEAD`   # bound once; reused by Phases 3, 6, 7
 author = read_review(`--root "{session.review_root}" --name "{session.name}"`)   # the committed Gate 1 review on the reviewed branch
-session.gate1 = author.gate1             # the latest Gate 1 round: locked | overridden | open | none
+session.gate1 = author.gate1             # the latest Gate 1 branch round: locked | overridden | open | none
+session.skip_rounds = join(author.partial_rounds, ",")   # Files / Folder / Ad-hoc round numbers: never a ledger gap
 session.gate1_skip_note = null
 if session.gate == "Gate 1":
   p = author
   session.ledger_path = p.ledger_path    # …/{name}-findings-ledger.json beside it
 else:                                    # Gate 2: the reviewer's own rounds, under ~/.claude, never committed
-  p = read_review(`--local "{session.repo}" --name "{session.name}"`)
+  p = read_review(`--local "{session.repo}" --pr {session.pr.number} --name "{session.name}"`)   # keyed by PR
   session.ledger_path = null
   if author.version_advisories.gate2: ⚠️ {author.version_advisories.gate2}
 review_file = output_path = p.markdown_path       # Phase 6 renders here
@@ -43,10 +44,11 @@ session.round_n = p.next_round                    # 1 when no round exists; the 
 
 ## Findings ledger (Gate 1)
 
-Checks the ledger before any PE runs, so a broken ledger stops the round before dispatch. Skipped when `not session.ledger` (Gate 2, Specific Files, Folder, Ad-hoc).
+Checks the ledger before any PE runs, so a broken ledger stops the round before dispatch.
 
 ```text
-status = `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/convergence.js" status --ledger "{session.ledger_path}" --target "$(git -C "{session.review_root}" rev-parse --abbrev-ref HEAD)" --round {session.round_n}`
+if not session.ledger: skip this section          # Gate 2, Specific Files, Folder, Ad-hoc
+status = `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/convergence.js" status --ledger "{session.ledger_path}" --target "$(git -C "{session.review_root}" rev-parse --abbrev-ref HEAD)" --round {session.round_n} --skip "{session.skip_rounds}"`
 if exit == 127:
   ❌ Error — sdlc:review needs Node on PATH (convergence controller); restore_stash(); STOP
 elif exit != 0 and `git -C "{session.review_root}" ls-files -u -- "{session.ledger_path}"` is non-empty:

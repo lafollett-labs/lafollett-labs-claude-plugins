@@ -25,6 +25,7 @@ fails=0
 
 # Hermetic git for the same-code repos: no user/system config, fixed identity.
 export HOME="$TMP/home"
+export USERPROFILE="$HOME"   # os.homedir() reads USERPROFILE, not HOME, on Windows
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_CONFIG_GLOBAL="$TMP/home/.gitconfig"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
@@ -306,6 +307,20 @@ check "gate2: an approval on a commit this clone lacks is not the current code" 
 printf 'pr view 7\t1\tfail.stderr\n' > "$STUB_GH_DIR/routes"; echo 'HTTP 502' > "$STUB_GH_DIR/fail.stderr"
 out="$(g "$C" "$ME_OK" 2>/dev/null)"; code=$?
 if [ "$code" -eq 2 ]; then pass "gate2: a gh failure fails closed (exit 2)"; else fail "gate2 gh failure (exit $code): $out"; fi
+for bad in '' ',"reviews":"x"'; do
+  printf '{"author":{"login":"octocat"}%s}\n' "$bad" > "$STUB_GH_DIR/view.json"
+  printf 'pr view 7 --json author,reviews\t0\tview.json\n' > "$STUB_GH_DIR/routes"
+  out="$(g "$C" "$ME_OK" 2>/dev/null)"; code=$?
+  if [ "$code" -eq 2 ]; then pass "gate2: a PR view without a reviews list fails closed (exit 2): {$bad}"; else fail "gate2 without a reviews list (exit $code): $out"; fi
+done
+reviews "[$(rv hubot APPROVED --output=x 2026-10-12T10:00:00Z)]"
+check "gate2: an option-shaped commit oid never reaches git (not the current code)" "$(cd "$TMP" && g "$C" "$ME_OK")" \
+  'o.gate_status.includes("@hubot (approved --outpu, not the current code)")'
+if [ ! -e "$TMP/x" ] && [ ! -e "$G/x" ]; then pass "gate2: an option-shaped oid writes no file"; else fail "gate2 passed an option-shaped oid to git"; fi
+node "$CLI" gate2 --pr 7 --head HEAD --root "$G" <<<"$ME_OK" >/dev/null 2>&1; code=$?
+if [ "$code" -eq 2 ]; then pass "gate2: a non-SHA --head exits 2"; else fail "gate2 --head HEAD (exit $code)"; fi
+out="$(node "$CLI" gate2 --pr 7 --head "$C" --root "$TMP/no-such-dir" <<<"$ME_OK" 2>/dev/null)"; code=$?
+if [ "$code" -eq 2 ] && printf '%s' "$out" | grep -qF 'does not exist'; then pass "gate2: a --root that does not exist exits 2 before any gh call"; else fail "gate2 --root missing (exit $code): $out"; fi
 
 # --- gate2: CI holds before any review is read ---------------------------------------
 : > "$STUB_GH_DIR/calls"
@@ -373,6 +388,26 @@ node -e 'const r=require(process.argv[1]); r.head_sha="9f9f9f9"; console.log(JSO
   | node "$CLI" render --file "$TMP/stale.md" >/dev/null
 check "gate1: a dirty Gate 1 round after the lock reopens it" "$(gate1 "$TMP/stale.md")" 'o.state === "open" && o.round === 4 && o.sha === "9f9f9f9"'
 check "gate1: no review yet" "$(node "$CLI" parse --root "$TMP/nowhere" --name 42)" 'o.gate1.state === "none" && o.gate1.round === null && o.gate1.sha === null'
+PARTIAL="OPEN — not a branch review; no findings ledger"
+cp "$FIX/gate1-locked.md" "$TMP/partial.md"
+clean 6e6e6e6 "$PARTIAL" | node "$CLI" render --file "$TMP/partial.md" >/dev/null
+check "gate1: a Files / Folder / Ad-hoc round after the lock leaves it locked" "$(node "$CLI" parse --file "$TMP/partial.md")" \
+  'o.gate1.state === "locked" && o.gate1.round === 3 && o.latest.n === 4 && JSON.stringify(o.partial_rounds) === "[4]"'
+if grep -qx '## Review Round 4' "$TMP/partial.md"; then pass "a partial-scope round carries no Gate 1 note"; else fail "partial-scope round heading: $(grep -m1 '^## Review Round 4' "$TMP/partial.md")"; fi
+node -e 'const r=require(process.argv[1]); r.head_sha="7f7f7f7"; r.gate_status=process.argv[2]; console.log(JSON.stringify(r))' "$FIX/gate1-initial.json" "$PARTIAL" \
+  | node "$CLI" render --file "$TMP/partial.md" >/dev/null
+cp "$TMP/partial.md" "$TMP/partial.before"
+node "$CLI" override --file "$TMP/partial.md" <<<'{"round":5,"reviewer":"octocat","reason":"x","findings":[{"id":"HIGH-001","title":"Username concatenated into a SQL query"}]}' >/dev/null 2>&1; code=$?
+if [ "$code" -eq 2 ] && cmp -s "$TMP/partial.md" "$TMP/partial.before"; then pass "override refuses a partial-scope round"; else fail "override of a partial-scope round (exit $code)"; fi
+check "gate1: a dirty partial-scope round never reopens the branch lock" "$(node "$CLI" parse --file "$TMP/partial.md")" \
+  'o.gate1.state === "locked" && o.gate1.round === 3 && JSON.stringify(o.partial_rounds) === "[4,5]"'
+clean 8a8a8a8 | node "$CLI" render --file "$TMP/partial-clean.md" >/dev/null
+clean 8a8a8a8 "$PARTIAL" | node "$CLI" render --file "$TMP/partial-clean.md" >/dev/null
+if grep -qx '## Review Round 2' "$TMP/partial-clean.md"; then pass "a partial-scope round after a clean branch round carries no note"; else fail "partial round note: $(grep -m1 '^## Review Round 2' "$TMP/partial-clean.md")"; fi
+cp "$FIX/expected-initial.md" "$TMP/partial-note.md"
+clean 8a8a8a8 "$PARTIAL" | node "$CLI" render --file "$TMP/partial-note.md" >/dev/null
+clean 8a8a8a8 | node "$CLI" render --file "$TMP/partial-note.md" >/dev/null
+if grep -qx '## Review Round 3' "$TMP/partial-note.md"; then pass "a branch round after a clean partial-scope round takes no note from it"; else fail "note taken from a partial round: $(grep -m1 '^## Review Round 3' "$TMP/partial-note.md")"; fi
 
 # --- override: the single writer of an engineer override ----------------------------------------
 cp "$TMP/expected-initial.md" "$TMP/ovr.md"
@@ -405,6 +440,7 @@ else
 fi
 cp "$TMP/mid.md" "$TMP/mid.before"
 for bad in '{"round":2,"reviewer":"octocat","reason":"again","findings":[]}' \
+           '{"round":1,"reviewer":"octocat\n## Review Round 9","reason":"x","findings":[{"id":"HIGH-001","title":"Username concatenated into a SQL query"}]}' \
            '{"round":1,"reviewer":"octocat","reason":"x","findings":[{"id":"HIGH-009","title":"nope"}]}' \
            '{"round":9,"reviewer":"octocat","reason":"x","findings":[]}' \
            '{"round":1,"reviewer":"octocat","reason":" ","findings":[]}'; do
@@ -430,14 +466,21 @@ done
 node "$CLI" parse --root "$REPO" >/dev/null 2>&1; code=$?
 if [ "$code" -eq 2 ]; then pass "parse --root without --name exits 2"; else fail "parse --root without --name (exit $code)"; fi
 LOCAL="$HOME/.claude/sdlc/reviews/octo-org/octo-repo"
-node "$CLI" render --file "$LOCAL/42-code-review.md" < "$FIX/gate2-round.json" >/dev/null
-check "parse --local reads the reviewer's own Gate 2 review under ~/.claude" "$(node "$CLI" parse --local octo-org/octo-repo --name 42)" \
-  'o.rounds.length === 1 && o.markdown_path === "'"$LOCAL"'/42-code-review.md" && o.gate1.state === "none"'
-check "parse --local with no review yet starts at round 1" "$(node "$CLI" parse --local octo-org/other --name 42)" \
-  'o.next_round === 1 && o.markdown_path.endsWith("/.claude/sdlc/reviews/octo-org/other/42-code-review.md")'
+node "$CLI" render --file "$LOCAL/42-pr7-code-review.md" < "$FIX/gate2-round.json" >/dev/null
+check "parse --local reads the reviewer's own Gate 2 review under ~/.claude, keyed by PR" "$(node "$CLI" parse --local octo-org/octo-repo --pr 7 --name 42)" \
+  'o.rounds.length === 1 && o.markdown_path === "'"$LOCAL"'/42-pr7-code-review.md" && o.gate1.state === "none"'
+check "parse --local: another PR for the same ticket has its own doc" "$(node "$CLI" parse --local octo-org/octo-repo --pr 8 --name 42)" \
+  'o.next_round === 1 && o.markdown_path === "'"$LOCAL"'/42-pr8-code-review.md"'
+check "parse --local with no review yet starts at round 1" "$(node "$CLI" parse --local octo-org/other --pr 7 --name 42)" \
+  'o.next_round === 1 && o.markdown_path.endsWith("/.claude/sdlc/reviews/octo-org/other/42-pr7-code-review.md")'
 for bad in 'octo-org' 'a/b/c' '../x' 'a/..'; do
-  node "$CLI" parse --local "$bad" --name 42 >/dev/null 2>&1; code=$?
+  node "$CLI" parse --local "$bad" --pr 7 --name 42 >/dev/null 2>&1; code=$?
   if [ "$code" -eq 2 ]; then pass "parse --local rejects \"$bad\" (exit 2)"; else fail "parse --local accepted \"$bad\" (exit $code)"; fi
+done
+for args in "--local octo-org/octo-repo --name 42" "--local octo-org/octo-repo --pr 0 --name 42" "--local octo-org/octo-repo --pr 7x --name 42" "--root $REPO --pr 7 --name 42"; do
+  # shellcheck disable=SC2086 # word-split on purpose: each entry is an argument list
+  node "$CLI" parse $args >/dev/null 2>&1; code=$?
+  if [ "$code" -eq 2 ]; then pass "parse $args exits 2"; else fail "parse $args (exit $code)"; fi
 done
 node "$CLI" parse --root "$REPO" --local octo-org/octo-repo --name 42 >/dev/null 2>&1; code=$?
 if [ "$code" -eq 2 ]; then pass "parse with both --root and --local exits 2"; else fail "parse --root --local (exit $code)"; fi

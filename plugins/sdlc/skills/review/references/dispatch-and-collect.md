@@ -202,7 +202,7 @@ TARGET BRANCH:  {target_branch}
 SOURCE BRANCH:  {source_branch}
 HEAD SHA:       {session.head_sha}
 WORKTREE:       {session.review_root}   # worktree path in worktree mode, else repo root — PEs cd here for all Bash ops
-SEARCH_ROOTS:   {session.search_roots, comma-separated}   # below DEEP, a hard boundary for every search and read (TIER_CONTRACT § Search Boundary)
+SEARCH_ROOTS:   {session.search_roots, comma-separated}   # below DEEP, a hard boundary for every search and read except PRIOR REVIEW / PRIOR LEDGER (TIER_CONTRACT § Search Boundary)
 BUILD ROOT:     {session.build_root_line}   # where front-end installs, builds, and tests run
 ISSUE_ID:       {session.ticket_key, else session.name}
 GATE:           {session.gate}
