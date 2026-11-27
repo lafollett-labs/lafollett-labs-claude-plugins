@@ -135,6 +135,16 @@ assert_stdout "plan: a release-looking subject without the Base: trailer still b
 plugin beta patch
 marketplace patch" plan --log "$WORK/log8b" --before "$FIX/marketplace-base.json" --after "$FIX/marketplace-base.json"
 
+# git log -z: NUL after the format line and after each name, which is written as is (no C quoting).
+{ printf '\x1e%040d\x1f%s\x1f\x1f\0\n%s\0' 1 "fix: quoted names" "plugins/alpha/caf$(printf '\303\251').md"
+  printf '\x1e%040d\x1f%s\x1f\x1f\0\n%s\0%s\0' 2 "fix: more" 'plugins/beta/q"x.md' 'README.md'; } > "$WORK/log-z"
+assert_stdout "plan: a -z log with names git would quote bumps their plugins" "plugin alpha patch
+plugin beta patch
+marketplace patch" plan --log "$WORK/log-z" --before "$FIX/marketplace-base.json" --after "$FIX/marketplace-base.json"
+printf '\x1e%040d\x1f%s\x1f\x1f\0\n%s\0' 1 "chore: retitle" ".claude-plugin/marketplace.json" > "$WORK/log-z4"
+assert_stdout "plan: a -z log's marketplace-only edit -> marketplace patch" "marketplace patch" \
+  plan --log "$WORK/log-z4" --before "$FIX/marketplace-base.json" --after "$FIX/marketplace-edited.json"
+
 commit 1 "fix: x" "trailer
 
 BREAKING CHANGE: gone" plugins/alpha/a.md > "$WORK/log9"

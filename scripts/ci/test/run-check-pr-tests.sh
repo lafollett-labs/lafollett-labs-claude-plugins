@@ -48,6 +48,11 @@ fresh; echo b >> "$R/plugins/alpha/a.md"; commit "fix(alpha): x"
 check "a plugin change without a fragment fails" "$(run)" 1
 check "  and names changelog.d" "$(grep -c '::error file=changelog.d::' "$W/out")" 1
 
+fresh; echo b > "$R/plugins/alpha/caf$(printf '\303\251') \"q\".md"; commit "fix(alpha): x"
+check "a plugin file git quotes (non-ASCII, a quote) still needs a fragment" "$(run)" 1
+frag "caf$(printf '\303\251')-fix"; commit "fix(alpha): fragment"
+check "  and a fragment git quotes counts" "$(run)" 0
+
 fresh; echo b >> "$R/plugins/alpha/a.md"; echo more >> "$R/changelog.d/README.md"; commit "fix(alpha): x"
 check "editing only the fragments README does not count" "$(run)" 1
 

@@ -80,10 +80,10 @@ check "a hit in the second added line is named by its new line number" \
   "$(try -m "feat: a"):$(said '  added line:  sub/a.txt:3$')" "1:1"
 
 fresh
-echo "x $TERM_HIT" > "$R/q\"x.txt"; echo "x $TERM_HIT" > "$R/back\\slash.txt"; git -C "$R" add -A
+echo "x $TERM_HIT" > "$R/q\"x y.txt"; echo "x $TERM_HIT" > "$R/back\\slash.txt"; git -C "$R" add -A
 try -m "feat: a" >/dev/null
 check "paths git quotes are named as written" \
-  "$(grep -cxF '  added line:  q"x.txt:1' "$W/err"):$(grep -cxF '  added line:  back\slash.txt:1' "$W/err")" "1:1"
+  "$(grep -cxF '  added line:  q"x y.txt:1' "$W/err"):$(grep -cxF '  added line:  back\slash.txt:1' "$W/err")" "1:1"
 echo ok > "$R/q\"$TERM_HIT.txt"; git -C "$R" add -A
 check "  in staged paths too" "$(try -m "feat: a"):$(grep -cxF "  staged path: q\"$TERM_HIT.txt" "$W/err")" "1:1"
 
@@ -230,10 +230,10 @@ else
 fi
 
 fresh
-git -C "$R" config core.commentChar Auto   # git reads auto in any case
+git -C "$R" config core.commentChar aUtO   # git reads auto in any case
 echo "x $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt; try --no-verify -m "chore: seed" >/dev/null
 echo ok > "$R/a.txt"; git -C "$R" add a.txt
-check "with core.commentChar Auto the -v diff does not block" "$(GIT_EDITOR="sed -i.bak '1s/^/fix: remove it/'" try -v)" 0
+check "with core.commentChar aUtO the -v diff does not block" "$(GIT_EDITOR="sed -i.bak '1s/^/fix: remove it/'" try -v)" 0
 echo "y $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt; try --no-verify -m "chore: again" >/dev/null
 echo ok > "$R/a.txt"; git -C "$R" add a.txt
 check "  nor when git picks ';' for a message that starts with #" "$(GIT_EDITOR=true try -e -v -m "#21 fix: remove it")" 0

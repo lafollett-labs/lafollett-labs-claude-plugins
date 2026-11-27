@@ -8,8 +8,9 @@
 #                 open or update the release PR; dispatch CI on it; enable squash auto-merge
 #   3. wait       poll the release PR up to RELEASE_MERGE_WAIT seconds; once merged, reconcile
 #
-# A release-titled commit without the Base: trailer is not tagged, so this run's plan re-bumps what it
-# released: the run then leaves the release PR for a human instead of arming auto-merge.
+# A release-titled commit without the Base: trailer is not tagged. While it is in the plan's range the
+# plan may re-bump what it released, so the run leaves the release PR for a human instead of arming
+# auto-merge. Paths are read with -z, so a name git would quote still matches plugins/.
 #
 # The release PR merges as github-actions[bot], and pushes made with GITHUB_TOKEN trigger no
 # workflow, so a merge the wait misses is tagged by step 1 of the next run.
@@ -115,8 +116,8 @@ reconcile() {
     # Only the release workflow's squash carries the Base: trailer; a look-alike subject is a plain commit.
     built_on="$(git log -1 --format=%b "$sha" | sed -n 's/^Base: \([0-9a-f]\{40\}\)$/\1/p' | head -n 1)"
     if [ -z "$built_on" ]; then
-      echo "::warning::$sha is titled like a release but has no Base: trailer, so it is not tagged and this run does not arm auto-merge. If it is the release PR's squash, release it by hand (gh release create $TAG_PREFIX$v --target $sha) and re-run this workflow; otherwise merge the release PR by hand"
-      HELD="$sha"
+      echo "::warning::$sha is titled like a release but has no Base: trailer, so it is not tagged"
+      HELD="$sha"; HELD_TAG="$TAG_PREFIX$v"
       continue
     fi
     git show "$sha:$MARKETPLACE" > "$WORK/at.json" 2>/dev/null || die "no $MARKETPLACE at $sha"
@@ -157,12 +158,15 @@ open_pr() {
 fetch_state
 [ -n "$(newest_tag)" ] || seed_baseline
 HELD=
+HELD_TAG=
 reconcile
 
 BASE="$(newest_tag)"
 log "baseline $BASE, $MAIN at $MAIN_SHA"
+# Hold only for a trailer-less release title this plan reads; a release tagged after it moved BASE past it.
+if [ -n "$HELD" ] && ! git merge-base --is-ancestor "$BASE^{commit}" "$HELD"; then HELD=; fi
 
-git log --reverse --no-merges --format='%x1e%H%x1f%s%x1f%b%x1f' --name-only "$BASE..$MAIN_SHA" > "$WORK/log" \
+git log --reverse --no-merges -z --format='%x1e%H%x1f%s%x1f%b%x1f' --name-only "$BASE..$MAIN_SHA" > "$WORK/log" \
   || die "change detection failed against $BASE"
 git show "$BASE:$MARKETPLACE" > "$WORK/before.json" 2>/dev/null || die "no $MARKETPLACE at $BASE"
 git show "$MAIN_SHA:$MARKETPLACE" > "$WORK/after.json" || die "no $MARKETPLACE at $MAIN"
@@ -258,7 +262,7 @@ fi
 if [ -n "$HELD" ]; then
   "$GH" pr merge "$PR" --disable-auto >/dev/null 2>&1 \
     || echo "::warning::could not turn off auto-merge on release PR #$PR (it may already be off); check that it is off"
-  echo "::warning::release PR #$PR is left for a human: $HELD has a release title but no Base: trailer (see above)"
+  echo "::warning::release PR #$PR is left for a human: $HELD has a release title but no Base: trailer, so this stamp may bump its plugins again. If $HELD is the release PR's squash, release it by hand (gh release create $HELD_TAG --target $HELD), close #$PR, and re-run this workflow; otherwise merge #$PR by hand"
   exit 0
 fi
 

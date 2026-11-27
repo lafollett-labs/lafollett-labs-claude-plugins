@@ -5,8 +5,8 @@
 #   allow-list an entry clears one exact value at one exact path; any other config shape is refused
 #   tree       the current tree passes with the repo's config
 # Every case needs python3 3.11+ (secret-scan.sh runs check-allowlist.py first). Range contracts use a
-# stub gitleaks; the rest need the real gitleaks on PATH. Fake secrets are assembled at runtime so none
-# is ever committed. Exit 0 = all pass.
+# stub gitleaks; the rest need the real gitleaks v8.25+ ([[allowlists]]) on PATH. Fake secrets are
+# assembled at runtime so none is ever committed. Exit 0 = all pass.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -219,6 +219,12 @@ shape_case "a digit-class value is refused" "2:not-run" "$(regex '^TOKEN=\\d\\d\
 shape_case "a word-class value is refused" "2:not-run" "$(regex '^TOKEN=\\w\\w\\w\\w$')"
 shape_case "a bare quantifier in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE0*00$')"
 shape_case "an alternation in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE|0000$')"
+shape_case "a bracket class in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE[0-9]00$')"
+shape_case "a group in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE(0)00$')"
+shape_case "a brace quantifier in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE0{2}0$')"
+shape_case "a + quantifier in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE0+00$')"
+shape_case "a ? quantifier in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE0?00$')"
+shape_case "a \\p class in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE\\pL000$')"
 shape_case "a match-anything regex is refused" "2:not-run" "$(regex '.*')"
 shape_case "an anchored match-anything regex is refused" "2:not-run" "$(regex '^.+$')"
 shape_case "a \\S* regex is refused" "2:not-run" "$(regex '^\\S*$')"

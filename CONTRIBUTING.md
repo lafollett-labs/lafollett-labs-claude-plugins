@@ -22,7 +22,7 @@ non-conventional title. A one-commit PR also fails when that commit's subject is
 its message releases at another level than the title.
 Check before pushing: `bash scripts/ci/check-pr.sh origin/main HEAD` (`upstream/main` in a fork).
 
-Optional local hooks: `git config core.hooksPath scripts/hooks` runs gitleaks v8.19+ on the staged
+Optional local hooks: `git config core.hooksPath scripts/hooks` runs gitleaks v8.25+ on the staged
 diff, and `git config labs.denylistScan <path>` adds a private denylist scanner over the staged diff
 and the commit message.
 

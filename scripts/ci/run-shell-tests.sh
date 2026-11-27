@@ -6,7 +6,7 @@
 # `test/run-*.sh` convention is discovered with no workflow edit.
 #
 # Deterministic: no network, no time/order dependence (discovery is sorted). Requires bash, node,
-# python3 3.11+ and gitleaks v8.19+ on PATH (the suites run node validators, check-allowlist.py and gitleaks).
+# python3 3.11+ and gitleaks v8.25+ on PATH (the suites run node validators, check-allowlist.py and gitleaks).
 set -u
 
 # Repo root = two levels up from scripts/ci/, so the runner works from any CWD.

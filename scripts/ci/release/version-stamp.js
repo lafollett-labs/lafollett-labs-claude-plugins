@@ -26,8 +26,8 @@
  *                       (or, with none, from the commit subjects in --log); prints the entry
  *   changelog-entry  --file <f> --version <v>     -> prints the "## [v]" block
  *
- * --log is the output of:
- *   git log --reverse --no-merges --format='%x1e%H%x1f%s%x1f%b%x1f' --name-only <base>..<head>
+ * --log is the output of (with or without -z; -z keeps a name git would quote as written):
+ *   git log --reverse --no-merges -z --format='%x1e%H%x1f%s%x1f%b%x1f' --name-only <base>..<head>
  *
  * On any error: the reason on stderr, exit 1.
  */
@@ -102,7 +102,7 @@ function parseLog(text) {
     const parts = rec.split('\x1f');
     if (parts.length < 4) throw new Error('malformed --log record (expected sha, subject, body, files)');
     const [sha, subject, body, rest] = parts;
-    const files = rest.split('\n').map((l) => l.trim()).filter(Boolean);
+    const files = rest.split(/[\0\n]/).map((l) => l.trim()).filter(Boolean);
     commits.push({ sha: sha.trim(), subject, body, files });
   }
   return commits;

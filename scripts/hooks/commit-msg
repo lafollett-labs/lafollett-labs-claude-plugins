@@ -10,9 +10,9 @@
 # Blank lines are tidied as git does in every mode but verbatim, so a hit's line number is its line in
 # the recorded message. git sets GIT_EDITOR=: for hooks when no editor runs, so an exported GIT_EDITOR=:
 # reads as "no editor". A --cleanup= flag is not visible to hooks: commit.cleanup is read instead. With
-# core.commentChar=auto (in any case) comment lines are scanned. Each misread scans more than git
-# records, never less, except a --cleanup= flag that keeps comment lines commit.cleanup would drop,
-# or a scissors line typed by hand.
+# core.commentChar=auto (in any case) comment lines are scanned, and counted in a hit's line number.
+# Each misread scans more than git records, never less, except a --cleanup= flag that keeps comment
+# lines commit.cleanup would drop, or a scissors line typed by hand.
 # See scripts/hooks/pre-commit for setup.
 set -u
 scan="$(git config --type=path --get labs.denylistScan)"

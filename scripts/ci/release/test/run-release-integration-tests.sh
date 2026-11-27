@@ -226,6 +226,23 @@ check "missed: v1.0.2 tagged on the merged release commit" "$(git --git-dir="$OR
 check "missed: release published" "$(test -f "$STATE/releases/v1.0.2" && echo yes)" yes
 check "missed: the root-only merge after it releases nothing" "$(grep -c 'nothing to release' "$W/out")" 1
 
+# 7b. A look-alike that a tagged release then passes is not held for, and a name git quotes still bumps.
+echo "y" >> "$DEV/plugins/alpha/README.md"
+merge "fix(alpha): tweak (#5)"
+code="$(release)"
+check "passed: stamp opened" "$code" 0
+echo "look" >> "$DEV/NOTES.md"
+merge "chore(release): v8.8.8"                      # a look-alike lands while the release PR is open
+"$STATE/squash-merge" >/dev/null 2>&1                # then the release PR merges, Base: trailer intact
+printf 'x\n' > "$DEV/plugins/beta/caf$(printf '\303\251') \"q\".md"
+merge "fix(beta): a file git quotes (#6)"
+code="$(release)"
+check "passed: exits 0" "$code" 0
+check "passed: the release after the look-alike is tagged" \
+  "$(git --git-dir="$ORIGIN" log -1 --format=%s "$(tag_sha v1.0.3)")" "chore(release): v1.0.3"
+check "passed: the next release PR is armed, not held" "$(calls 'pr merge [0-9]* --auto'):$(calls 'disable-auto')" "1:0"
+check "passed: a name git quotes bumps its plugin" "$(version_at release/next plugins/beta/.claude-plugin/plugin.json)" 3.0.1
+
 # 8. A debut keeps its authored version and raises the marketplace minor.
 write_plugin "$DEV" gamma 0.1.0
 write_marketplace "$DEV" 1.0.2 alpha beta gamma
@@ -264,7 +281,8 @@ check "look-alike: exits 0" "$code" 0
 check "look-alike: warns" "$(grep -c 'has no Base: trailer' "$W/out")" 1
 check "look-alike: not tagged" "$(tag_sha v9.9.8 || echo none)" none
 check "look-alike: auto-merge turned off, not armed" "$(calls 'pr merge [0-9]* --disable-auto'):$(calls 'pr merge [0-9]* --auto')" "1:0"
-check "look-alike: PR left for a human" "$(grep -c 'is left for a human' "$W/out")" 1
+check "look-alike: PR left for a human, with the recovery" \
+  "$(grep -c 'is left for a human' "$W/out"):$(grep -c 'gh release create v9.9.8 --target [0-9a-f]\{40\}), close #[0-9]*, and re-run' "$W/out")" "1:1"
 
 # 13 (last: it leaves main wedged). A release commit whose version disagrees with its marketplace fails closed.
 echo "y" >> "$DEV/README.txt"

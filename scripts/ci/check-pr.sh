@@ -23,7 +23,9 @@ trap 'rm -rf "$WORK"' EXIT
 
 # Compare against the merge base: the PR's own changes, not whatever main gained since.
 mb="$(git merge-base "$base" "$head")" || die "no merge base between $base and $head"
-git diff --name-only --no-renames "$mb" "$head" > "$WORK/changed" || die "diff failed"
+# -z: a name git would quote (non-ASCII, a quote, a backslash) is written as is, so it matches plugins/.
+git diff -z --name-only --no-renames "$mb" "$head" > "$WORK/changed.z" || die "diff failed"
+tr '\0' '\n' < "$WORK/changed.z" > "$WORK/changed"
 
 fails=0
 err() { echo "::error file=$1::$2"; fails=$((fails + 1)); }
@@ -48,7 +50,8 @@ while IFS= read -r f; do
 done < "$WORK/changed"
 
 if grep -q '^plugins/' "$WORK/changed"; then
-  git diff --name-only --no-renames --diff-filter=AM "$mb" "$head" -- changelog.d > "$WORK/fragments" || die "diff failed"
+  git diff -z --name-only --no-renames --diff-filter=AM "$mb" "$head" -- changelog.d > "$WORK/fragments.z" || die "diff failed"
+  tr '\0' '\n' < "$WORK/fragments.z" > "$WORK/fragments"
   if ! grep -E '^changelog\.d/[^/]+\.md$' "$WORK/fragments" | grep -vq '^changelog\.d/README\.md$'; then
     err "changelog.d" "changes under plugins/ need a changelog.d/<branch-slug>.md fragment (see changelog.d/README.md)"
   fi

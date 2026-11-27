@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-commit: refuse a staged secret (gitleaks v8.19+, when installed) or a hit from the maintainer's
+# Pre-commit: refuse a staged secret (gitleaks v8.25+, when installed) or a hit from the maintainer's
 # private denylist scanner (when labs.denylistScan is set) in the staged paths and added lines.
 # gitleaks runs with CI's flags: inline gitleaks:allow comments are ignored and a .gitleaksignore file
 # is refused. Only CI checks the allow-list's shape. commit-msg scans the message. Enable once per clone:
@@ -22,7 +22,7 @@ if command -v gitleaks >/dev/null 2>&1; then
     case $? in
       0) ;;
       3) echo "pre-commit: gitleaks found a secret in the staged diff (run: $hint)" >&2; rc=1 ;;
-      *) echo "pre-commit: gitleaks failed to run; it needs v8.19+ and a valid .gitleaks.toml (run: $hint)" >&2; rc=1 ;;
+      *) echo "pre-commit: gitleaks failed to run; it needs v8.25+ and a valid .gitleaks.toml (run: $hint)" >&2; rc=1 ;;
     esac
   fi
 else
