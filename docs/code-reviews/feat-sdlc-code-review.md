@@ -2,7 +2,7 @@
 
 > Round 1 ran on #23 (`feat/sdlc-github`). #24 carries the same work as one clean commit, and rounds 2 onward review #24.
 
-**Verdict:** 🚫 BLOCKED
+**Verdict:** ⚠️ CHANGES REQUESTED
 
 | | |
 | - | - |
@@ -1446,6 +1446,523 @@ without a scope change.
 
 **Locked to SHA:** `217a9b659ecb292dcdabf7b8bf3872075b04f5ed`
 **Status:** 🚫 Not mergeable — 1 HIGH and 2 MEDIUM findings open. Any commit after this SHA requires re-review.
+
+---
+
+## Review Round 3
+
+**Verdict:** ⚠️ CHANGES REQUESTED
+
+| | |
+| - | - |
+| **Reviewer** | @Cali LaFollett |
+| **PR** | [#24](https://github.com/lafollett-labs/lafollett-labs-claude-plugins/pull/24) |
+| **Reviewed SHA** | `465b4ccaebdae0ff3ef9285ed19044a4809449fa` |
+| **Date** | 2026-11-27 |
+| **Fix cascade** | 12 / 18 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 25 spot-checked |
+
+### Summary
+
+Every round-2 finding the PEs re-checked is fixed at this SHA, including the HIGH: implement now drops unsafe branch names before any git command, and the injection name is refused in a temp shell. One gating gap remains, in the same family as round 2's MEDIUM-002: deliver's no-commit stop runs only for resume and start-over, so a fresh run started on another ticket's branch reviews that branch when implement stops before leaving it. The LOWs refine round-2 fixes: two shell globs abort under zsh when nothing matches, the 30-second CI wait names no mechanism the Bash tool allows, Staged rounds still write the branch ledger, git's Reapply subject, safeRef rules without tests, and lost line numbers in the issue-history guard. All four PEs report severity falling over a closed set of themes. Nothing was merged or dismissed.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-Governance (review skill + agents) | none | doc-only; pe-agent 143/0, skill-structure 30/0, review-file 137/0, convergence 197/0 at HEAD; zsh NOMATCH and the blocked foreground sleep reproduced |
+| PE-Governance (other skills + shared refs) | none | doc-only; skill-structure 30/0; safe-ref filter run on 5 names in a temp shell; override pathspec commit run in a temp repo |
+| PE-DevTools (review scripts) | lint-only | 6 suites from / → 618 checks, 0 failed; shellcheck clean; 27 mutations, 23 caught (3 equivalent) |
+| PE-DevTools (other scripts) | lint-only | 11 suites from / pass; shellcheck clean on 13 files; check-pr.sh clean; 29 mutations, 21 caught |
+| Primary | n/a | `bash scripts/ci/run-shell-tests.sh` → 25 suites, 0 failed; CI run 45973176277 green at 465b4cc |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-Governance (review + agents) | 14 receipts, 1 unreceipted binding, glob pattern grepped | partial rounds on a temp ledger, PR-keyed Gate 2 doc, skip note, prior_same | 9 input classes | workflow grep under zsh and bash on 4 temp repos | 6 failure paths incl. no .sqlproj under zsh | n/a — no test changed in this shard | zsh NOMATCH, Bash tool sleep refusal, --skip and --local --pr headers |
+| PE-Governance (other skills) | 18 receipts, 1 kept reason does not hold | deliver → implement → deliver over 4 starts × 7 stops | gate1 none, plugin sources, ticket_branches lists, resolve_base | safe-ref filter on 5 names, no-commit check, headRefOid check | 5 failure paths | n/a — no test in this shard | marketplace reference, pathspec commit on a new file, lstrip=3 |
+| PE-DevTools (review scripts) | 3 contracts → 7 call sites, 6 restatements | partial rounds in 6 orders | --skip and --local --pr values, scope modes | 5 guards both ways (Staged passes as a branch round) | bad --skip, record fail-closed | 27 mutations, 1 real survivor | n/a beyond headers — no external fact in the fix diff |
+| PE-DevTools (other scripts) | 6 receipts, 2 disagree | update --key ordering, suite temp paths | revert subjects, issue_refs tokens, --key owners | 4 guards both ways | --key refusal, base refusal, unreadable file | 29 mutations, 8 survived | git revert of a revert, check-ref-format, safeRef header vs code |
+| Primary | 2 README restatements vs ci-gate and review-store | n/a — no state change in this shard | n/a — no parser or loop | n/a — no guard in this shard | n/a — no calls | n/a — no test | n/a — no new external claim |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 1 | 0 |
+| 🟢 LOW | 12 | 0 |
+| ℹ️ INFO | 5 | 0 |
+
+### In Scope Findings
+
+#### 🟡 MEDIUM-001: A fresh deliver run started on another ticket's branch still reviews that branch when implement stops before leaving it
+
+**Domains:** [Governance] · **Move:** M1
+**Location:** `plugins/sdlc/skills/deliver/SKILL.md:242`
+**Introduced by:** MEDIUM-002
+**Siblings:** `plugins/sdlc/skills/deliver/SKILL.md:247`, `plugins/sdlc/skills/deliver/references/resume-menus.md:15`, `plugins/sdlc/skills/deliver/SKILL.md:156`
+
+The MEDIUM-002 fix runs the no-commit stop only when session.implement_mode is set. The receipt
+kept line 247 because "commits_ahead == 0 still covers fresh runs". That reason holds only when the
+fresh run starts on the base branch.
+Trace: the engineer is on feat/41-x with uncommitted edits and runs `/sdlc:deliver #42 --auto`.
+  - Phase 0 warns that the branch belongs to #41 and starts fresh (line 156).
+  - Phase 1 binds head_before to feat/41-x. implement --auto HALTs at its dirty-tree gate, and the
+    engineer picks "Commit first — exit" or "Abort". implement exits with HEAD still on feat/41-x.
+  - implement_mode is "", so line 242 is skipped. commits_ahead counts #41's commits (> 0), so
+    line 247 is skipped too, and deliver goes to Phase 2 with session.auto still true.
+  - sdlc:review --auto names the round from the current branch (review SKILL.md:161 → "41"). It
+    auto-picks PR #41 (review SKILL.md:97), then commits and pushes 41-code-review.md onto feat/41-x
+    (publish.md:30). It also posts on issue #41 and the PR and sends the Slack verdict.
+  - Phase 3 reads 42-code-review.md, finds state none, and prints "sdlc:review recorded no Gate 1 round".
+implement's Phase 1 stops lead to the same result: ticket not found, epic, gh unavailable, and a
+declined closed issue. All of them come before Phase 2 moves HEAD. This is round-1 MEDIUM-002's
+outcome (another ticket's branch reviewed inside this run), reached through the fresh path that fix
+routes to. It now ends without a PR only because the LOW-007 guard happens to miss the doc name.
+
+**Recommendation:**
+Run the stop check for every mode. HEAD cannot equal head_before after a fresh run that committed.
+```
+if `git rev-parse HEAD` == head_before:   # implement added no commit, whatever the mode
+  finish("✅ Done — sdlc:implement added no commits on {session.branch}{" (start over did not happen)" if start_over}; re-run sdlc:deliver {session.ticket_key} when ready")
+```
+Keep line 247 for a branch cut with no commit. In resume-menus.md:15, change "either run" to "every run".
+
+#### 🟢 LOW-001: Gate 2 CI re-read never runs under zsh, and its 30-second wait is a sleep the Bash tool refuses
+
+**Domains:** [Governance] · **Move:** M7
+**Location:** `plugins/sdlc/skills/review/references/ci-gate.md:13`
+**Introduced by:** LOW-022
+**Siblings:** `plugins/sdlc/skills/review/references/ci-gate.md:14`, `plugins/sdlc/skills/review/references/ci-gate.md:38`, `plugins/sdlc/skills/review/README.md:31`, `plugins/sdlc/agents/pe-sql-server.md:36`
+
+The new check passes two shell globs, `.../.github/workflows/*.yml` and `.../*.yaml`. The Bash
+tool runs the user's shell, which is zsh in this session and by default on macOS. Under zsh's
+NOMATCH option an unmatched glob is an error that cancels the command. So in a repo whose
+workflows all use one extension (this repo has only ci.yml and release.yml), grep never runs
+and the condition exits 1.
+Reproduced on temp repos: zsh gives exit=1 for both a .yml-only and a .yaml-only workflow dir;
+bash gives exit=0 for both. Gate 2 then accepts `none` on the first read, which is the round-2
+behaviour.
+Separately, line 14's "wait 30 seconds" names no mechanism. The Claude Code Bash tool refuses a
+foreground `sleep 30` ("Blocked: sleep 30 … use Monitor … or run_in_background"; reproduced in
+this session), so the agent has to improvise the wait or skip it.
+Branch protection still enforces required checks, so the gap is the round-2 LOW window, not a
+new hole.
+
+**Recommendation:**
+Move the settle step into pr-checks.js, where it is deterministic and does not depend on the
+shell. Detect the workflow in Node (fs over .github/workflows/*.yml|*.yaml, test /pull_request/)
+and wait with Atomics.wait, as copilot-review.js:259 already does. For example,
+`check --pr N --head SHA --settle 30` re-reads once when the state is none and such a workflow
+exists; ci-gate.md then calls read_ci once and drops lines 13–14.
+If the step stays in the doc, use a command with no glob:
+`grep -rqsE --include='*.yml' --include='*.yaml' 'pull_request' "{session.review_root}/.github/workflows"`
+(verified: exit 0 under both zsh and bash for .yml-only and .yaml-only dirs; exit 1 for a
+push-only dir or no dir). Also name how to wait, since a bare `sleep 30` is refused.
+
+#### 🟢 LOW-002: Without a .sqlproj, the `*.sqlproj` glob aborts the whole Commands block under zsh: no parse, no lint, no exit= line
+
+**Domains:** [Governance] · **Move:** M5
+**Location:** `plugins/sdlc/agents/pe-sql-server.md:36`
+**Introduced by:** LOW-002
+**Siblings:** `plugins/sdlc/agents/pe-sql-server.md:37`, `plugins/sdlc/agents/pe-sql-server.md:55`, `plugins/sdlc/skills/review/references/ci-gate.md:13`
+
+The guard `[ -f "$p" ] || { echo "no .sqlproj — no model build ran"; break; }` handles bash,
+where an unmatched glob stays a literal word. Under zsh, the Bash tool's shell here,
+`for p in <dir>/*.sqlproj` with no match errors before the loop starts, and the rest of the
+block is cancelled.
+Reproduced by running the block as written, in one Bash tool call, on a db root with one .sql
+file and no .sqlproj. The only output was `(eval):3: no matches found: …/*.sqlproj`. The
+"no .sqlproj" line, the "sqlfluff not installed" line, the parse loop and the lint never ran.
+Under bash the same block prints all three lines and `exit=127`.
+Line 55 calls a missing .sqlproj expected for a state-based repo, the layout this agent
+describes first. It tells the PE to look for `exit=127` or "not installed" to know a check did
+not run, and neither appears. A PE can therefore still record "parse clean" when no parse ran,
+which is the LOW-002 outcome. The pre-fix line used the same glob; the new guard does not
+cover zsh.
+
+**Recommendation:**
+Find project files without a shell glob, so zsh and bash behave the same (verified under both,
+with and without a .sqlproj):
+```bash
+find <worktree>/<db_subdir> -maxdepth 1 -name '*.sqlproj' | grep -q . || echo "no .sqlproj — no model build ran"
+find <worktree>/<db_subdir> -maxdepth 1 -name '*.sqlproj' | while IFS= read -r p; do
+  echo "== $p"; dotnet build "$p" /p:NetCoreBuild=true < /dev/null; echo "exit=$?"
+done
+```
+(`< /dev/null` keeps dotnet from reading the loop's stdin.)
+
+#### 🟢 LOW-003: Override option is withheld from partial-scope rounds only by a trailing comment
+
+**Domains:** [Governance] · **Move:** M4
+**Location:** `plugins/sdlc/skills/review/SKILL.md:440`
+**Introduced by:** LOW-003
+**Siblings:** `plugins/sdlc/skills/review/bin/review-file.js:421`, `plugins/sdlc/skills/review/references/round-state.md:129`
+
+The fix appends `# offered only when session.ledger: …` to option (b). The options list itself
+still shows (b) unconditionally, and § Input Gate Rendering builds options from "the gate's
+enumerated choices". An agent skimming the block can therefore offer all three options on a
+Files / Folder / Ad-hoc round that has gating findings.
+Choosing (b) fails safely: review-file.js:421 refuses to override a partial round, and
+round-state.md:129 returns to remediate. The cost is a dead option and an error message, not a
+wrong record.
+
+**Recommendation:**
+Make the condition part of the option list:
+`options = [(a), (b), (c)] if session.ledger else [(a), (c)]`, or put `if session.ledger` on
+the (b) line in the same inline-conditional form the file uses elsewhere.
+
+#### 🟢 LOW-004: The Phase 7 headRefOid check says no PR was opened when a Copilot fix commit stays local
+
+**Domains:** [Governance] · **Move:** M4
+**Location:** `plugins/sdlc/skills/deliver/SKILL.md:459`
+**Introduced by:** LOW-008
+**Siblings:** none
+
+copilot-review commits each Copilot fix and then pushes once. When that push is rejected, it keeps
+the commits local (copilot-review/SKILL.md:136). By then the PR is open, and pull-request still
+labels and announces it and prints "✅ Done — PR opened". deliver then sees headRefOid != HEAD and
+ends with "stopped before the PR: sdlc:pull-request exited without opening or updating one". That
+contradicts the sub-skill, skips End, and drops the PR number from deliver's summary. No wrong
+action follows; only the report is wrong.
+
+**Recommendation:**
+Split the condition so that LOW-008's protection stays and the message matches the state:
+```
+if ec != 0 or v.state != "OPEN":
+  finish("✅ Done — stopped before the PR: sdlc:pull-request exited without opening one (see its output above)")
+if v.headRefOid != `git rev-parse HEAD`:
+  finish("⚠️ PR #{v.number} {v.url} is open but HEAD is not on it — push {session.branch}, then re-run sdlc:pull-request")
+```
+
+#### 🟢 LOW-005: The fix diff adds lines that explain why the pseudocode is safe and do not change what the model does
+
+**Domains:** [Governance] · **Move:** none
+**Location:** `plugins/sdlc/skills/implement/references/existing-branch.md:5`
+**Introduced by:** HIGH-001
+**Siblings:** `plugins/sdlc/skills/implement/SKILL.md:267`, `plugins/sdlc/skills/implement/references/spike.md:20`, `plugins/sdlc/skills/deliver/references/override.md:25`
+
+Four added lines justify the code instead of directing the agent:
+  - existing-branch.md:5-6 "...so it is safe inside the single quotes below"
+  - implement SKILL.md:267 "# git allows $( ), backticks, quotes and ; in names"
+  - spike.md:20 "# session.branch_name is safe-ref checked..."
+  - override.md:25 "# it may be untracked..."
+The house style's CUT list covers "this works because…" lines. These files load on every invocation.
+This is token weight only: no lines need to change behaviour.
+
+**Recommendation:**
+Drop them in the planned behaviour-preserving diet PR.
+
+#### 🟢 LOW-006: Staged Diff rounds still write the branch ledger, so two staged rounds lock Gate 1 at a HEAD that lacks the reviewed code
+
+**Domains:** [DevTools] · **Move:** M1
+**Location:** `plugins/sdlc/skills/review/bin/scope.js:181`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/skills/review/bin/scope.js:17`, `plugins/sdlc/skills/review/bin/test/run-scope-tests.sh:190`, `plugins/sdlc/skills/review/SKILL.md:440`, `plugins/sdlc/skills/review/SKILL.md:488`, `plugins/sdlc/skills/review/references/round-state.md:31`, `plugins/sdlc/skills/review/references/round-state.md:50`, `plugins/sdlc/skills/review/README.md:11`
+
+The LOW-003 fix keeps Files / Folder / Ad-hoc rounds out of the branch's Gate 1 record. The staged mode is the same
+pattern and the fix left it in: scope.js returns ledger: true for it, so convergence.js records it as a branch round.
+A staged round reviews only the index-vs-HEAD diff. Committed branch code is pre-existing and goes out of scope, and
+Reviewed SHA is bound to `git rev-parse HEAD` (round-state.md:29). Since the round-1 HIGH-003 fix, the review-doc
+commit takes only the review paths, so the staged code is never in the SHA the lock records.
+Probe on a mktemp ledger: round 1 (branch) records a MEDIUM; rounds 2 and 3 (staged, which cannot see that line)
+record []. Round 2 marks the MEDIUM RESOLVED and round 3 returns LOCKED.
+In normal use, sdlc:review then reports Gate 1 LOCKED. As soon as the engineer commits the staged change,
+pull-request (SKILL.md:295) and the next review's post-lock check both report the lock as stale. If the staged change
+is instead unstaged, the branch carries a LOCKED Gate 1 at a SHA whose MEDIUM was never re-reviewed. When a branch
+round later finds the MEDIUM again, its reopen_count goes up, which moves it toward the reopen-guard.
+README.md:11 lists staged changes with files and folders as a "focused review". scope.js:17 and
+run-scope-tests.sh:190 state the opposite, deliberately.
+
+**Recommendation:**
+Treat staged like files: in scope.js:181 return `ledger: false` for 'staged'. Change run-scope-tests.sh:190 to assert
+`o.ledger === false`, and add Staged to the lists at scope.js:17, SKILL.md:440/488 and round-state.md:31/50.
+SKILL.md:386 then renders the round as "OPEN — not a branch review" and every LOW-003 exclusion applies.
+If staged locks are intended, say in scope.js:17 and SKILL.md:488 that a staged lock records HEAD, not the index.
+
+#### 🟢 LOW-007: roundNote's new !prior guard has no test: a branch round after only partial rounds
+
+**Domains:** [DevTools] · **Move:** M6
+**Location:** `plugins/sdlc/skills/review/bin/review-file.js:363`
+**Introduced by:** LOW-003
+**Siblings:** none
+
+appendRound now takes prior from the non-partial rounds (review-file.js:371). When every earlier round is a Files /
+Folder / Ad-hoc round, which happens when a branch's first review is a Specific Files review, prior is undefined and
+only the `!prior ||` guard keeps roundNote from dereferencing it.
+At HEAD this works: partial round 1 followed by branch round 2 exits 0, and parse returns
+gate1 {open, 2} and partial_rounds [1]. On a copy with `!prior ||` removed, all 137 suite checks still pass, but the
+same two renders fail with exit 2 ("Cannot read properties of undefined (reading 'gate_status')"). That would tear
+down the first branch round after any partial-only history.
+
+**Recommendation:**
+Add one case beside run-review-file-tests.sh:391. Render `clean 8a8a8a8 "$PARTIAL"` into a new file, then
+`clean 8a8a8a8` into the same file. Assert render exits 0, the heading is a bare `## Review Round 2`, and
+parse gives `o.gate1.state === "open" && o.gate1.round === 2 && JSON.stringify(o.partial_rounds) === "[1]"`.
+
+#### 🟢 LOW-008: Two restatements lag the partial-round fix: merge-conflict stage status has no --skip, and render's header note claim
+
+**Domains:** [DevTools] · **Move:** M1
+**Location:** `plugins/sdlc/skills/review/references/round-state.md:59`
+**Introduced by:** LOW-003
+**Siblings:** `plugins/sdlc/skills/review/bin/review-file.js:16`, `plugins/sdlc/skills/review/references/round-state.md:51`, `plugins/sdlc/skills/review/SKILL.md:383`
+
+(1) The ledger merge-conflict resolver runs `convergence.js status --ledger "{tmp_{stage}}"` without --skip, and its
+next branch compares status_2.locked with status_3.locked. Probe: a ledger with rounds 1 and 3 (LOCKED), where round 2
+was a partial round, gives locked:true with --skip 2 and locked:false without it.
+With equal round counts, a locked stage 3 and a dirty stage 2 both read unlocked, so the resolver keeps 3 and the lock
+survives. The rule intends to keep the unlocked side (fail closed). This needs a ledger conflict to reach.
+The restore call at round-state.md:70 reads only the exit code, so it is unaffected.
+(2) The header at review-file.js:16-17 still says "A Gate 1 round that follows a clean, still-open Gate 1 round is
+headed as a confirmation ... or an invalidation". A Files / Folder / Ad-hoc round is a Gate 1 round in the skill
+(SKILL.md:386), and roundNote now gives it no note and never takes the note from it. Line 24 of the same header
+already says "Gate 1 branch round".
+
+**Recommendation:**
+(1) At round-state.md:59, append ` --skip "{session.skip_rounds}"`, as lines 51 and SKILL.md:383 do.
+(2) At review-file.js:16-17, write "A branch Gate 1 round that follows a clean, still-open branch Gate 1 round
+(Files / Folder / Ad-hoc rounds are skipped and never headed) is headed as ...".
+
+#### 🟢 LOW-009: Commit check still flags git's revert-of-a-revert subject, Reapply "<subject>"
+
+**Domains:** [DevTools] · **Move:** M7
+**Location:** `plugins/sdlc/bin/git-conventions.js:71`
+**Introduced by:** LOW-017
+**Siblings:** `plugins/sdlc/bin/git-conventions.js:31`, `plugins/sdlc/bin/git-conventions.js:70`, `plugins/sdlc/bin/test/fixtures/git-conventions/commits-valid.txt:6`
+
+REVERT_RE accepts only `Revert "<subject>"`, and the comment calls this git's default revert subject. Current git
+names the revert of a revert `Reapply "<subject>"` instead of `Revert "Revert "…""`. Reproduced in a temp repo
+on git 2.54 (commit, revert, revert again):
+`git log --no-merges --format=%s | git-conventions.js commits` returns ok:false, with offender
+`Reapply "feat: add f"` and the error "missing `<type>: ` prefix". pull-request then warns and asks about
+that commit on every run, which is the noise LOW-017 removed for plain reverts. Rare: it needs a revert that
+is later reverted on the same branch.
+
+**Recommendation:**
+Accept both of git's generated subjects:
+  const REVERT_RE = /^(Revert|Reapply) ".+"$/;   // git revert's default subjects
+Add `Reapply "feat: add title search (#42)"` to commits-valid.txt, bump its count check to 7, and update
+the header line 31 wording.
+
+#### 🟢 LOW-010: issue_refs drops the line number from ticket-history failures (and still fires on an all-digit hex colour)
+
+**Domains:** [DevTools] · **Move:** none
+**Location:** `plugins/sdlc/bin/test/run-skill-structure-tests.sh:35`
+**Introduced by:** LOW-016
+**Siblings:** `plugins/sdlc/bin/test/run-skill-structure-tests.sh:33`, `plugins/sdlc/bin/test/run-skill-structure-tests.sh:77`, `plugins/sdlc/bin/test/run-pe-agent-tests.sh:46`, `plugins/sdlc/bin/test/run-pe-agent-tests.sh:48`, `plugins/sdlc/bin/test/run-pe-agent-tests.sh:53`, `plugins/sdlc/bin/test/run-pe-agent-tests.sh:59`
+
+LOW-016's fix replaced `grep -noE '#[0-9]{3,}'` with a `tr -c '[:alnum:]#&' '\n' | grep` pipeline. This
+loses each match's position. Reproduced by seeding "Since #20 merged." and "Since #517 merged." into a temp
+copy:
+  - The old guard printed `skills/deliver/SKILL.md:4:#517`.
+  - The new one prints `skills/deliver/SKILL.md::#20` and `skills/deliver/SKILL.md::#517`, with no line.
+In run-pe-agent-tests.sh, ticket_refs now mixes formats in one failure. The grep half prints
+`2:ABC-1790`. The issue_refs half prints the copy's absolute temp path, `/…/mut.X/…/pe-go.md:#20`.
+So the operator must search the file by hand to find a flagged reference.
+Smaller, same helper: the comment says a hex colour "is not one". An all-digit colour such as #333333 still
+fires (`:#333333`). No sdlc doc has one today, and a false positive here fails the test, so nothing is
+missed.
+
+**Recommendation:**
+Keep grep's line numbers and apply the same boundaries. Both suites carry this helper:
+  issue_refs() { grep -noE '(^|[^[:alnum:]&#])#[0-9]{2,}([^[:alnum:]]|$)' "$1" | sed -E 's/:[^#]*#/:#/; s/[^0-9]$//'; }
+(or awk with match() for each hit). The output becomes "<line>:#<n>", which fits grep's format and the
+`:#(…)$` allowlists. Then change the comment to "a hex colour with a letter (#5319e7)".
+
+#### 🟢 LOW-011: Five of safeRef's eight rules have no test, including the charset rule that keeps shell metacharacters out
+
+**Domains:** [DevTools] · **Move:** M6
+**Location:** `plugins/sdlc/bin/git-conventions.js:201`
+**Introduced by:** missed
+**Siblings:** `plugins/sdlc/bin/git-conventions.js:48`, `plugins/sdlc/bin/git-conventions.js:199`, `plugins/sdlc/bin/test/run-git-conventions-tests.sh:389`, `plugins/sdlc/bin/test/run-git-conventions-tests.sh:391`, `plugins/sdlc/bin/test/run-git-conventions-tests.sh:393`
+
+The ripple receipt says "safeRef rules listed in full and tested". The header now lists all eight rules, but
+only three have tests: ".." (../main, main..evil), the leading character (-x) and ".lock". Each of these
+mutants passes all 132 checks on a temp copy:
+  - `//` dropped
+  - `/.` dropped
+  - the trailing `/` or `.` rule dropped
+  - the 255-character cap dropped
+  - the charset widened from `[A-Za-z0-9._/-]*` to `[^\s]*`
+The charset rule is the one that keeps `$( )`, quotes and `;` out of a PR baseRefName or sdlc-base config
+value. Callers interpolate that value into shell (review's `git fetch origin "{target_branch}"`). A
+regression would reopen the round-1 HIGH-004 class with the suite still green. The code is correct
+today, so this is a test gap only.
+
+**Recommendation:**
+Add one refusal case for each untested rule, beside the existing ones at run-git-conventions-tests.sh:389:
+  base_in "$R" --branch 'feat/x;id'   → 2, /"feat\/x;id" is not a plain branch name/
+  base_in "$R" --branch 'a//b'        → 2
+  base_in "$R" --branch 'feat/.x'     → 2
+  base_in "$R" --branch 'feat/x.'     → 2
+  base_in "$R" --branch "$(printf 'a%.0s' {1..256})"   → 2
+Add one output-side case too: gh_routes 0 '{"baseRefName":"main$(id)"}' → /unsafe base ref/.
+
+#### 🟢 LOW-012: Usage message still ends base's synopsis with '(absent flag → stdin)'; base reads no stdin
+
+**Domains:** [DevTools] · **Move:** M1
+**Location:** `plugins/sdlc/bin/git-conventions.js:266`
+**Introduced by:** LOW-018
+**Siblings:** `plugins/sdlc/bin/git-conventions.js:21`, `plugins/sdlc/bin/git-conventions.js:22`
+
+LOW-018's fix corrected the header (lines 21-23: "`base` reads no stdin: its --branch is an argument"). The
+usage string printed on every usage error still ends with `| base [--branch <b>] [--pr <N>] (absent flag →
+stdin)`, so the stdin note reads as part of base's synopsis. A caller that follows it and pipes a branch to
+base gets the current branch's base instead, with exit 0 and no error. Only seen after a usage error, and
+the header is correct.
+
+**Recommendation:**
+Attach the note to the subcommands that read stdin, and say base takes only arguments:
+  ' | base [--branch <b>] [--pr <N>] (no stdin)' and '(absent --name/--text → stdin)' on branch, key and retype.
+
+#### ℹ️ INFO-001: Phase 2's list of round-state bindings omits session.skip_rounds, which Phase 6 passes to convergence.js record
+
+**Domains:** [Governance] · **Move:** M1
+**Location:** `plugins/sdlc/skills/review/SKILL.md:312`
+**Introduced by:** LOW-003
+**Siblings:** `plugins/sdlc/skills/review/references/round-state.md:3`, `plugins/sdlc/skills/review/references/round-state.md:31`, `plugins/sdlc/skills/review/SKILL.md:383`
+
+SKILL.md:312 lists the values round-state.md binds (review_file through gate1_skip_note). The fix
+added session.skip_rounds (round-state.md:31), and SKILL.md:383 reads it, but the list was not
+updated. round-state.md runs in order and always binds the value, so nothing breaks at runtime.
+The list is now an incomplete contract for anyone tracing where line 383's input comes from.
+
+**Recommendation:**
+Add `session.skip_rounds` to the binding list at SKILL.md:312.
+
+#### ℹ️ INFO-002: Convergence signal: round-2 governance findings for the review skill and agents verified at 465b4cc
+
+**Domains:** [Governance] · **Move:** none
+**Location:** `docs/code-reviews/feat-sdlc-code-review.md:936`
+**Introduced by:** new
+**Siblings:** none
+
+Verified fixed at HEAD:
+- MEDIUM-001: PRIOR REVIEW / PRIOR LEDGER exempted at dispatch-playbook.md:183,
+  pe-protocol.md:29 and dispatch-and-collect.md:205.
+- LOW-001: prior_same bound before both guards (publish.md:62).
+- LOW-003: gate1Of, partial_rounds, override refusal and --skip in place. convergence.js was run
+  with --skip "", "2" and "2,4" on a temp ledger: no false gap, and a lock that survives a Files
+  round.
+- LOW-004: publish.md:123.
+- LOW-005: round-state.md:37, review-store.md:9, README.md:62.
+- LOW-006: round-state.md:50.
+- LOW-012's doc restatements: pe-governance.md:3 and :24, pe-general-purpose.md:28,
+  SKILL.md:217.
+- LOW-018's review restatement: SKILL.md:496 now matches git-conventions.js:21-23.
+LOW-002 and LOW-022 work under bash but not under zsh (LOW-001 and LOW-002 above). Both are
+LOW edge refinements in round-2 themes. This shard has no MEDIUM or higher finding.
+
+**Recommendation:**
+Fix LOW-001 and LOW-002 here or in the planned follow-up PR. Nothing in this shard needs
+another round.
+
+#### ℹ️ INFO-003: Convergence signal: round-2 findings in this shard verified fixed at 465b4cc
+
+**Domains:** [Governance] · **Move:** none
+**Location:** `docs/code-reviews/feat-sdlc-code-review.md:887`
+**Introduced by:** new
+**Siblings:** none
+
+Verified fixed:
+  - HIGH-001: the safe-ref filter now runs before any shell use. The injection names are dropped by
+    a regex run, and existing-branch and spike now see only filtered names.
+  - MEDIUM-002: fixed for resume and start-over. The fresh-run sibling is MEDIUM-001 above.
+  - LOW-007: Phase 3 none guard.
+  - LOW-008: headRefOid check. Its over-strict edge is LOW-001.
+  - LOW-009: plugin_json matches the marketplace reference.
+  - LOW-010: override pathspec commit, proven in a temp repo.
+  - LOW-011: checkout failure now STOPs.
+  - LOW-018 (deliver part): resolve_base passes --pr.
+  - LOW-015 (doc row): matches gh-issues.js:506-511.
+Severity in this shard went from 1 HIGH + 1 MEDIUM in round 2 to 1 MEDIUM now. MEDIUM-001 is a
+one-line change.
+
+**Recommendation:**
+Fix MEDIUM-001 by removing the `session.implement_mode and` guard. Treat the LOWs as awareness.
+
+#### ℹ️ INFO-004: Convergence signal: severity flat at 3 LOW, closed set, nothing in this shard blocks
+
+**Domains:** [DevTools] · **Move:** none
+**Location:** `plugins/sdlc/skills/review/bin/review-file.js:1`
+**Introduced by:** new
+**Siblings:** none
+
+Round 2 had 3 LOW in this shard (LOW-012, LOW-013, LOW-014) and round 3 also has 3 LOW, with no MEDIUM or above.
+All three are themes earlier rounds already raised: a partial-scope round counted as a branch round (LOW-003),
+a guard with no test (LOW-013), and a restatement that lags its fix (LOW-012). Every round-2 finding for this shard
+is verified fixed at 465b4cc by suite and mutation (see prior_findings_verified).
+One unverified residual on LOW-014: under Git Bash, MSYS converts POSIX-looking env values, so os.homedir() likely
+returns a C:\ path with backslashes. The string-equality and endsWith checks at
+run-review-file-tests.sh:470-475 would then still fail on Windows, although nothing is written into the real profile
+any more. There is no Windows host to check this on, and CI runs on ubuntu only.
+
+**Recommendation:**
+Do not run another round for this shard. Put LOW-001 to LOW-003 in the planned follow-up PR, or accept them.
+If Windows contributors matter, compare the --local paths after normalising them
+(node -e 'console.log(require("path").resolve(process.argv[1]))'), or use the cygpath helper the build-plan suite already has.
+
+#### ℹ️ INFO-005: Convergence signal: severity falling, closed set (4/4 themes recur), round cap reached for shard B
+
+**Domains:** [DevTools] · **Move:** none
+**Location:** `docs/code-reviews/feat-sdlc-code-review.md:887`
+**Introduced by:** new
+**Siblings:** none
+
+Round 2 had 7 LOW in this shard (LOW-015 to LOW-021) and no HIGH or MEDIUM. Round 3 has 4 LOW and none
+gating. Every round-3 theme repeats a round-2 theme: revert subjects (LOW-017), the ticket-history guard
+(LOW-016), safeRef tests (LOW-019) and the base contract wording (LOW-018). Each is a last-mile refinement
+of a fix that worked.
+Fixed at 465b4cc, checked by suite and mutation:
+  - LOW-015: an owner refusal before any gh call, naming the owning file.
+  - LOW-016: 2+ digit floor, entity and hex-colour exemptions, #42/#57 allowlist, kept in step across both suites.
+  - LOW-017: Revert "<subject>" accepted.
+  - LOW-018, script side: the header names base --branch as an argument.
+  - LOW-019: -x and .lock cases, header lists every rule.
+  - LOW-020: suite header names base and SDLC_TEST_TMP.
+LOW-021 (UNVERIFIED Copilot overview wording) is unchanged. It still needs a live review body and cannot
+be settled from code.
+
+**Recommendation:**
+Nothing in this shard blocks merge. Treat LOW-001 to LOW-004 as awareness items for the planned follow-up
+PR. Another round on this shard is unlikely to change severity without a scope change.
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+
+#### Should Fix
+
+- [ ] MEDIUM-001: fix `plugins/sdlc/skills/deliver/SKILL.md:242` + 3 siblings
+
+#### Consider
+
+- [ ] LOW-001: fix `plugins/sdlc/skills/review/references/ci-gate.md:13` + 4 siblings
+- [ ] LOW-002: fix `plugins/sdlc/agents/pe-sql-server.md:36` + 3 siblings
+- [ ] LOW-003: fix `plugins/sdlc/skills/review/SKILL.md:440` + 2 siblings
+- [ ] LOW-004: fix `plugins/sdlc/skills/deliver/SKILL.md:459` + 0 siblings
+- [ ] LOW-005: fix `plugins/sdlc/skills/implement/references/existing-branch.md:5` + 3 siblings
+- [ ] LOW-006: fix `plugins/sdlc/skills/review/bin/scope.js:181` + 7 siblings
+- [ ] LOW-007: fix `plugins/sdlc/skills/review/bin/review-file.js:363` + 0 siblings
+- [ ] LOW-008: fix `plugins/sdlc/skills/review/references/round-state.md:59` + 3 siblings
+- [ ] LOW-009: fix `plugins/sdlc/bin/git-conventions.js:71` + 3 siblings
+- [ ] LOW-010: fix `plugins/sdlc/bin/test/run-skill-structure-tests.sh:35` + 6 siblings
+- [ ] LOW-011: fix `plugins/sdlc/bin/git-conventions.js:201` + 5 siblings
+- [ ] LOW-012: fix `plugins/sdlc/bin/git-conventions.js:266` + 2 siblings
+- [ ] INFO-001: fix `plugins/sdlc/skills/review/SKILL.md:312` + 3 siblings
+- [ ] INFO-002: fix `docs/code-reviews/feat-sdlc-code-review.md:936` + 0 siblings
+- [ ] INFO-003: fix `docs/code-reviews/feat-sdlc-code-review.md:887` + 0 siblings
+- [ ] INFO-004: fix `plugins/sdlc/skills/review/bin/review-file.js:1` + 0 siblings
+- [ ] INFO-005: fix `docs/code-reviews/feat-sdlc-code-review.md:887` + 0 siblings
+
+### Merge Eligibility
+
+**Locked to SHA:** `465b4ccaebdae0ff3ef9285ed19044a4809449fa`
+**Status:** ⚠️ Not mergeable — 0 HIGH and 1 MEDIUM findings open. Any commit after this SHA requires re-review.
 
 ---
 
