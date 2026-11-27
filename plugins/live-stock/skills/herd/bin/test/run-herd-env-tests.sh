@@ -90,7 +90,7 @@ run
 check "a CLAUDE_PLUGIN_ROOT that is not sdlc is skipped" 0 "o.sdlc.source === 'HERD_SDLC_ROOT'"
 
 newcase; mkdir -p "$CASE/home/.claude/plugins"
-printf '{"plugins":{"sdlc@lafollett-labs-claude-plugins":[{"scope":"user","installPath":"%s","version":"9.9.9"}]}}' "$CASE/sdlc" \
+printf '{"plugins":{"sdlc@home-market":[{"scope":"user","installPath":"%s","version":"9.9.9"}]}}' "$CASE/sdlc" \
   > "$CASE/home/.claude/plugins/installed_plugins.json"
 SDLC_ENV=""
 run
@@ -103,12 +103,21 @@ SDLC_ENV=""
 run
 check "an sdlc install from another marketplace is accepted" 0 "o.sdlc.root === '$CASE/sdlc' && o.sdlc.source === 'installed_plugins'"
 
+LS_ROOT="$(cd "$HERE/../../../.." && pwd)"   # this checkout's plugins/live-stock
+
 newcase; mkdir -p "$CASE/home/.claude/plugins"; fake_sdlc "$CASE/other-sdlc" sdlc 1.0.0
-printf '{"plugins":{"sdlc@another-marketplace":[{"installPath":"%s"}],"sdlc@lafollett-labs-claude-plugins":[{"installPath":"%s"}]}}' \
-  "$CASE/other-sdlc" "$CASE/sdlc" > "$CASE/home/.claude/plugins/installed_plugins.json"
+printf '{"plugins":{"sdlc@another-market":[{"installPath":"%s"}],"sdlc@home-market":[{"installPath":"%s"}],"live-stock@home-market":[{"installPath":"%s"}]}}' \
+  "$CASE/other-sdlc" "$CASE/sdlc" "$LS_ROOT" > "$CASE/home/.claude/plugins/installed_plugins.json"
 SDLC_ENV=""
 run
-check "sdlc@lafollett-labs-claude-plugins wins over another marketplace's sdlc" 0 "o.sdlc.root === '$CASE/sdlc'"
+check "the sdlc from live-stock's own marketplace wins over another marketplace's" 0 "o.sdlc.root === '$CASE/sdlc'"
+
+newcase; mkdir -p "$CASE/home/.claude/plugins"; fake_sdlc "$CASE/other-sdlc" sdlc 1.0.0
+printf '{"plugins":{"sdlc@home-market":[{"installPath":"%s"}],"sdlc@another-market":[{"installPath":"%s"}],"live-stock@another-market":[{"installPath":"%s"}]}}' \
+  "$CASE/sdlc" "$CASE/other-sdlc" "$LS_ROOT" > "$CASE/home/.claude/plugins/installed_plugins.json"
+SDLC_ENV=""
+run
+check "the preference follows live-stock's marketplace, not key order" 0 "o.sdlc.root === '$CASE/other-sdlc'"
 
 newcase; mkdir -p "$CASE/home/.claude/plugins"
 printf '{"plugins":{"sdlc-extras@another-marketplace":[{"installPath":"%s"}]}}' "$CASE/sdlc" \

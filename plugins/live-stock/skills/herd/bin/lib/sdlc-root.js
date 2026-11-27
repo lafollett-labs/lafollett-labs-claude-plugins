@@ -2,7 +2,8 @@
  * Resolves the sdlc plugin root for the herd scripts, fresh on every call.
  *
  * Order: $CLAUDE_PLUGIN_ROOT → $HERD_SDLC_ROOT → ~/.claude/plugins/installed_plugins.json
- * (`sdlc@lafollett-labs-claude-plugins`, then any other `sdlc@<marketplace>`; each key's first entry's installPath).
+ * (the `sdlc@<marketplace>` whose marketplace also installed this live-stock, then any other `sdlc@<marketplace>`;
+ * each key's first entry's installPath).
  * A candidate counts only when its .claude-plugin/plugin.json names "sdlc", so another plugin's
  * CLAUDE_PLUGIN_ROOT is skipped.
  *
@@ -23,14 +24,36 @@ function manifest(root) {
   }
 }
 
-const PREFERRED_KEY = 'sdlc@lafollett-labs-claude-plugins';
+function real(p) {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return null;
+  }
+}
+
+// The marketplace whose live-stock install holds this file, or null when run from a checkout.
+function ownMarketplace(plugins) {
+  const here = real(__dirname);
+  if (!here) return null;
+  for (const [key, entries] of Object.entries(plugins)) {
+    if (!key.startsWith('live-stock@') || !Array.isArray(entries)) continue;
+    for (const e of entries) {
+      const root = e && e.installPath ? real(e.installPath) : null;
+      if (root && (here === root || here.startsWith(root + path.sep))) return key.slice('live-stock@'.length);
+    }
+  }
+  return null;
+}
 
 function installedPaths() {
   try {
     const file = path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json');
     const plugins = JSON.parse(fs.readFileSync(file, 'utf8')).plugins || {};
+    const own = ownMarketplace(plugins);
+    const preferred = own ? `sdlc@${own}` : null;
     const keys = Object.keys(plugins).filter((k) => k.startsWith('sdlc@'));
-    keys.sort((a, b) => (b === PREFERRED_KEY) - (a === PREFERRED_KEY));
+    keys.sort((a, b) => (b === preferred) - (a === preferred));
     return keys
       .map((k) => (Array.isArray(plugins[k]) && plugins[k][0] ? plugins[k][0].installPath : null))
       .filter(Boolean);
