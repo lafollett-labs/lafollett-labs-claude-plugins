@@ -1,6 +1,6 @@
 # Code Review: feat-github-actions-release
 
-**Verdict:** ✅ APPROVED (round 6)
+**Verdict:** ✅ APPROVED (round 7)
 
 | | |
 | - | - |
@@ -222,8 +222,8 @@ None.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `171a7872dd889a50b625b58465f3329bce3cbfc2` (round 6)
-**Status:** ✅ Mergeable IF the branch head is `171a7872dd889a50b625b58465f3329bce3cbfc2` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
+**Locked to SHA:** `43bb4d529b398f3e760c6355a2e3bb93941aea3f` (round 7)
+**Status:** ✅ Mergeable IF the branch head is `43bb4d529b398f3e760c6355a2e3bb93941aea3f` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
 
 ---
 
@@ -727,6 +727,85 @@ None.
 
 - [ ] LOW-001: fix `scripts/ci/release/test/run-release-integration-tests.sh:248` + 2 siblings (write 1.0.3, renumber the debut `(#7)`)
 - [ ] INFO-001 … INFO-003: each at its location + the siblings listed above
+
+---
+
+## Review Round 7
+
+> 🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval changes
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer` 2.14.1) for Cali LaFollett |
+| **Reviewed SHA** | `43bb4d529b398f3e760c6355a2e3bb93941aea3f` |
+| **Date** | 2026-11-26 |
+| **Round cap** | past the owner's cap of 4; the owner chose "fix all + round 7" after round 6 |
+| **Fix cascade** | 0 / 1 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 3 supplied, all spot-checked, 0 disagree |
+
+### Summary
+
+Round 6 was approved at `171a787`, and its findings were then fixed. All 4 actionable findings (LOW-001, INFO-001, INFO-002, INFO-003) are closed. The convergence note (INFO-004) is reissued as INFO-001 below.
+
+What the fixes did:
+- Case 8 writes main's current marketplace version, and a new check fails if the fixture ever moves it.
+- A comment says why reconcile keeps the latest trailer-less title. PE-AWS-Infra probed it with two look-alikes around a tagged release: the claim holds.
+- Under `core.commentChar=auto`, commit-msg names a hit's line in "the message as scanned (comment lines kept)".
+- install-gitleaks.sh's comment matches `.gitleaks.toml`.
+
+Round 7 found no CRITICAL, HIGH, MEDIUM or LOW. PE-Governance and PE-AWS-Infra returned no findings. PE-DevTools returned only its convergence note, and recommends ending the hook rounds: what remains is the deprecated `auto` mode, documented and fail-closed.
+
+CI was green on all 5 jobs at the reviewed SHA (run 45930610514). An earlier run on the same SHA was cancelled by `cancel-in-progress` when the PR-body edit fired an `edited` run.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-AWS-Infra | none | none — TEST BUDGET none; CI run 45930610514 at `43bb4d5` read: 5 jobs green. Under M6/M7, on copies: the hard-coded-1.0.2 mutant (killed, 71 checks, 1 failed); a real vs first-wins probe with two look-alikes around a tagged release (held vs armed) |
+| PE-Governance | none | none; check-pr.sh origin/main HEAD rc 0 |
+| PE-DevTools | lint-only | run-hooks-tests.sh 49/49 locally (git 2.54, gitleaks 8.30.1, BSD awk) and on Ubuntu (mawk); shellcheck 0.11.0 clean; all 3 files 100755; 9 commit-msg mutants on copies, all killed |
+| Primary | — | CI run 45930610514 at `43bb4d5`: all 5 jobs green. Author mutants before review, all killed: 13 hook mutants and the case-8 fixture revert |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-AWS-Infra | 2 receipts in its domain vs run-release.sh:11-13 / :120 / :167 / :266 and 9 v8.25+ restatements: 0 disagree; LOW-001's siblings fixed; 0 other order-dependent fixture versions | case 8's version read traced through 7b's squash, the rebase into DEV, `write_marketplace` and a run that does not move main; the run-release.sh hunk is a comment only | `HELD` with 1 and 2 trailer-less titles around a tagged release; `version_at` failing empty fails 2 checks, not silently | the new fixture check vs a stale and a forward write: both fail it | `version_at` / node failures at write and check time; no new failing call | the hard-coded-1.0.2 mutant killed; "marketplace minor" now tells minor from patch; first-wins survives the unmodified suite, accepted as documented | 3 claims (run-release.sh:120 by probe, install-gitleaks.sh:4, case 8's comment): all true |
+| PE-Governance | 3 receipts vs 13 restatements: 0 disagree; the commit-msg:10-11 keep holds; v8.25+ at all 6 sites; 0 governance files in the fix diff; PR #21 vs the hard rules: pass | CLAUDE.md:31 vs the `HELD` path; case 8 leaves main alone | CLAUDE.md:36-41 on 3 shapes: this PR, a debut, a removal | :31 vs check-pr.sh:38-50 (the old fixture would fail it); :27 vs the hooks: 0 version or fragment checks | :27 vs the hooks' failure branches | the case-8 check and run-hooks-tests.sh:245-246 vs the rules they cover | :27, :31-33, :37-48 and the Structure block vs the code: all hold |
+| PE-DevTools | receipt 1 vs 4 restatements and the suite's 3 greps: agree; receipt 3 agrees; the `--cleanup=` flag is the only other scanned-vs-recorded gap, documented | `of` set once on every path; traps unchanged; the new check depends on the line before it and fails if moved | aUtO on commentChar and AUTO on commentString in the editor and `-m` flows; the default wording; the auto status-comment over-scan (pre-existing, documented) | the auto arm unchanged; the new grep rejects a dropped qualifier and a trailing period | no new failing call; `awk -v of=` carries no escapes | 9 mutants on copies, all killed | git 2.54 probes: auto drops the editor's `#` line and keeps the `-m` one; `awk -v of` on BSD awk and mawk |
+| Primary | 3 receipted rules vs CONTRIBUTING.md and README: agree | n/a — human docs hold no state | n/a — no human doc in the fix diff | n/a — no guard in the human docs | n/a — human docs make no call | n/a — no test in the human docs | n/a — no human doc in the fix diff |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 0 | 0 |
+| ℹ️ INFO | 1 | 0 |
+
+### In Scope Findings
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| INFO-001 | none | `scripts/hooks/commit-msg:1` | still-present | Convergence signal: no blocking findings remain in any domain, and the last hook theme (the deprecated `core.commentChar=auto`) is documented and fails closed | none |
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+None.
+
+#### Should Fix
+
+None.
+
+#### Consider
+
+None.
 
 ---
 
