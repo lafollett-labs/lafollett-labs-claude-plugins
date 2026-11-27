@@ -1,6 +1,6 @@
 # Code Review: fix-release-seed-tag
 
-**Verdict:** ✅ APPROVED
+**Verdict:** ✅ APPROVED (round 2)
 
 | | |
 | - | - |
@@ -136,8 +136,102 @@ None.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `d001a857fefe4b43348437e3c8d108cb08f50f8c`
-**Status:** ✅ Mergeable IF `git rev-parse HEAD == d001a857fefe4b43348437e3c8d108cb08f50f8c` (plus this review doc). Any later code commit invalidates this round and requires re-review.
+**Locked to SHA:** `853bab94ede086e5f8e2f8ac42f76c4ee7cc6f1c` (round 2)
+**Status:** ✅ Mergeable IF `git rev-parse HEAD == 853bab94ede086e5f8e2f8ac42f76c4ee7cc6f1c` (plus this review doc). Any later code commit invalidates this round and requires re-review.
+
+---
+
+## Review Round 2
+
+> 🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval changes
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer` 2.14.1) for Cali LaFollett |
+| **Reviewed SHA** | `853bab94ede086e5f8e2f8ac42f76c4ee7cc6f1c` |
+| **Date** | 2026-11-27 |
+| **Fix cascade** | 2 / 2 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 2 spot-checked; receipt 2 missed one PR-body restatement (LOW-003) |
+
+### Summary
+
+Both round-1 LOWs are resolved.
+- LOW-001: the seed anchors to the parent of the commit that adds `RELEASE_WORKFLOW`. Case 14c shows that a later merge editing the workflow keeps the same seed and the same refusal, and that the hand-tagged seed releases both merges.
+- LOW-002: the comment and the stub now state only the observed case.
+- INFO-001 is unchanged and stays awareness only.
+
+PE-AWS-Infra simulated the post-merge run on a scratch copy:
+- It seeds `v1.34.1` on the squash and releases nothing. A second run is idle.
+- A plugin merge landing first gives a refusal that names `v1.34.1` at `6f375e6`.
+
+Two new findings, neither blocking:
+- LOW-003: the PR body and `d001a85`'s commit message still state the broad rule. The PR body is fixed, and the squash uses one message that matches the code.
+- INFO-002: under the default workflow path, the seed's parent is never tagged directly.
+
+CI was green on all 5 jobs at the reviewed SHA (run 45943567816).
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-AWS-Infra | none | none — TEST BUDGET none; CI run 45943567816 at `853bab9`: 5/5 green. Post-merge simulation on a scratch bare copy (squash onto 41c4677, no tags, the stub's 403 rule): seeds v1.34.1 on the squash, 1 refs call, nothing to release, exit 0; a second run is idle. A plugin merge first → exit 1 naming v1.34.1 at 6f375e6. 1 mutant run: the `same_workflows` condition forced true survives 93/93 (INFO-002) |
+| Primary | — | Author mutants on copies at `853bab9`: 9 killed. The engine's plan on the real history from `6f375e6`: empty |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-AWS-Infra | 2 receipts spot-checked against the code, README, CONTRIBUTING, changelog.d/README and release.yml: the 6 and 4 listed restatements agree; keeping :273 holds; the PR body's Tests bullet and `d001a85`'s message disagree (LOW-003), and the repo's squash setting would carry the latter onto main | post-merge run simulated twice; a plugin merge landing first; 4 lifecycles traced (refused seed across merges, tag wipe, main moving between fetch and create, workflow delete then re-add) | no add commit, a root add commit, add then edit, delete then re-add, empty `RELEASE_WORKFLOW`, squash-only merges; the `:111` version claim vs the engine | `same_workflows` vs GitHub's documented workflow-scope rule (conservative); the seed parent always differs under the default (INFO-002); 14e tests the prelude's name guard; job permissions unchanged | 5 failure paths (git log failing, no parent, no marketplace at the seed, plan failing in the seed, a race with a workflow merge): none swallowed | 1 mutant run (survives, INFO-002); 6 traced, all killed; 93 checks match | 6 claims: `:78-79` against the run log and the 6f375e6..41c4677 diff, the token's permissions, the workflow-scope docs, `:111` against the engine, the post-merge claim by simulation, the 93 count; the PR body overstated (LOW-003) |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 1 | 0 |
+| ℹ️ INFO | 1 | 0 |
+
+### In Scope Findings
+
+#### 🟢 LOW-003: The PR body and `d001a85`'s commit message still state the broad rule LOW-002 narrowed
+
+**Domains:** [Ripple] · **Move:** M1
+**Location:** PR #22 body, Tests, first bullet
+**Introduced by:** LOW-002
+**Siblings:** `d001a85` commit message, lines 2-3 and 6-7
+
+The Tests bullet said the stub refuses "a ref … as GitHub does", the general rule that LOW-002 removed from the code. `d001a85`'s message says it more strongly, and it also describes the superseded main^1 seed. The repo squashes with `COMMIT_MESSAGES`, so by default both would land on main. Releasing is unaffected: no commit has a breaking footer, and the squash title is `fix(ci):`.
+
+**Recommendation:** Narrow the bullet. When merging, replace the squash body with one account that matches `853bab9`. Done: the PR body is updated, and the squash body is written out separately.
+
+#### ℹ️ INFO-002: Under the default `RELEASE_WORKFLOW` the seed's parent is never tagged directly
+
+**Domains:** [Test coverage] · **Move:** M6
+**Location:** `scripts/ci/release/run-release.sh:108`
+**Introduced by:** LOW-001
+**Siblings:** `scripts/ci/release/run-release.sh:96-99`, `scripts/ci/release/test/run-release-integration-tests.sh:153-154`
+
+The parent never has the workflow file and main always does, so a first run either seeds on main or stops for a human. The equal-workflows branch runs only when `RELEASE_WORKFLOW` names a path outside `.github/workflows`, and no case covers it. Nothing is ever skipped; at worst a re-activation asks for a hand tag GitHub might not have required.
+
+**Recommendation:** Awareness only.
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+None.
+
+#### Should Fix
+
+None.
+
+#### Consider
+
+- [x] LOW-003: fix PR #22 body + 1 sibling (squash message)
 
 ---
 
