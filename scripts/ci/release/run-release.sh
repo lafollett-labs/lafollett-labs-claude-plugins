@@ -117,6 +117,7 @@ reconcile() {
     built_on="$(git log -1 --format=%b "$sha" | sed -n 's/^Base: \([0-9a-f]\{40\}\)$/\1/p' | head -n 1)"
     if [ -z "$built_on" ]; then
       echo "::warning::$sha is titled like a release but has no Base: trailer, so it is not tagged"
+      # Keep the latest: the hold checks only HELD against BASE, and if any such title is past BASE, the latest is.
       HELD="$sha"; HELD_TAG="$TAG_PREFIX$v"
       continue
     fi

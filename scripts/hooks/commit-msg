@@ -32,10 +32,12 @@ case "$(git config --get commit.cleanup || true)" in
   verbatim) strip=no; tidy=no ;;
   *) strip=no ;;
 esac
+of="the message git will record"   # what a hit's line number counts
 # core.commentChar and core.commentString are aliases; the last one set wins.
 cs="$(git config --get-regexp '^core\.comment(char|string)$' | tail -n 1 | cut -d' ' -f2-)"
 case "$cs" in
-  [Aa][Uu][Tt][Oo]) strip=no; esc='[#;@!$%^&|:]' ;;   # git picks one per message, so comment lines are scanned
+  [Aa][Uu][Tt][Oo])   # git picks one per message, so comment lines are scanned and counted
+    strip=no; esc='[#;@!$%^&|:]'; of="the message as scanned (comment lines kept)" ;;
   *) [ -n "$cs" ] || cs='#'; esc="$(printf '%s' "$cs" | sed 's/[][\/.^$*]/\\&/g')" ;;
 esac
 
@@ -47,6 +49,6 @@ if [ "$edited" = yes ]; then sed "/^$esc -\{24\} >8 -\{24\}\$/,\$d" "$1"; else c
   > "$msg"
 if ! "$scan" "$msg" /dev/null > "$out"; then
   echo "commit-msg: private denylist hit in the commit message" >&2
-  awk -v f="$msg" 'index($0, f ":") == 1 { print "  line " (substr($0, length(f) + 2) + 0) " of the message git will record" }' "$out" >&2
+  awk -v f="$msg" -v of="$of" 'index($0, f ":") == 1 { print "  line " (substr($0, length(f) + 2) + 0) " of " of }' "$out" >&2
   exit 1
 fi

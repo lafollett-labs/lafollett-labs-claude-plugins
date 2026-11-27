@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install the pinned gitleaks into $1 (default: $RUNNER_TEMP/bin, else ./.bin) and verify its checksum.
 # Bump GITLEAKS_VERSION and GITLEAKS_SHA256 together, from the release's checksums.txt; keep it 8.25+
-# (.gitleaks.toml uses [[allowlists]]).
+# (.gitleaks.toml allows only [[allowlists]] entries).
 set -euo pipefail
 
 GITLEAKS_VERSION="8.30.1"

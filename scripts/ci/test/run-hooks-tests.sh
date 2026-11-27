@@ -242,6 +242,8 @@ check "  and a first line starting with # that git records is scanned" \
   "$(GIT_EDITOR=true try -e -m "#21 $TERM_HIT"):$(said 'hit in the commit message')" "1:1"
 check "  but an editor's # line is scanned (git may pick another comment char)" \
   "$(EDIT_SUBJECT="fix: b" EDIT_BODY="#21 $TERM_HIT" GIT_EDITOR="$W/edit" try):$(said 'hit in the commit message')" "1:1"
+check "  and its line is named in the message as scanned, not as git will record it" \
+  "$(said '  line 3 of the message as scanned (comment lines kept)$'):$(said 'git will record')" "1:0"
 
 echo "=============================================="
 echo "$total checks, $fails failed"

@@ -245,13 +245,15 @@ check "passed: a name git quotes bumps its plugin" "$(version_at release/next pl
 
 # 8. A debut keeps its authored version and raises the marketplace minor.
 write_plugin "$DEV" gamma 0.1.0
-write_marketplace "$DEV" 1.0.2 alpha beta gamma
-merge "feat(gamma): debut (#5)"
+write_marketplace "$DEV" "$(version_at main .claude-plugin/marketplace.json)" alpha beta gamma   # main's version, unchanged
+merge "feat(gamma): debut (#7)"
 code="$(release)"
 check "debut: exits 0" "$code" 0
 check "debut: gamma at its authored version" "$(version_at release/next plugins/gamma/.claude-plugin/plugin.json)" 0.1.0
 check "debut: marketplace minor" "$(version_at release/next .claude-plugin/marketplace.json)" 1.1.0
 check "debut: plugins line marks it new" "$(remote_file release/next CHANGELOG.md | grep -c 'gamma 0.1.0 (new)')" 1
+check "debut: the fixture leaves main's marketplace version as it was" \
+  "$(version_at main .claude-plugin/marketplace.json)" "$(version_at main^ .claude-plugin/marketplace.json)"
 
 # 9. A closed release PR fails the run.
 code="$(release STUB_PR_CLOSED=1 RELEASE_MERGE_WAIT=2)"
