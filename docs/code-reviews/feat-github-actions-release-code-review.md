@@ -1,6 +1,6 @@
 # Code Review: feat-github-actions-release
 
-**Verdict:** ✅ APPROVED (round 4)
+**Verdict:** ✅ APPROVED (round 5)
 
 | | |
 | - | - |
@@ -222,8 +222,8 @@ None.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `c009230baec7b23c805dc1497506bacf1e50b06e` (round 4)
-**Status:** ✅ Mergeable IF the branch head is `c009230baec7b23c805dc1497506bacf1e50b06e` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
+**Locked to SHA:** `a330382ec24cadba192370dceec0f6742fa366af` (round 5)
+**Status:** ✅ Mergeable IF the branch head is `a330382ec24cadba192370dceec0f6742fa366af` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
 
 ---
 
@@ -531,6 +531,108 @@ None.
 - [ ] LOW-005: fix `scripts/hooks/pre-commit:49` + 4 siblings
 - [ ] LOW-006: fix `scripts/ci/test/run-hooks-tests.sh:211` + 5 siblings
 - [ ] INFO-001 … INFO-003: each at its location + the siblings listed above
+
+---
+
+## Review Round 5
+
+> 🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval changes
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer` 2.14.1) for Cali LaFollett |
+| **Reviewed SHA** | `a330382ec24cadba192370dceec0f6742fa366af` |
+| **Date** | 2026-11-26 |
+| **Round cap** | past the owner's cap of 4; the owner approved this round after round 4 |
+| **Fix cascade** | 9 / 11 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 5 supplied, all spot-checked, 0 disagree; 1 unreceipted rule is false (LOW-001) |
+
+### Summary
+
+Round 4 was approved at `c009230`, and its findings were then fixed. All 10 of round 4's findings are closed, and its convergence note (INFO-004) is replaced by INFO-007 below.
+
+What the fixes did:
+- A release-titled commit without its `Base:` trailer now leaves the release PR for a human: auto-merge is turned off, and the run exits before the wait.
+- The allow-list suite has value cases for a bare dot, quantifier, alternation and escape classes. Its sed helper fails the suite on an edit that errors or changes nothing.
+- commit-msg reads `auto` in any case, and tidies blank lines as git does.
+- pre-commit scans and names paths without git's quotes or its trailing tab.
+- CLAUDE.md:32 drops the stricter-than-CI parenthetical.
+
+Round 5 found no CRITICAL, HIGH or MEDIUM. 9 of the 11 LOW and INFO findings are edge cases of round-4 fixes. Notable ones:
+- check-pr.sh and the release plan read git's C-quoted `--name-only` paths literally. A PR whose only plugin change is a file with a non-ASCII, quote or backslash name skips the fragment gate and gets no bump (LOW-003). It is latent: no tracked path is quoted today. Reported by PE-DevTools and confirmed by PE-AWS-Infra.
+- The suite header's "gitleaks v8.19+" is too low: `[[allowlists]]` needs v8.25 (LOW-001).
+- 2 test gaps let a mutant through: one that holds every release PR (LOW-002), and a quoted path with a space (LOW-004).
+
+Severity is falling (round 4: 6 LOW; round 5: 4 LOW), but each fix round still produces new edge cases. PE-DevTools recommends ending the hook rounds and keeping further git cleanup edge cases as documented misreads (INFO-007).
+
+CI was green on all 5 jobs at the reviewed SHA (run 45922394995). Ubuntu ran secret-scan 84/84 and hooks 48/48 with no SKIP.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-AWS-Infra | none | none — TEST BUDGET none. Read CI run 45922394995 at `a330382`: all 5 jobs green; integration 65, engine 79, secret-scan 84, check-pr 16, title 17, gate 14, hooks 48; gitleaks 8.30.1 on both jobs. Under M2/M3/M6: 15 check-allowlist.py mutants (9 killed; of the 6 survivors only brackets admit a wildcard, INFO-004); 2 run-release.sh mutants (1 survives, LOW-002); 5 file names through check-pr.sh and the plan (3 escape, LOW-003) |
+| PE-Governance | none | none; 8 one-commit shapes through check-title.sh against CLAUDE.md:32 |
+| PE-DevTools | lint-only | run-hooks-tests.sh 48/48 on git 2.54, gitleaks 8.30.1 and BSD awk; shellcheck 0.11.0 clean; all 3 files 100755; 8 mutants on copies: 6 killed, 2 survive (LOW-004, INFO-005) |
+| Primary | — | CI run 45922394995 at `a330382`: all 5 jobs green. Author mutants before review: 10 hook, 5 allow-list value-class and 1 release-hold mutant, all killed |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-AWS-Infra | 3 receipts spot-checked, 0 disagree, and the README.md:108 / release.yml:4 keeps hold; the unreceipted "gitleaks v8.19+" vs 3 restatements and gitleaks' README (LOW-001); run-release.sh:11-12 vs a same-pass tagged release (INFO-002); the hooks' `quotePath=false` read vs 3 CI path reads (LOW-003) | `HELD` traced through init, reconcile, BASE, the nothing-to-release exit, the hold and the wait-loop reconcile; 2 scenarios on a copy of the harness (INFO-002, INFO-003) | `HELD` with 0, 1 and 2 look-alikes, before and after a trailered release; `lit()` on `\|` and `&`; `with()` on a no-op and an unbalanced sed; 5 file names through check-pr.sh and the plan (LOW-003) | the hold's trigger vs check-title.sh's release-subject refusal; 15 checker mutants vs 66 shape cases; a 36-wide `[!-~]` value clears any PAT on real gitleaks under the bracket mutant, and the real checker refuses it (INFO-004) | a `--disable-auto` failure warns and exits 0; a re-bump PR is always new and never armed; dispatch or open_pr failure before the hold; python3 without tomllib exits 1 with a reason | 8 added cases read; 15 checker mutants: 9 killed, 6 survive, only brackets admit a wildcard (INFO-004); 2 release mutants: no-exit killed, hold-for-every survives (LOW-002); the bad-edits guard fires on both kinds of bad edit | gitleaks `[[allowlists]]` since v8.25.0 (LOW-001); `gh pr merge --disable-auto`; release-version on a `(#N)` suffix; the `lit()` and python3 headers hold; git's quoting under the default `core.quotePath` (LOW-003) |
+| PE-Governance | 5 receipts spot-checked, 0 disagree; the check-title.sh:35 keep holds; CLAUDE.md does not restate the hold, python3 or path rules; repo-wide grep for the lone-commit rule: 11 hits, 0 disagree; PR #21 against the hard rules: check-pr.sh rc 0 | the lone-commit rule across a retitle and a 1 ↔ many force-push; the `HELD` path vs CLAUDE.md:31 | 8 one-commit shapes vs line 32; 1 shape passes a literal "plugin bump" reading but fails CI (INFO-001) | line 32 as a guard vs check-title.sh and commitLevel: rejects none that CI passes; :27 vs the hooks: 0 version or fragment checks | the mismatch error names both levels; check-pr.sh exits 0/1/2 with messages; the hold warns from the run itself | n/a — no test in the CLAUDE.md diff | line 32, :27, :31, :33, :37-41, the table and the Structure block vs the code: all hold |
+| PE-DevTools | 2 receipts in its domain vs 10 restatements: all agree except commit-msg:10-11 under auto (INFO-006); the quoted-path pattern grepped repo-wide: 3 CI readers (LOW-003) | temp files unchanged on every path; the tidy stage holds no state; concurrent commits share nothing | 8 path shapes × 3 locales through `unq` and the `+++` rule; 5 cleanup modes × with/without `-v` line numbers: 10/10 match; auto / Auto / AUTO on both keys | the `[Aa][Uu][Tt][Oo]` glob vs 3 spellings × 2 keys: git and the hook agree on all 6; `unq` vs git's quoting of a quote, backslash, trailing backslash, control and non-ASCII characters | the stripspace stage fails only where git commit already dies; the locate fallback prints only when no location is named | 8 mutants: 6 killed; tab strip after `unq` (LOW-004) and `auto\|Auto` (INFO-005) survive | 9 claims hold on git 2.54, except "a hit's line number is its line in the recorded message" under auto (INFO-006) |
+| Primary | 5 receipted rules vs CONTRIBUTING.md, README and changelog.d/README: all agree | n/a — human docs hold no state | n/a — no human doc in the fix diff | n/a — no guard in the human docs | n/a — human docs make no call | n/a — no test in the human docs | CONTRIBUTING.md:25-27 vs the hooks and README.md:104-110 vs the release hold: agree |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 4 | 0 |
+| ℹ️ INFO | 7 | 0 |
+
+### In Scope Findings
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| LOW-001 | M7 | `scripts/ci/run-shell-tests.sh:9` | INFO-002 | The header says gitleaks v8.19+, but `[[allowlists]]` (the only shape check-allowlist.py allows) needs v8.25, so the suite's allow-list case fails without a reason on 8.19-8.24 | `CONTRIBUTING.md:25`, `scripts/hooks/pre-commit:2`, `scripts/hooks/pre-commit:25`, `scripts/ci/security/test/run-secret-scan-tests.sh:8`, `scripts/ci/security/install-gitleaks.sh:6` |
+| LOW-002 | M6 | `scripts/ci/release/test/run-release-integration-tests.sh:222` | INFO-001 | No case checks that a trailered release does not hold, so a mutant that holds every release-titled commit passes 65/65 | `scripts/ci/release/test/run-release-integration-tests.sh:266`, `scripts/ci/release/run-release.sh:119`, `scripts/ci/release/run-release.sh:258` |
+| LOW-003 | M3 | `scripts/ci/check-pr.sh:26` | missed | check-pr.sh and the release plan read `--name-only` paths with the default `core.quotePath`, so a C-quoted name (non-ASCII, quote, backslash) escapes the `^plugins/` matches: no fragment required, no bump. Latent: 0 tracked paths are quoted | `scripts/ci/check-pr.sh:38`, `scripts/ci/check-pr.sh:49`, `scripts/ci/check-pr.sh:50`, `scripts/ci/check-pr.sh:51`, `scripts/ci/check-pr.sh:52`, `scripts/ci/release/run-release.sh:165`, `scripts/ci/release/version-stamp.js:30`, `scripts/ci/release/version-stamp.js:159`, `scripts/hooks/pre-commit:56` |
+| LOW-004 | M6 | `scripts/ci/test/run-hooks-tests.sh:83` | LOW-005 | No fixture is a quoted path with a space, so moving the trailing-tab strip after `unq` passes 48/48 while the hook names `b/q\"x y.txt` | `scripts/hooks/pre-commit:61`, `scripts/ci/test/run-hooks-tests.sh:86`, `scripts/ci/test/run-hooks-tests.sh:91`, `scripts/ci/test/run-hooks-tests.sh:93` |
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| INFO-001 | M4 | `CLAUDE.md:32` | LOW-001 | "same plugin bump" reads as met in a PR that touches no plugin, but CI still compares the levels (`ci:` title, `feat:` commit → rc 1) | `CLAUDE.md:44`, `CONTRIBUTING.md:22`, `scripts/ci/check-title.sh:3` |
+| INFO-002 | M2 | `scripts/ci/release/run-release.sh:119` | INFO-001 | The hold is decided over the reconcile pass, not the plan's range, so a trailered release tagged in the same pass still holds a correct release PR for one run | `scripts/ci/release/run-release.sh:11`, `scripts/ci/release/run-release.sh:12`, `scripts/ci/release/run-release.sh:118`, `scripts/ci/release/run-release.sh:162`, `scripts/ci/release/run-release.sh:258`, `scripts/ci/release/test/run-release-integration-tests.sh:222` |
+| INFO-003 | M2 | `scripts/ci/release/run-release.sh:118` | INFO-001 | After the warning's recovery (tag by hand, re-run), the held PR stays open with the re-bump stamp, and nothing says to close it | `scripts/ci/release/run-release.sh:172`, `scripts/ci/release/run-release.sh:243`, `scripts/ci/release/run-release.sh:261` |
+| INFO-004 | M6 | `scripts/ci/security/test/run-secret-scan-tests.sh:216` | LOW-002 | No value case fails on a lone bracket, so a LITERAL class that admits `[` `]` passes the suite | `scripts/ci/security/test/run-secret-scan-tests.sh:225`, `scripts/ci/security/check-allowlist.py:10`, `scripts/ci/security/check-allowlist.py:24` |
+| INFO-005 | M6 | `scripts/ci/test/run-hooks-tests.sh:233` | LOW-003 | Only the `Auto` spelling is tested, so an `auto\|Auto` mutant survives and lets an `AUTO` `#` subject through | `scripts/hooks/commit-msg:38`, `scripts/hooks/commit-msg:13` |
+| INFO-006 | M7 | `scripts/hooks/commit-msg:10` | INFO-003 | Under auto the hook keeps comment lines git drops, so "line N of the message git will record" can name a line git never records | `scripts/hooks/commit-msg:13`, `scripts/hooks/commit-msg:38`, `scripts/hooks/commit-msg:50`, `scripts/ci/test/run-hooks-tests.sh:243` |
+| INFO-007 | none | `scripts/hooks/commit-msg:1` | new | Convergence signal: severity falling, and the hook findings are a closed set that refines rounds 2-4 | none |
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+None.
+
+#### Should Fix
+
+None.
+
+#### Consider
+
+- [ ] LOW-001: fix `scripts/ci/run-shell-tests.sh:9` + 5 siblings (state v8.25+)
+- [ ] LOW-002: fix `scripts/ci/release/test/run-release-integration-tests.sh:222` + 3 siblings (a plugin follow-up in case 7 that must arm auto-merge)
+- [ ] LOW-003: fix `scripts/ci/check-pr.sh:26` + 9 siblings (read paths with `-z`, or `quotePath=false` and fail closed on a quoted line)
+- [ ] LOW-004: fix `scripts/ci/test/run-hooks-tests.sh:83` + 4 siblings
+- [ ] INFO-001 … INFO-006: each at its location + the siblings listed above
 
 ---
 
