@@ -1,6 +1,6 @@
 # Code Review: feat-github-actions-release
 
-**Verdict:** ✅ APPROVED (round 5)
+**Verdict:** ✅ APPROVED (round 6)
 
 | | |
 | - | - |
@@ -222,8 +222,8 @@ None.
 
 ## Merge Eligibility
 
-**Locked to SHA:** `a330382ec24cadba192370dceec0f6742fa366af` (round 5)
-**Status:** ✅ Mergeable IF the branch head is `a330382ec24cadba192370dceec0f6742fa366af` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
+**Locked to SHA:** `171a7872dd889a50b625b58465f3329bce3cbfc2` (round 6)
+**Status:** ✅ Mergeable IF the branch head is `171a7872dd889a50b625b58465f3329bce3cbfc2` plus only this review doc. Any other commit after it invalidates this round and requires re-review (`/code-reviewer` again before merge).
 
 ---
 
@@ -633,6 +633,100 @@ None.
 - [ ] LOW-003: fix `scripts/ci/check-pr.sh:26` + 9 siblings (read paths with `-z`, or `quotePath=false` and fail closed on a quoted line)
 - [ ] LOW-004: fix `scripts/ci/test/run-hooks-tests.sh:83` + 4 siblings
 - [ ] INFO-001 … INFO-006: each at its location + the siblings listed above
+
+---
+
+## Review Round 6
+
+> 🚫 PRIOR ROUND INVALIDATED — re-reviewing post-approval changes
+
+**Verdict:** ✅ APPROVED
+
+| | |
+| - | - |
+| **Reviewer** | Claude Code (`/code-reviewer` 2.14.1) for Cali LaFollett |
+| **Reviewed SHA** | `171a7872dd889a50b625b58465f3329bce3cbfc2` |
+| **Date** | 2026-11-26 |
+| **Round cap** | past the owner's cap of 4; the owner chose "fix all here + round 6" after round 5 |
+| **Fix cascade** | 3 / 5 in-scope findings introduced by a prior fix |
+| **Ripple receipts** | 5 supplied, all spot-checked; 1 restatement disagrees (INFO-002) |
+
+### Summary
+
+Round 5 was approved at `a330382`, and all 11 of its findings were then fixed:
+- 10 are closed.
+- INFO-006 is partly closed: the header now documents the auto caveat, but the printed hit message does not (INFO-002).
+- The convergence note (INFO-007) is reissued as INFO-004.
+
+What the fixes did:
+- check-pr.sh and the release plan read paths with `-z`, so a plugin file git would quote still needs a fragment and still bumps its plugin.
+- The release PR is held only for a trailer-less release title still in the plan's range, and the hold's warning names the tag to create and the PR to close.
+- gitleaks v8.25+ is stated wherever a version is named.
+- The hook and allow-list test gaps are closed.
+
+Round 6 found no CRITICAL, HIGH or MEDIUM: 1 LOW and 4 INFO, down from 4 LOW and 7 INFO.
+- LOW-001: inserting case 7b left case 8's fixture rolling main's marketplace version back from 1.0.3 to 1.0.2. Its check passes only because a minor bump of either gives 1.1.0.
+- The INFO findings are an unpinned "latest wins" invariant, one wording caveat under the deprecated `core.commentChar=auto`, one stale comment, and the convergence note.
+
+PE-Governance found nothing. PE-DevTools again recommends ending the hook rounds.
+
+CI was green on all 5 jobs at the reviewed SHA (run 45927455908). Ubuntu ran secret-scan 90/90 and hooks 48/48 with no SKIP.
+
+### Test Evidence
+
+| PE | Budget | Pass 2 evidence |
+| - | - | - |
+| PE-AWS-Infra | none | none — TEST BUDGET none; CI run 45927455908 at `171a787` as reported: 5 jobs green, 8 suites, 0 failed. Under M2/M6, on copies of `scripts/ci/release`: 4 integration runs and 1 unit run; 4 mutants (3 killed, 1 survives, INFO-001); a probe of case 8's end state (LOW-001) |
+| PE-Governance | none | none; 11 commit shapes through check-title.sh, check-pr.sh origin/main HEAD rc 0, squash settings via gh api |
+| PE-DevTools | lint-only | run-hooks-tests.sh 48/48 on git 2.54, gitleaks 8.30.1 and BSD awk; shellcheck 0.11.0 clean; all 3 files 100755; 9 mutants on copies, all killed |
+| Primary | — | CI run 45927455908 at `171a787`: all 5 jobs green. Author mutants before review, all killed: 12 hook, 6 value-class, 3 release-hold and path-read, 2 check-pr, 1 engine |
+
+### Moves Coverage
+
+| PE | M1 Ripple | M2 Lifecycle | M3 Inputs | M4 Attack the guard | M5 Failure path | M6 Falsify the test | M7 Fact check |
+| - | - | - | - | - | - | - | - |
+| PE-AWS-Infra | 4 receipts vs 19 restatements: 0 disagree; the README.md:108, release.yml:4, pre-commit:56 and check-title.sh:35 keeps hold; 14 git reads grepped, all 3 path-name reads use `-z`, 0 unconverted | `HELD` / `HELD_TAG` through init, reconcile, the BASE recompute, the is-ancestor clear, the nothing-to-release exit, the hold and the wait loop; the recovery with and without the close; 7b's end state into case 8 (LOW-001) | `HELD` with 0, 1 and 2 trailer-less titles around a tagged release; non-ASCII, quote, tab and newline names through `-z \| tr` and `parseLog`; `git log -z` bytes vs the unit fixtures | the is-ancestor clear under squash-only history; a wrong hand tag vs check-title.sh's release-subject refusal; quoted and newline-split fragment names; the 6 new value cases vs the checker | is-ancestor errors, the unchecked `tr` writes, a `git log -z` failure, a `--disable-auto` failure: none reaches a wrong release | 4 mutants: hold-for-every, no `-z` and split on `\n` killed; first-trailer-less-wins survives (INFO-001) | `gh release create --target` with a full SHA; `-z` writes names unquoted; BSD `tr` and `\0`; `[[allowlists]]` needs v8.25; 4 comments vs the code: hold |
+| PE-Governance | 5 receipts spot-checked, 0 disagree; 5 live restatements of the lone-commit rule agree; no stale 8.19; PR #21 vs the hard rules: check-pr.sh rc 0, no fragment needed | the lone-commit rule across a retitle and a 1 ↔ many force-push; the scoped hold and its recovery vs CLAUDE.md:31 | 10 one-commit shapes and 1 multi-commit shape vs line 32 and row 48 | line 32 as a guard vs check-title.sh: no shape passes the rule but fails CI on level; :27 vs the hooks; :37 vs the `-z` fragment read | the mismatch error, check-pr.sh's exit 2, pre-commit's skip and its v8.25+ message | n/a — no test in the CLAUDE.md diff | squash settings, commitLevel, marketplaceLevel, plan() with `-z`, check-pr.sh:38-58 and the Structure block vs CLAUDE.md:27 and :31-48: all hold |
+| PE-DevTools | 3 receipts in its domain spot-checked; gitleaks v8.25+ agrees in 6 places; the auto rule disagrees at commit-msg:50 (INFO-002); the pre-commit:56 keep holds | no new state; the 3 cleanup traps are unchanged; the new fixture lives in the suite's own temp dir | git's real header for `q"x y.txt` (quoted, trailing tab); auto / aUtO / AUTO on both keys | the `[Aa][Uu][Tt][Oo]` glob vs git on both keys; `unq` vs a quote, space and backslash together | no new failing call; the "failed to run" branch prints v8.25+ and refuses the commit | 9 mutants on copies, all killed | gitleaks v8.25.0 notes for `[[allowlists]]`; the 7 pre-commit flags in 8.30.1; git 2.54 reads auto in any case and deprecates it; install-gitleaks.sh:4's claim vs `.gitleaks.toml` (INFO-003) |
+| Primary | 5 receipted rules vs CONTRIBUTING.md, README and changelog.d/README: agree | n/a — human docs hold no state | n/a — CONTRIBUTING.md:25 is the only human-doc hunk | n/a — no guard in the human docs | n/a — human docs make no call | n/a — no test in the human docs | CONTRIBUTING.md:25's v8.25+ vs pre-commit and the suite headers: agree |
+
+### Findings Overview
+
+| Severity | In Scope | Out of Scope |
+| - | - | - |
+| 🔴 CRITICAL | 0 | 0 |
+| 🟠 HIGH | 0 | 0 |
+| 🟡 MEDIUM | 0 | 0 |
+| 🟢 LOW | 1 | 0 |
+| ℹ️ INFO | 4 | 0 |
+
+### In Scope Findings
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| LOW-001 | M6 | `scripts/ci/release/test/run-release-integration-tests.sh:248` | LOW-002 | Case 7b now tags v1.0.3 before case 8, but case 8 still writes marketplace 1.0.2, so its debut rolls main's version back; "marketplace minor" passes only by coincidence, and 7b reuses `(#5)` | `scripts/ci/release/test/run-release-integration-tests.sh:249`, `scripts/ci/release/test/run-release-integration-tests.sh:231` |
+
+| ID | Move | Location | Introduced by | Finding | Siblings |
+| - | - | - | - | - | - |
+| INFO-001 | M6 | `scripts/ci/release/run-release.sh:120` | INFO-002 | After the range check, the hold depends on `HELD` being the latest trailer-less title; a first-wins mutant passes 70/70, and no comment says why the order matters | `scripts/ci/release/run-release.sh:167`, `scripts/ci/release/test/run-release-integration-tests.sh:229` |
+| INFO-002 | M1 | `scripts/hooks/commit-msg:50` | still-present | Under auto, the printed "line N of the message git will record" can name a line git drops; only the header was qualified | `scripts/hooks/commit-msg:10`, `scripts/hooks/commit-msg:13`, `scripts/ci/test/run-hooks-tests.sh:169`, `scripts/ci/test/run-hooks-tests.sh:174`, `scripts/ci/test/run-hooks-tests.sh:243` |
+| INFO-003 | M7 | `scripts/ci/security/install-gitleaks.sh:4` | LOW-001 | "(.gitleaks.toml uses [[allowlists]])" — the file holds no entries today; `[[allowlists]]` is the only entry shape it allows. Raised by PE-DevTools as outside its domain | `.gitleaks.toml:3`, `scripts/ci/security/check-allowlist.py:7` |
+| INFO-004 | none | `scripts/hooks/commit-msg:1` | still-present | Convergence signal: severity falling (round 5: 4 LOW, round 6: 1 LOW, in a test fixture), and the hook themes are a closed set; git 2.54 deprecates `core.commentChar=auto` | none |
+
+### Action Items
+
+#### Must Fix (blocks merge)
+
+None.
+
+#### Should Fix
+
+None.
+
+#### Consider
+
+- [ ] LOW-001: fix `scripts/ci/release/test/run-release-integration-tests.sh:248` + 2 siblings (write 1.0.3, renumber the debut `(#7)`)
+- [ ] INFO-001 … INFO-003: each at its location + the siblings listed above
 
 ---
 
