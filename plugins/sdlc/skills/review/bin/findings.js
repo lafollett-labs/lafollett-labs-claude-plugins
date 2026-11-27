@@ -9,11 +9,13 @@
  *
  * validate prints { outputs, redispatch: [{ name, kinds, note }], category_fallbacks, demoted }.
  *   Severity is normalized first ("🔴 CRITICAL" → CRITICAL). Each teammate is re-dispatched at most
- *   once per kind (recommendation | severity | category | claim). When a kind was already
+ *   once per kind (findings | recommendation | severity | category | claim). When a kind was already
  *   re-dispatched, the still-invalid item falls back instead: a finding without a concrete
  *   recommendation becomes a below_bar receipt, an invalid severity becomes MEDIUM (still gating),
  *   an invalid category becomes "general", an invalid receipt claim becomes "absence". Fallbacks apply only to teammates with nothing left to
  *   re-dispatch, so a pending replacement is never half-applied. `expert` is set from the dispatched pe.
+ *   An output whose findings is not a list (an error body, a missing key) is never a clean review: it is
+ *   re-dispatched once, then validate exits 2.
  * dedup prints { consolidated }: findings sharing (location, normalized title) merge into one; each
  *   finding's domains are the PEs that raised it. The category floor applies here, once: a
  *   data-integrity, migration, auth, or secrets finding rated LOW or INFO becomes MEDIUM, with the PE's
@@ -40,6 +42,7 @@ const NOTES = {
   severity: (titles) => `Finding(s) ${titles} have a severity outside CRITICAL|HIGH|MEDIUM|LOW|INFO. Re-emit with one.`,
   category: (titles) => `Finding(s) ${titles} have a category outside the enum. Every finding needs an enum category. Re-emit with one.`,
   claim: (titles) => `Receipt(s) ${titles} have a claim outside absence|positive|below_bar|indeterminate. Re-emit with one.`,
+  findings: () => 'Your output has no findings list. Re-emit your full YAML block; a clean review returns findings: [].',
 };
 
 class CliError extends Error {}
@@ -71,7 +74,15 @@ function validate(input) {
   const result = {};
 
   for (const [name, raw] of Object.entries(outputs)) {
-    const findings = (raw.findings || []).map((f) => ({
+    if (!Array.isArray(raw.findings)) {
+      if ((done.findings || []).includes(name)) {
+        throw new CliError(`output "${name}" has no findings list after its re-dispatch; a clean review returns findings: []`);
+      }
+      redispatch.push({ name, kinds: ['findings'], note: NOTES.findings() });
+      result[name] = { ...raw, expert: raw.pe, findings: [], verification_receipts: [] };
+      continue;
+    }
+    const findings = raw.findings.map((f) => ({
       ...f,
       severity: String(f.severity || '').toUpperCase().replace(/[^A-Z]/g, ''),
       category: String(f.category || '').trim().toLowerCase(),

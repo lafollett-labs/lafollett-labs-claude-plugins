@@ -33,5 +33,5 @@ The file's H1 (minus an `Epic:|Story:|Task:|Bug:` label) is the title; the lines
 | update | `gh issue edit <N> --title <t> --body-file -` |
 | readback | `gh issue view <N> --json body` |
 | link | `gh api repos/{o}/{r}/issues/<N>` → `.id`; `gh api -X POST repos/{o}/{r}/issues/<epic>/sub_issues -F sub_issue_id=<id>` |
-| list children | `gh api 'repos/{o}/{r}/issues/<epic>/sub_issues?per_page=100' --paginate --slurp` |
+| list children | `gh api 'repos/{o}/{r}/issues/<epic>/sub_issues?per_page=100' --paginate --slurp`; items whose `repository_url` is another repository are ignored |
 | parent | `gh api repos/{o}/{r}/issues/<N>/parent` (404 "No parent issue found" = none) |

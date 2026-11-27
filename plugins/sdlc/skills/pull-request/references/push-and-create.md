@@ -91,9 +91,14 @@ gh pr create --base '{session.base_branch}' --head '{session.branch}' \
 
 ```text
 run it, capturing stdout + stderr + exit code
-if exit == 0:
-  session.pr_url    = the https://github.com/<owner>/<repo>/pull/<N> line of stdout
+url = the https://github.com/<owner>/<repo>/pull/<N> line of stdout, else null   # printed even when a step after the create fails
+if url:
+  session.pr_url    = url
   session.pr_number = its trailing integer
+  if exit != 0:                                  # the PR is open; a reviewer or assignee step failed
+    ⚠️ Warning — PR opened, but gh could not finish it: {first stderr line}
+    for r in session.reviewers:
+      `gh pr edit {session.pr_number} --add-reviewer '{r}'`; on failure ⚠️ Warning — could not request {r}: {stderr}
 elif session.reviewers and stderr names a reviewer (not found, not a collaborator, cannot request):
   ⚠️ Warning — a reviewer could not be requested; creating the PR without --reviewer
   re-run the command without --reviewer; exit != 0 → ❌ Error — gh pr create failed; STOP, print stderr

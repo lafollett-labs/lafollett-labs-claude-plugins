@@ -145,7 +145,9 @@ if user_response == yes:
       case "✅ APPROVED":
         git -C "{session.review_root}" fetch --quiet origin "refs/pull/{session.pr.number}/head"
         head_now = `gh pr view {session.pr.number} --json headRefOid --jq .headRefOid`
-        if not same_code(head_now, session.head_sha):
+        if that exits non-zero or head_now !~ ^[0-9a-f]{40}$:
+          ⚠️ PR head unreadable — not approving; re-run Gate 2: {session.pr.url}
+        elif not same_code(head_now, session.head_sha):
           ⚠️ PR head {head_now} changed code since the review — not approving unreviewed code: {session.pr.url}
         else:
           `gh pr review {session.pr.number} --approve --body-file "{tmp}/review-verdict.md"`

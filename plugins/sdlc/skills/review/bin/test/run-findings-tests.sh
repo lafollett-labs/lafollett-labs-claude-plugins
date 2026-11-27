@@ -72,6 +72,12 @@ check "a receipt with an unknown claim re-dispatches once" \
 check "after its re-dispatch an unknown claim fails closed to absence" \
   "$(val '{"outputs":{"t1":{"pe":"pe-go","findings":[],"verification_receipts":[{"claim":"maybe","title":"r","location":"src/"}]}},"redispatched":{"claim":["t1"]}}')" \
   'o.redispatch.length === 0 && o.outputs.t1.verification_receipts[0].claim === "absence"'
+check "an output with no findings list (an error body) re-dispatches, never reads as clean" \
+  "$(val '{"outputs":{"t1":{"pe":"pe-go","error":"could not run the diff command"}}}')" \
+  'o.redispatch.length === 1 && o.redispatch[0].kinds[0] === "findings" && /findings: \[\]/.test(o.redispatch[0].note)'
+out="$(val '{"outputs":{"t1":{"pe":"pe-go","findings":null}},"redispatched":{"findings":["t1"]}}')"; code=$?
+check "still no findings list after its re-dispatch → exit 2" "$out" 'o.error.includes("no findings list")'
+if [ "$code" -eq 2 ]; then pass "  exit 2"; else fail "  exit $code, expected 2"; fi
 check "missing verification_receipts defaults to []" \
   "$(val '{"outputs":{"t1":{"pe":"pe-go","findings":[]}}}')" 'Array.isArray(o.outputs.t1.verification_receipts)'
 

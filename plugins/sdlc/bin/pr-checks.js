@@ -21,7 +21,10 @@
  * --settle <s> (0–600, default 0): checks register a few seconds after a push, so when the state is none and a
  * workflow in ./.github/workflows/*.y(a)ml mentions pull_request, re-read every 5 s (SDLC_SETTLE_POLL_MS) until
  * the state is no longer none or <s> seconds have passed, and print the last read. Each re-read confirms the
- * head again.
+ * head again. Still none at the end of the window: the head's workflow runs are read
+ * (gh run list --commit <head>), because a run that fails to start reports no check. Any run that failed, timed
+ * out or failed to start makes the state failed (failed_checks name the runs); else any run not yet completed, or
+ * waiting for approval, makes it pending; else it stays none.
  *
  * gh is $SDLC_GH or `gh`; each call is killed after SDLC_GH_TIMEOUT_MS (default 60000) and reported as timed out.
  *
@@ -41,8 +44,11 @@ const BUCKETS = ['pass', 'skipping', 'fail', 'pending', 'cancel'];
 const RUN_ID = /\/actions\/runs\/(\d+)(?:[/?#]|$)/;
 // gh pr checks exits 1 with this on stderr when the head has no checks at all.
 const NO_CHECKS = /no (required )?checks reported/i;
-// gh pr checks exits 8 while checks are pending (and 1 when one failed); --json output is still on stdout.
+// gh pr checks --json exits 0 whatever the buckets (gh 2.60–2.103); 1 and 8 (its exits without --json for a failed
+// or pending check) are accepted only in case another gh version keeps them, and then need JSON on stdout.
 const CHECKS_EXITS_WITH_OUTPUT = [0, 1, 8];
+const RUN_FIELDS = 'databaseId,workflowName,status,conclusion,url';
+const RUN_FAILED = new Set(['failure', 'startup_failure', 'timed_out']);
 const SETTLE_POLL_MS = Number(process.env.SDLC_SETTLE_POLL_MS) || 5000;
 const MAX_SETTLE_S = 600;
 
@@ -178,7 +184,30 @@ async function settled(opts) {
     await sleep(Math.min(SETTLE_POLL_MS, deadline - Date.now()));
     result = check(opts);
   }
-  return result;
+  return result.state === 'none' ? fromRuns(result, opts) : result;
+}
+
+// A none after the window: classify the head's workflow runs instead, since a run that never started has no check.
+function fromRuns(result, opts) {
+  const r = gh(['run', 'list', '--commit', result.head, '--json', RUN_FIELDS, '--limit', '100']);
+  if (r.status !== 0) throw new ChecksError(`${r.what} failed: ${r.stderr}`);
+  const runs = json(r);
+  if (!Array.isArray(runs)) throw new ChecksError(`${r.what} did not return a list`);
+  const at = `PR #${opts.pr} head ${short(result.head)}`;
+  const label = (list) => list.map((x) => x.workflowName || `run ${x.databaseId}`).join(', ');
+  const failed = runs.filter((x) => x && x.status === 'completed' && RUN_FAILED.has(x.conclusion));
+  if (failed.length) {
+    return { ...result, state: 'failed',
+      failed_checks: failed.map((x) => ({ name: x.workflowName || null, link: x.url || null,
+        run_id: Number.isSafeInteger(x.databaseId) ? x.databaseId : null })),
+      reason: `${failed.length} workflow run(s) failed without reporting a check on ${at}: ${label(failed)}` };
+  }
+  const waiting = runs.filter((x) => x && (x.status !== 'completed' || x.conclusion === 'action_required'));
+  if (waiting.length) {
+    return { ...result, state: 'pending',
+      reason: `${waiting.length} workflow run(s) have not reported a check on ${at}: ${label(waiting)}` };
+  }
+  return { ...result, reason: `${result.reason}; a pull_request workflow exists, and no run on the head failed or is waiting` };
 }
 
 async function main() {

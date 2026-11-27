@@ -124,7 +124,7 @@ check "a non-code artifact counts as config-only" "$(classify "$R")" 'o.tier ===
 R="$TMP/review-only"; new_repo "$R"; put "$R" docs/code-reviews/42-code-review.md 50; commit "$R"
 out="$(classify "$R")"; code=$?
 if [ "$code" -eq 3 ]; then pass "a review-doc-only diff exits 3 (nothing to review)"; else fail "review-doc-only diff exit $code"; fi
-check "the stop reason names the excluded files" "$out" 'o.stop && o.excluded.includes("docs/code-reviews/42-code-review.md")'
+check "the stop reason names the excluded files" "$out" 'o.stop === "only excluded files changed — nothing to review" && o.excluded.includes("docs/code-reviews/42-code-review.md")'
 
 R="$TMP/empty-index"; new_repo "$R"
 out="$(node "$CLI" classify --root "$R" --mode staged)"; code=$?

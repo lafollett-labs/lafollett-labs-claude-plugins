@@ -32,6 +32,7 @@ HEAD=0123456789abcdef0123456789abcdef01234567
 OTHER=fedcba9876543210fedcba9876543210fedcba98
 VIEW='^pr view 7 --json headRefOid$'
 CHECKS='^pr checks 7 --json name,workflow,state,bucket,link$'
+RUNS='^run list --commit '
 
 # newcase — a fresh STUB_GH_DIR holding every fixture and an empty routes file
 N=0
@@ -101,7 +102,7 @@ check "a failed check outside Actions has run_id null" 0 'o.failed_checks[1].nam
 
 newcase; head_is pr-view.json; checks_are 1 checks-failed.json
 run
-check "gh exiting 1 with the checks on stdout is still read as failed" 0 'o.state === "failed" && o.failed_checks.length === 2'
+check "a gh that exits 1 with the checks on stdout (not 2.60–2.103) is still read as failed" 0 'o.state === "failed" && o.failed_checks.length === 2'
 
 # --- pending / incomplete ---------------------------------------------------------
 newcase; head_is pr-view.json; checks_are 0 checks-pending.json
@@ -110,7 +111,7 @@ check "any pending bucket (no fail) is pending, ahead of a cancel" 0 'o.state ==
 
 newcase; head_is pr-view.json; checks_are 8 checks-pending.json
 run
-check "gh's pending exit code 8 with the checks on stdout is pending" 0 'o.state === "pending"'
+check "a gh that exits 8 with the checks on stdout (not 2.60–2.103) is pending" 0 'o.state === "pending"'
 
 newcase; head_is pr-view.json; checks_are 0 checks-canceled.json
 run
@@ -146,7 +147,7 @@ check "a failing gh pr checks is an error carrying gh's reason" 2 '/^gh pr check
 
 newcase; head_is pr-view.json; checks_are 8 -
 run
-check "gh's pending exit code with nothing on stdout is an error" 2 '/^gh pr checks 7 failed/.test(o.error)'
+check "exit 8 with nothing on stdout is an error" 2 '/^gh pr checks 7 failed/.test(o.error)'
 
 newcase; head_is pr-view.json; checks_are 4 checks-passed.json
 run
@@ -196,11 +197,25 @@ check "--settle re-reads a none until the checks register" 0 'o.state === "passe
 calls_are "each re-read confirms the head first" "$(printf 'pr view 7 --json headRefOid\npr checks 7 --json name,workflow,state,bucket,link\n%.0s' 1 2 3)"
 
 checkout pr-yaml ci.yaml='[push, pull_request]'
-newcase; head_is pr-view.json; checks_are 0 checks-empty.json
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 0 runs-empty.json
 start=$(date +%s); run --settle 1; elapsed=$(( $(date +%s) - start ))
-check "--settle returns none once the window passes" 0 'o.state === "none" && /^no checks reported/.test(o.reason)'
+check "--settle returns none once the window passes and no run failed" 0 'o.state === "none" && /^no checks reported/.test(o.reason) && /no run on the head failed/.test(o.reason)'
 if [ "$(reads)" -ge 3 ] && [ "$elapsed" -lt 5 ]; then pass "--settle polls within the window ($(reads) reads, ${elapsed}s)"
 else fail "--settle read $(reads) times in ${elapsed}s"; fi
+if grep -qx "run list --commit $HEAD --json databaseId,workflowName,status,conclusion,url --limit 100" "$CASE/calls"; then pass "the head's runs are read once the window passes"
+else fail "the head's runs were not read by full SHA"; fi
+
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 0 runs-startup-failure.json
+run --settle 1
+check "a run that failed to start (no check) is failed, not none" 0 'o.state === "failed" && o.failed_checks.length === 1 && o.failed_checks[0].run_id === 9001 && o.failed_checks[0].name === "CI" && /failed without reporting a check/.test(o.reason)'
+
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 0 runs-queued.json
+run --settle 1
+check "a queued run with no check yet is pending, not none" 0 'o.state === "pending" && /have not reported a check/.test(o.reason)'
+
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 1 gh-error.stderr
+run --settle 1
+check "an unreadable run list is an error, never none" 2 '/^gh run list.* failed: /.test(o.error)'
 
 checkout push-only ci.yml=push notes.md=pull_request
 newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json

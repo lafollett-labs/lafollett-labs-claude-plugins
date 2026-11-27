@@ -28,7 +28,7 @@ The mechanical steps are tested scripts in `bin/`, not model judgment: `scope.js
 
 **Gate 2 status:** the PR is MERGEABLE when every Gate 2 reviewer's latest GitHub review is an approval on code identical to the PR head (a commit that only touches `docs/code-reviews/` does not count as a change) and the head's checks passed or none are reported.
 
-**Gate 2 CI gate:** Gate 2 reads the checks on the PR head (`../../bin/pr-checks.js`). A failed check adds a CRITICAL finding with the failed-step log tail; checks still running, cancelled, or unreadable hold the round open and withhold the approval; a PR with no checks is not blocked (when a workflow has a `pull_request` trigger, `pr-checks.js --settle 30` first polls for up to 30 seconds, since fresh checks take a moment to register).
+**Gate 2 CI gate:** Gate 2 reads the checks on the PR head (`../../bin/pr-checks.js`). A failed check adds a CRITICAL finding with the failed-step log tail; checks still running, cancelled, or unreadable hold the round open and withhold the approval; a PR with no checks is not blocked (when a workflow has a `pull_request` trigger, `pr-checks.js --settle 30` first polls for up to 30 seconds, since fresh checks take a moment to register, then reads the head's workflow runs, so a workflow that failed to start counts as failed rather than as no CI).
 
 ## Usage examples
 

@@ -127,8 +127,8 @@ if session.mode == "nudge":
 ```text
 run github-preflight.md            # binds session.gh_ok, session.repo, session.status_labels_ok
 if not session.gh_ok or session.repo is null:
-  ❌ Error — gh is not authenticated, or this checkout has no GitHub remote gh can resolve
-  STOP — `gh auth login`; if PR creation later fails with 403, the token needs the `repo` scope
+  ❌ Error — gh cannot call GitHub as a signed-in user, or this checkout has no GitHub remote gh can resolve
+  STOP — check `gh auth status`; if PR creation later fails with 403, the token needs the `repo` scope
 
 run settings.md's load_settings()  # binds session.settings
 session.slack_on = session.settings.slack.enabled and not session.no_slack

@@ -12,7 +12,10 @@ const { issueParts } = require('../publish-body.js');
 const GI = path.resolve(__dirname, '..', 'gh-issues.js');
 const STUB = path.resolve(__dirname, '..', '..', '..', '..', 'bin', 'test', 'stub-gh.sh');
 const REPO = 'octo-org/octo-repo';
+const OTHER = 'octo-org/other-repo';
 const URL = `https://github.com/${REPO}`;
+// A REST issue item: GitHub always names its repository, and sub-issue lists mix in the owner's other repos.
+const at = (number, slug = REPO, extra = {}) => ({ number, repository_url: `https://api.github.com/repos/${slug}`, ...extra });
 
 // ---------------------------------------------------------------------------------------------
 // sandbox: a git repo with docs/epics files, plus a stub-gh routes dir
@@ -208,6 +211,14 @@ test('stage: closed wins, then the latest status label, else open', () => {
     assert.equal(stageOf({ state: 'OPEN', labels: [] }), 'open');
 });
 
+test('stage: closed as not planned or duplicate is dropped, any other close is done', () => {
+    assert.equal(stageOf({ state: 'CLOSED', stateReason: 'NOT_PLANNED', labels: [] }), 'dropped');
+    assert.equal(stageOf({ state: 'CLOSED', stateReason: 'DUPLICATE', labels: [{ name: 'status:done' }] }), 'dropped');
+    assert.equal(stageOf({ state: 'CLOSED', stateReason: 'COMPLETED', labels: [] }), 'done');
+    assert.equal(stageOf({ state: 'CLOSED', stateReason: '', labels: [] }), 'done');
+    assert.equal(stageOf({ state: 'OPEN', stateReason: 'REOPENED', labels: [] }), 'open');
+});
+
 // ---------------------------------------------------------------------------------------------
 // CLI: usage
 
@@ -291,7 +302,7 @@ test('create re-run is idempotent: nothing created, nothing linked twice', (t) =
         ...epicFiles(),
         [`${EPIC_DIR}/00-Epic-Book-Search.md`]: MERGED_EPIC,
         [`${EPIC_DIR}/.github-state.json`]: JSON.stringify({ epic: 41, issues: { '00-Epic-Book-Search.md': 41, '01-Story-Search-By-Title.md': 42, '02-Story-Place-A-Hold.md': 43 } }),
-    }).route('^api repos/octo-org/octo-repo/issues/41/sub_issues', [[[{ number: 42 }], [{ number: 43 }]]]);
+    }).route('^api repos/octo-org/octo-repo/issues/41/sub_issues', [[[at(42)], [at(43)]]]);
     const r = box.run('create', '--docs-path', EPIC_DIR);
     assert.equal(r.code, 0, r.out + r.err);
     assert.match(r.out, /Story Breakdown already lists every child/);
@@ -307,13 +318,31 @@ test('create links tracked children that lost their link, and leaves one moved t
     })
         .route('^api repos/octo-org/octo-repo/issues/41/sub_issues', [[[]]])
         .route('^api repos/octo-org/octo-repo/issues/42/parent', ['gh: No parent issue found (HTTP 404)\n'], 1)
-        .route('^api repos/octo-org/octo-repo/issues/43/parent', [{ number: 7 }])
+        .route('^api repos/octo-org/octo-repo/issues/43/parent', [at(7)])
         .route('^api repos/octo-org/octo-repo/issues/42$', [{ id: 9042 }])
         .route('^api -X POST', [{}]);
     const r = box.run('create', '--docs-path', EPIC_DIR);
     assert.equal(r.code, 0, r.out + r.err);
     assert.match(r.out, /✓ Linked #42 under epic #41/);
     assert.match(r.out, /⏭ #43 is a sub-issue of #7, not #41; left as is/);
+    assert.deepEqual(box.calls().filter((c) => c.includes('-X POST')), ['api -X POST repos/octo-org/octo-repo/issues/41/sub_issues -F sub_issue_id=9042']);
+});
+
+test('create counts only this repository\'s sub-issues as linked, and names a parent in another repository', (t) => {
+    const box = sandbox(t, {
+        ...epicFiles(),
+        [`${EPIC_DIR}/00-Epic-Book-Search.md`]: MERGED_EPIC,
+        [`${EPIC_DIR}/.github-state.json`]: JSON.stringify({ epic: 41, issues: { '00-Epic-Book-Search.md': 41, '01-Story-Search-By-Title.md': 42, '02-Story-Place-A-Hold.md': 43 } }),
+    })
+        .route('^api repos/octo-org/octo-repo/issues/41/sub_issues', [[[at(42, OTHER), at(43, OTHER)]]])
+        .route('^api repos/octo-org/octo-repo/issues/42/parent', ['gh: No parent issue found (HTTP 404)\n'], 1)
+        .route('^api repos/octo-org/octo-repo/issues/43/parent', [at(41, OTHER)])
+        .route('^api repos/octo-org/octo-repo/issues/42$', [{ id: 9042 }])
+        .route('^api -X POST', [{}]);
+    const r = box.run('create', '--docs-path', EPIC_DIR);
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.match(r.out, /✓ Linked #42 under epic #41/);
+    assert.match(r.out, /⏭ #43 is a sub-issue of octo-org\/other-repo#41, not #41; left as is/);
     assert.deepEqual(box.calls().filter((c) => c.includes('-X POST')), ['api -X POST repos/octo-org/octo-repo/issues/41/sub_issues -F sub_issue_id=9042']);
 });
 
@@ -476,7 +505,7 @@ test('update never creates: an untracked file is skipped', (t) => {
 // ---------------------------------------------------------------------------------------------
 // import
 
-const sub = (number, title, body, label) => ({ id: 9000 + number, number, title, body, labels: [{ name: label }], state: 'open' });
+const sub = (number, title, body, label, slug = REPO) => at(number, slug, { id: 9000 + number, title, body, labels: [{ name: label }], state: 'open' });
 
 test('import pulls an epic and its sub-issues into a fresh ordinal folder', (t) => {
     const box = sandbox(t, { 'docs/epics/001-other/00-Epic-Other.md': '# Epic: Other\n' })
@@ -498,6 +527,39 @@ test('import pulls an epic and its sub-issues into a fresh ordinal folder', (t) 
     const again = box.run('import', '--epic', '41', '--docs-path', dir);
     assert.equal(again.code, 1);
     assert.match(again.last, /exists and is not empty; pass --force/);
+});
+
+test('import skips a sub-issue from another repository, and a later update never edits its number here', (t) => {
+    const box = sandbox(t)
+        .route('^issue view 41 ', [{ number: 41, title: 'Epic: Book search', body: '', labels: [{ name: 'epic' }] }])
+        .route('^api repos/octo-org/octo-repo/issues/41/sub_issues', [[[
+            sub(42, 'Search by title', '', 'story'),
+            sub(7, 'Other repo work', '', 'story', OTHER),
+            { number: 8, title: 'No repository named', body: '', labels: [] },
+        ]]]);
+    const r = box.run('import', '--epic', '41');
+    assert.equal(r.code, 0, r.out + r.err);
+    const dir = 'docs/epics/001-book-search';
+    assert.match(r.out, /⏭ #7 is in octo-org\/other-repo, not this repository; not imported/);
+    assert.match(r.out, /⏭ #8 is in another repository, not this repository; not imported/);
+    assert.equal(r.last, `✅ Done — imported epic #41 + 1 child issue(s) → ${dir}; state + README written`);
+    assert.deepEqual(box.json(`${dir}/.github-state.json`), { epic: 41, issues: { '00-Epic-Book-Search.md': 41, '01-Story-Search-By-Title.md': 42 } });
+    assert.equal(box.exists(`${dir}/02-Story-Other-Repo-Work.md`), false);
+
+    box.route('^issue edit', [null]).route('^issue view 41 --json body', [{ body: '' }]).route('^issue view 42 --json body', [{ body: '' }]);
+    const up = box.run('update', '--docs-path', dir, '--yes');
+    assert.equal(up.code, 0, up.out + up.err);
+    assert.deepEqual(box.calls().filter((c) => c.startsWith('issue edit')).map((c) => c.split(' ')[2]), ['41', '42']);
+});
+
+test('import of an epic whose sub-issues all live elsewhere does not fall back to "Part of Epic" children', (t) => {
+    const box = sandbox(t)
+        .route('^issue view 41 ', [{ number: 41, title: 'Book search', body: '', labels: [] }])
+        .route('^api repos/octo-org/octo-repo/issues/41/sub_issues', [[[sub(7, 'Other repo work', '', 'story', OTHER)]]]);
+    const r = box.run('import', '--epic', '41');
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.match(r.last, /^✅ Done — imported epic #41 \+ 0 child issue\(s\)/);
+    assert.ok(!box.calls().some((c) => c.startsWith('issue list')), 'no legacy search');
 });
 
 test('import --force flags local files the import did not write', (t) => {
@@ -549,7 +611,7 @@ test('status rolls up live state, flags unlinked children and local-only files',
         [`${EPIC_DIR}/03-Story-Draft.md`]: story('Draft'),
         [`${EPIC_DIR}/.github-state.json`]: JSON.stringify({ epic: 41, issues: { '00-Epic-Book-Search.md': 41, '01-Story-Search-By-Title.md': 42, '02-Story-Place-A-Hold.md': 43 } }),
     })
-        .route('^api repos/octo-org/octo-repo/issues/41/sub_issues', [[[{ number: 42 }]]])
+        .route('^api repos/octo-org/octo-repo/issues/41/sub_issues', [[[at(42)]]])
         .route('^issue view 41 ', [{ number: 41, title: 'Book search', state: 'OPEN', labels: [{ name: 'epic' }] }])
         .route('^issue view 42 ', [{ number: 42, title: 'Search by title', state: 'CLOSED', labels: [{ name: 'status:in-review' }] }])
         .route('^issue view 43 ', [{ number: 43, title: 'Place a hold', state: 'OPEN', labels: [{ name: 'status:in-progress' }] }]);
@@ -561,6 +623,27 @@ test('status rolls up live state, flags unlinked children and local-only files',
     assert.match(r.out, /local only — 03-Story-Draft\.md \(run create\)/);
     assert.equal(r.last, '✅ Done — 1/3 done (33%) for #41; 1 not linked to #41 — run create to link');
     assert.ok(!box.calls().some((c) => /issue (create|edit)|-X/.test(c)), 'status is read-only');
+});
+
+test('status: a same-numbered sub-issue in another repository does not link a child; dropped issues leave the rollup', (t) => {
+    const box = sandbox(t, {
+        ...epicFiles(),
+        [`${EPIC_DIR}/03-Story-Dup.md`]: story('Dup'),
+        [`${EPIC_DIR}/.github-state.json`]: JSON.stringify({ epic: 41, issues: { '00-Epic-Book-Search.md': 41, '01-Story-Search-By-Title.md': 42, '02-Story-Place-A-Hold.md': 43, '03-Story-Dup.md': 44 } }),
+    })
+        .route('^api repos/octo-org/octo-repo/issues/41/sub_issues', [[[at(42), at(43, OTHER), at(44)]]])
+        .route('^issue view 41 ', [{ number: 41, title: 'Book search', state: 'OPEN', stateReason: '', labels: [{ name: 'epic' }] }])
+        .route('^issue view 42 ', [{ number: 42, title: 'Search by title', state: 'CLOSED', stateReason: 'COMPLETED', labels: [] }])
+        .route('^issue view 43 ', [{ number: 43, title: 'Place a hold', state: 'CLOSED', stateReason: 'NOT_PLANNED', labels: [] }])
+        .route('^issue view 44 ', [{ number: 44, title: 'Dup', state: 'CLOSED', stateReason: 'DUPLICATE', labels: [] }]);
+    const r = box.run('status', '--docs-path', EPIC_DIR);
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.ok(box.calls().includes('issue view 42 --json number,title,state,stateReason,labels'));
+    assert.match(r.out, /#42 {2}✅ done — Search by title\n/);
+    assert.match(r.out, /#43 {2}⛔ dropped — Place a hold {2}⚠️ not a sub-issue of #41\n/);
+    assert.match(r.out, /#44 {2}⛔ dropped — Dup\n/);
+    assert.match(r.out, /── 1\/2 done \(50%\) {2}· {2}2 dropped\n/);
+    assert.equal(r.last, '✅ Done — 1/2 done (50%) for #41; 1 not linked to #41 — run create to link');
 });
 
 test('status reports an issue it cannot read and exits non-zero', (t) => {
@@ -582,7 +665,7 @@ function reparentBox(t, parentOf42) {
         .route('^api repos/octo-org/octo-repo/issues/8$', [{ id: 9008, number: 8, labels: [{ name: 'task' }] }])
         .route('^api -X (POST|DELETE)', [{}]);
     return parentOf42
-        ? box.route('^api repos/octo-org/octo-repo/issues/42/parent', [{ number: parentOf42 }])
+        ? box.route('^api repos/octo-org/octo-repo/issues/42/parent', [typeof parentOf42 === 'object' ? parentOf42 : at(parentOf42)])
         : box.route('^api repos/octo-org/octo-repo/issues/42/parent', ['gh: No parent issue found (HTTP 404)\n'], 1);
 }
 const writes = (box) => box.calls().filter((c) => c.includes(' -X '));
@@ -621,6 +704,26 @@ test('reparent is a no-op when the issue is already there', (t) => {
     assert.deepEqual(writes(box), []);
 });
 
+test('reparent under #N when the parent is #N in another repository moves it, removing via that repository', (t) => {
+    const box = reparentBox(t, at(7, OTHER));
+    const r = box.run('reparent', '--key', '42', '--parent', '7');
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.match(r.out, /✓ Removed #42 from octo-org\/other-repo#7/);
+    assert.equal(r.last, '✅ Done — reparented #42 → #7');
+    assert.deepEqual(writes(box), [
+        'api -X DELETE repos/octo-org/other-repo/issues/7/sub_issue -F sub_issue_id=9042',
+        'api -X POST repos/octo-org/octo-repo/issues/7/sub_issues -F sub_issue_id=9042',
+    ]);
+});
+
+test('reparent refuses to remove from a parent whose repository GitHub does not name', (t) => {
+    const box = reparentBox(t, { number: 7 });
+    const r = box.run('reparent', '--key', '42', '--parent', '7');
+    assert.equal(r.code, 1);
+    assert.match(r.last, /#42's parent #7 names no repository; nothing changed/);
+    assert.deepEqual(writes(box), []);
+});
+
 test('reparent refuses a parent that is not an epic, before any write', (t) => {
     const box = reparentBox(t, 41);
     const r = box.run('reparent', '--key', '42', '--parent', '8');
@@ -633,7 +736,7 @@ test('reparent reports a failed add after the remove, so a re-run finishes it', 
     const failing = sandbox(t)
         .route('^api repos/octo-org/octo-repo/issues/42$', [{ id: 9042, number: 42 }])
         .route('^api repos/octo-org/octo-repo/issues/7$', [{ id: 9007, number: 7, labels: [{ name: 'epic' }] }])
-        .route('^api repos/octo-org/octo-repo/issues/42/parent', [{ number: 41 }])
+        .route('^api repos/octo-org/octo-repo/issues/42/parent', [at(41)])
         .route('^api -X DELETE', [{}])
         .route('^api -X POST', ['gh: Validation Failed (HTTP 422)\n'], 1);
     const r = failing.run('reparent', '--key', '42', '--parent', '7');

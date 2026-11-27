@@ -50,7 +50,7 @@ Invoke AskUserQuestion only when the user must act, one per pause, in the canoni
 ## Shared routines
 
 ```text
-same_code(a, b) = `git -C "{session.review_root}" diff --quiet {a} {b} -- . ':!docs/code-reviews/'` exits 0
+same_code(a, b) = `git -C "{session.review_root}" diff --quiet "{a}" "{b}" -- . ':!docs/code-reviews/'` exits 0   # an empty or bad SHA is a git error, never a match
                   # one review target: identical outside the review docs; an unknown SHA is a difference
 
 restore_stash():                     # every exit after checkout.md § In-place checkout stashed; publish.md Step 6

@@ -18,7 +18,7 @@ Turn Copilot's review into ranked, evidence-backed findings the developer can ac
            checkout; never re-requests a review after a fix (sdlc:deliver and sdlc:pull-request pass it unattended)
 ```
 
-Validate `<N>` against `^[1-9][0-9]*$` before using it anywhere. Without a number, use the open PR for the current branch (`gh pr view --json number --jq .number`); if there is none, stop and say so.
+Validate `<N>` against `^[1-9][0-9]*$` before using it anywhere. Without a number, use the open PR for the current branch: `gh pr view --json number,state`; if it fails or `state` is not `OPEN`, stop with "no open PR for this branch" (gh also returns a merged or closed PR).
 
 ## Flow
 
@@ -101,7 +101,7 @@ Above the table, even when there are no open threads:
 | `null` | `⚠ Copilot's overview does not say which files it reviewed. Check its overview on the PR before treating no threads as clean.` |
 | `false` | nothing |
 
-The table repeats each round. The result block is printed once, when the run finishes, interactive or `--auto`, with or without findings. Its `findings` accumulate across rounds (a thread's latest disposition wins), and `status` is `complete` if any round completed, else the status that ended the run:
+The table repeats each round. The result block is printed once, when the run finishes, interactive or `--auto`, with or without findings. Its `findings` accumulate across rounds (a thread's latest disposition wins), and `status` is `complete` if any round's threads were read and classified, else the status that ended the run:
 
 ````text
 ```copilot-review-result
@@ -115,8 +115,8 @@ The table repeats each round. The result block is printed once, when the run fin
 | Field | Value |
 | - | - |
 | `status` | `complete`, `quota_exhausted`, `timeout` or `error` |
-| `copilot_rounds` | rounds whose review completed |
-| `coverage` | `partial` when any completed round's `d.coverage.partial` was true, else `unknown` when one was null, else `full` when a round completed, else `null` |
+| `copilot_rounds` | rounds whose threads were read and classified |
+| `coverage` | `partial` when any counted round's `d.coverage.partial` was true, else `unknown` when one was null, else `full` when a round completed, else `null` |
 | `gate` | the Flow's final `gate` |
 | `fixed` | threads whose fix was pushed and replied to, across rounds |
 | `open` | Copilot threads still unresolved when the run finishes, `answered` included |

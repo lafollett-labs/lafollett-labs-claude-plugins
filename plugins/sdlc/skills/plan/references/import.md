@@ -2,7 +2,7 @@
 
 Loaded by Command Dispatch for `import`. Uses `run_gi` from SKILL.md.
 
-Pulls an epic and its sub-issues from GitHub into a fresh epic folder — the inverse of `create`. Writes `00-Epic-<Title>.md`, one `NN-<Type>-<Title>.md` per child in sub-issue order (type from its `story|task|bug` label, else Story), a fresh `.github-state.json` and the README rollup, so `update` and `status` work on the folder at once.
+Pulls an epic and its sub-issues in this repository from GitHub into a fresh epic folder — the inverse of `create`. Writes `00-Epic-<Title>.md`, one `NN-<Type>-<Title>.md` per child in sub-issue order (type from its `story|task|bug` label, else Story), a fresh `.github-state.json` and the README rollup, so `update` and `status` work on the folder at once. A sub-issue in another repository is skipped (`⏭ #N is in <owner/repo>, not this repository; not imported`) and left out of the child count.
 
 ```text
 import(args):
@@ -23,7 +23,7 @@ import(args):
 
 | flag | required | meaning |
 | - | - | - |
-| `--epic <N>` | yes | the epic to pull, with all its sub-issues |
+| `--epic <N>` | yes | the epic to pull, with its sub-issues in this repository |
 | `--docs-path <dir>` | no | target folder; default `docs/epics/<NNN>-<slug>` from the epic title |
 | `--force` | no | write into a non-empty folder; files the import did not write are flagged |
 

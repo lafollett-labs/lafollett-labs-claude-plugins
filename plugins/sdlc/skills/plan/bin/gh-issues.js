@@ -53,7 +53,9 @@ const WARNING_TEXT = {
     'unclosed-fence': 'code fence never closes — the rest of the file renders as code (a Story, Task or Bug also gets no Test Plan)',
 };
 const STAGES = ['done', 'in-review', 'in-progress', 'todo']; // latest first
-const GLYPH = { done: '✅', 'in-review': '🔍', 'in-progress': '🟡', todo: '🔵', open: '⚪' };
+const GLYPH = { done: '✅', 'in-review': '🔍', 'in-progress': '🟡', todo: '🔵', open: '⚪', dropped: '⛔' };
+const DROPPED_REASONS = ['NOT_PLANNED', 'DUPLICATE']; // gh's stateReason for a close that is not done
+const API_REPO_RE = /\/repos\/([^/]+\/[^/]+?)\/?$/;
 
 class UsageError extends Error {}
 class CliError extends Error {}
@@ -204,24 +206,37 @@ function issueId(num) {
     return id;
 }
 
+// A REST issue's owner/repo from its repository_url; an item without one is never this repository's.
+const repoOf = (item) => (String((item && item.repository_url) || '').match(API_REPO_RE) || [])[1] || null;
+const inThisRepo = (item) => (repoOf(item) || '').toLowerCase() === repo().slug.toLowerCase();
+
+// GitHub also lists sub-issues from the owner's other repositories; their numbers mean nothing here.
 function subIssues(num) {
     const pages = ghJson(['api', `repos/${repo().slug}/issues/${num}/sub_issues?per_page=100`, '--paginate', '--slurp']);
     if (!Array.isArray(pages)) throw new CliError(`unexpected sub-issues response for #${num}`);
-    return pages.flat();
+    const all = pages.flat();
+    return { local: all.filter(inThisRepo), foreign: all.filter((i) => !inThisRepo(i)) };
 }
 
+// → null | { number, local, repo }: repo is the parent's owner/repo (null when GitHub names none).
 function parentOf(num) {
+    let p;
     try {
-        const p = ghJson(['api', `repos/${repo().slug}/issues/${num}/parent`]);
-        return Number.isInteger(p.number) ? p.number : null;
+        p = ghJson(['api', `repos/${repo().slug}/issues/${num}/parent`]);
     } catch (err) {
         if (err instanceof GhError && /No parent issue|HTTP 404/i.test(err.detail)) return null;
         throw err;
     }
+    if (!Number.isInteger(p.number)) return null;
+    const local = inThisRepo(p);
+    return { number: p.number, local, repo: local ? repo().slug : repoOf(p) };
 }
 
+const isUnder = (parent, num) => Boolean(parent && parent.local && parent.number === num);
+const issueRef = (p) => (p.local ? `#${p.number}` : `${p.repo || '(unnamed repository)'}#${p.number}`);
+
 const addSubIssue = (parent, id) => gh(['api', '-X', 'POST', `repos/${repo().slug}/issues/${parent}/sub_issues`, '-F', `sub_issue_id=${id}`]);
-const removeSubIssue = (parent, id) => gh(['api', '-X', 'DELETE', `repos/${repo().slug}/issues/${parent}/sub_issue`, '-F', `sub_issue_id=${id}`]);
+const removeSubIssue = (slug, parent, id) => gh(['api', '-X', 'DELETE', `repos/${slug}/issues/${parent}/sub_issue`, '-F', `sub_issue_id=${id}`]);
 
 function ensureLabels(names) {
     const have = new Set(ghJson(['label', 'list', '--json', 'name', '--limit', '1000']).map((l) => l.name.toLowerCase()));
@@ -420,14 +435,14 @@ function cmdCreate(a) {
     }
 
     const tracked = children.filter((f) => state.issues[f]);
-    const linked = new Set(tracked.length ? subIssues(state.epic).map((i) => i.number) : []);
+    const linked = new Set(tracked.length ? subIssues(state.epic).local.map((i) => i.number) : []);
     for (const f of tracked) {
         const num = state.issues[f];
         if (linked.has(num)) continue;
         try {
             const parent = created.has(num) ? null : parentOf(num);
-            if (parent && parent !== state.epic) {
-                out(`⏭ #${num} is a sub-issue of #${parent}, not #${state.epic}; left as is (reparent moves it)`);
+            if (parent && !isUnder(parent, state.epic)) {
+                out(`⏭ #${num} is a sub-issue of ${issueRef(parent)}, not #${state.epic}; left as is (reparent moves it)`);
                 continue;
             }
             addSubIssue(state.epic, issueId(num));
@@ -582,13 +597,14 @@ function cmdImport(a) {
     } catch (err) {
         throw new CliError(`#${epicNum} not found (or not readable): ${err.message}`);
     }
-    let children = subIssues(epicNum);
+    const subs = subIssues(epicNum);
+    let children = subs.local;
     let legacy = false;
-    if (!children.length) {
+    if (!children.length && !subs.foreign.length) {
         children = legacyChildren(epicNum);
         legacy = children.length > 0;
     }
-    if (!labelNames(epic).includes('epic') && !children.length) {
+    if (!labelNames(epic).includes('epic') && !children.length && !subs.foreign.length) {
         throw new CliError(`#${epicNum} is not an epic (no epic label, no sub-issues); import works on an epic`);
     }
     if (children.length > MAX_CHILDREN) throw new CliError(`epic #${epicNum} has ${children.length} children; the NN- file ordinal caps at ${MAX_CHILDREN}`);
@@ -613,6 +629,7 @@ function cmdImport(a) {
         state.issues[fname] = c.number;
         out(`  imported #${c.number} → ${fname}`);
     });
+    for (const c of subs.foreign) out(`⏭ #${c.number} is in ${repoOf(c) || 'another repository'}, not this repository; not imported`);
     writeState(dir, state);
     writeReadme(dir, state);
 
@@ -623,7 +640,9 @@ function cmdImport(a) {
 }
 
 function stageOf(issue) {
-    if (String(issue.state).toUpperCase() === 'CLOSED') return 'done';
+    if (String(issue.state).toUpperCase() === 'CLOSED') {
+        return DROPPED_REASONS.includes(String(issue.stateReason || '').toUpperCase()) ? 'dropped' : 'done';
+    }
     const names = labelNames(issue);
     return STAGES.find((s) => names.includes(`status:${s}`)) || 'open';
 }
@@ -642,26 +661,28 @@ function cmdStatus(a) {
     let linked = null;
     if (state.epic) {
         try {
-            linked = new Set(subIssues(state.epic).map((i) => i.number));
+            linked = new Set(subIssues(state.epic).local.map((i) => i.number));
         } catch (err) {
             out(`⚠️ cannot list the sub-issues of #${state.epic}: ${err.message}`);
         }
     }
     let done = 0;
     let total = 0;
+    let dropped = 0;
     const missing = [];
     const unlinked = [];
     for (const [fname, num] of rows) {
         let issue;
         try {
-            issue = ghJson(['issue', 'view', String(num), '--json', 'number,title,state,labels']);
+            issue = ghJson(['issue', 'view', String(num), '--json', 'number,title,state,stateReason,labels']);
         } catch {
             out(`  #${num}  ❓ not found — ${fname || '(epic)'}`);
             missing.push(`#${num}`);
             continue;
         }
-        total++;
         const stage = stageOf(issue);
+        if (stage === 'dropped') dropped++;
+        else total++;
         if (stage === 'done') done++;
         let note = '';
         if (linked && fname && num !== state.epic && CHILD_TYPES.includes(typeOf(fname)) && !linked.has(num)) {
@@ -674,7 +695,7 @@ function cmdStatus(a) {
     for (const [f, n] of rows) if (f && !fs.existsSync(path.join(dir, f))) out(`  ⚠️ tracked but missing locally: ${f} → #${n}`);
 
     const pct = total ? Math.round((100 * done) / total) : 0;
-    out(`  ── ${done}/${total} done (${pct}%)${missing.length ? `  ·  ${missing.length} not found` : ''}`);
+    out(`  ── ${done}/${total} done (${pct}%)${dropped ? `  ·  ${dropped} dropped` : ''}${missing.length ? `  ·  ${missing.length} not found` : ''}`);
     if (missing.length) {
         out(`🛑 Done with errors — ${done}/${total} done; ${missing.length} issue(s) not found on GitHub: ${missing.join(', ')}`);
         return 1;
@@ -707,23 +728,24 @@ function cmdReparent(a) {
     }
 
     const current = parentOf(num);
-    if (current === parent) {
+    if (parent ? isUnder(current, parent) : !current) {
         out(`✅ Done — #${num} is already ${parent ? `under #${parent}` : 'standalone'}; nothing changed`);
         return 0;
     }
     if (current) {
+        if (!current.repo) throw new CliError(`#${num}'s parent #${current.number} names no repository; nothing changed`);
         try {
-            removeSubIssue(current, id);
+            removeSubIssue(current.repo, current.number, id);
         } catch (err) {
-            throw new CliError(`removing #${num} from #${current} failed: ${err.message}; nothing changed`);
+            throw new CliError(`removing #${num} from ${issueRef(current)} failed: ${err.message}; nothing changed`);
         }
-        out(`✓ Removed #${num} from #${current}`);
+        out(`✓ Removed #${num} from ${issueRef(current)}`);
     }
     if (parent) {
         try {
             addSubIssue(parent, id);
         } catch (err) {
-            const now = current ? `; #${num} was already removed from #${current} and is standalone now — re-run reparent` : '';
+            const now = current ? `; #${num} was already removed from ${issueRef(current)} and is standalone now — re-run reparent` : '';
             throw new CliError(`adding #${num} under #${parent} failed: ${err.message}${now}`);
         }
     }

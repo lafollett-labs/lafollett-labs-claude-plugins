@@ -148,7 +148,7 @@ preflight_ok():                          # runs once; later calls return the fir
 
 read_issue(n):
   if not preflight_ok():
-    ❌ Error — gh is unavailable or unauthenticated; tell the user to run `gh auth login`; STOP
+    ❌ Error — gh is unavailable or cannot call GitHub as a signed-in user; tell the user to check `gh auth status`; STOP
   t = gh issue view {n} --json number,title,body,labels,state
   if exit != 0: return null
   labels = [lower(l.name) for l in t.labels]

@@ -11,9 +11,9 @@ Loaded by `sdlc:pull-request` when Mode Detection selects the nudge path. Remind
 
 ```text
 # The nudge path skips Phase 1, so bind what it reads here.
-if `gh auth status` fails:
-  ❌ Error — gh not installed or not authenticated
-  STOP — `gh auth login`
+if `gh api user --jq .login` fails or prints nothing:
+  ❌ Error — gh is not installed or cannot call GitHub as a signed-in user
+  STOP — check `gh auth status`
 run settings.md's load_settings()                       # binds session.settings
 
 p = `gh pr view {session.pr_number} --json state,url,title,comments,reviews,reviewRequests,updatedAt`
