@@ -56,6 +56,7 @@ case "$1 $2" in
     git --git-dir="$ORIGIN" rev-parse -q --verify "$ref" >/dev/null && { echo "Reference already exists (HTTP 422)" >&2; exit 1; }
     git --git-dir="$ORIGIN" update-ref "$ref" "$sha" ;;
   "pr merge")
+    case " $* " in *" --disable-auto "*) exit 0 ;; esac
     arg --subject "$@" > "$STATE/merge-subject"
     arg --body "$@" > "$STATE/merge-body"
     if [ "${STUB_AUTOMERGE:-0}" = 1 ]; then "$STATE/squash-merge" >/dev/null 2>&1 || exit 1; fi ;;
@@ -254,13 +255,16 @@ check "tunables: says why" "$(grep -c 'must be whole seconds' "$W/out")" 1
 check "tunables: no gh call, origin untouched" \
   "$(calls '.'):$([ "$(git --git-dir="$ORIGIN" for-each-ref)" = "$refs_before" ] && echo same)" "0:same"
 
-# 12. A release-looking subject without the Base: trailer is not tagged and does not wedge the run.
+# 12. A release-looking subject without the Base: trailer is not tagged and does not wedge the run,
+#     and the run leaves the release PR, which re-bumps that commit's plugins, for a human.
 echo "z" >> "$DEV/README.txt"
 merge "chore(release): v9.9.8"
 code="$(release)"
 check "look-alike: exits 0" "$code" 0
 check "look-alike: warns" "$(grep -c 'has no Base: trailer' "$W/out")" 1
 check "look-alike: not tagged" "$(tag_sha v9.9.8 || echo none)" none
+check "look-alike: auto-merge turned off, not armed" "$(calls 'pr merge [0-9]* --disable-auto'):$(calls 'pr merge [0-9]* --auto')" "1:0"
+check "look-alike: PR left for a human" "$(grep -c 'is left for a human' "$W/out")" 1
 
 # 13 (last: it leaves main wedged). A release commit whose version disagrees with its marketplace fails closed.
 echo "y" >> "$DEV/README.txt"

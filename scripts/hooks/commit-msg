@@ -7,10 +7,12 @@
 #   whitespace, verbatim,  kept                 kept
 #   scissors, other
 # In the editor flow git also cuts the scissors line and below (the -v diff), so that is cut here too.
-# git sets GIT_EDITOR=: for hooks when no editor runs, so an exported GIT_EDITOR=: reads as "no editor".
-# A --cleanup= flag is not visible to hooks: commit.cleanup is read instead. With core.commentChar=auto
-# comment lines are scanned. Each misread scans more than git records, never less, except a
-# --cleanup=verbatim, whitespace or scissors flag with an editor, or a scissors line typed by hand.
+# Blank lines are tidied as git does in every mode but verbatim, so a hit's line number is its line in
+# the recorded message. git sets GIT_EDITOR=: for hooks when no editor runs, so an exported GIT_EDITOR=:
+# reads as "no editor". A --cleanup= flag is not visible to hooks: commit.cleanup is read instead. With
+# core.commentChar=auto (in any case) comment lines are scanned. Each misread scans more than git
+# records, never less, except a --cleanup= flag that keeps comment lines commit.cleanup would drop,
+# or a scissors line typed by hand.
 # See scripts/hooks/pre-commit for setup.
 set -u
 scan="$(git config --type=path --get labs.denylistScan)"
@@ -23,15 +25,17 @@ esac
 [ -x "$scan" ] || { echo "commit-msg: labs.denylistScan is set but $scan is missing or not executable" >&2; exit 1; }
 
 if [ "${GIT_EDITOR:-}" = ":" ]; then edited=no; else edited=yes; fi
+tidy=yes
 case "$(git config --get commit.cleanup || true)" in
   ''|default) strip="$edited" ;;
   strip) strip=yes ;;
+  verbatim) strip=no; tidy=no ;;
   *) strip=no ;;
 esac
 # core.commentChar and core.commentString are aliases; the last one set wins.
 cs="$(git config --get-regexp '^core\.comment(char|string)$' | tail -n 1 | cut -d' ' -f2-)"
 case "$cs" in
-  auto) strip=no; esc='[#;@!$%^&|:]' ;;   # git picks one of these per message, so comment lines are scanned
+  [Aa][Uu][Tt][Oo]) strip=no; esc='[#;@!$%^&|:]' ;;   # git picks one per message, so comment lines are scanned
   *) [ -n "$cs" ] || cs='#'; esc="$(printf '%s' "$cs" | sed 's/[][\/.^$*]/\\&/g')" ;;
 esac
 
@@ -39,7 +43,8 @@ msg="$(mktemp)"
 out="$(mktemp)"
 trap 'rm -f "$msg" "$out"' EXIT
 if [ "$edited" = yes ]; then sed "/^$esc -\{24\} >8 -\{24\}\$/,\$d" "$1"; else cat "$1"; fi \
-  | if [ "$strip" = yes ]; then git stripspace --strip-comments; else cat; fi > "$msg"
+  | if [ "$strip" = yes ]; then git stripspace --strip-comments; elif [ "$tidy" = yes ]; then git stripspace; else cat; fi \
+  > "$msg"
 if ! "$scan" "$msg" /dev/null > "$out"; then
   echo "commit-msg: private denylist hit in the commit message" >&2
   awk -v f="$msg" 'index($0, f ":") == 1 { print "  line " (substr($0, length(f) + 2) + 0) " of the message git will record" }' "$out" >&2

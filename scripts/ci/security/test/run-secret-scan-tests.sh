@@ -4,8 +4,9 @@
 #   gate       a secret in range fails; the script never passes without scanning
 #   allow-list an entry clears one exact value at one exact path; any other config shape is refused
 #   tree       the current tree passes with the repo's config
-# Range contracts use a stub gitleaks; the rest need the real gitleaks on PATH. Fake secrets are
-# assembled at runtime so none is ever committed. Exit 0 = all pass.
+# Every case needs python3 3.11+ (secret-scan.sh runs check-allowlist.py first). Range contracts use a
+# stub gitleaks; the rest need the real gitleaks on PATH. Fake secrets are assembled at runtime so none
+# is ever committed. Exit 0 = all pass.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,6 +15,7 @@ SCAN="$ROOT/scripts/ci/security/secret-scan.sh"
 CONFIG="$ROOT/.gitleaks.toml"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+python3 -c 'import tomllib' 2>/dev/null || { echo "FAIL: python3 3.11+ (tomllib) not on PATH; secret-scan.sh needs it" >&2; exit 1; }
 
 fails=0
 total=0
@@ -180,9 +182,15 @@ config_case() { # config_case <label> <want> <whole config>
   check "allow-list shape: $1" "$code:$(test -f "$WORK/args" && echo ran || echo not-run)" "$2"
 }
 shape_case() { config_case "$1" "$2" "$(printf '[extend]\nuseDefault = true\n\n%s' "$3")"; } # [extend] + <body>
-with() { printf '%s\n' "$good_entry" | sed "$1"; }                                         # good_entry, edited
-regex() { with "s|^regexes = .*|regexes = [${T3}$1${T3}]|"; }
-path() { with "s|^paths = .*|paths = [${T3}$1${T3}]|"; }
+# with <sed>: good_entry, edited. An edit that fails or changes nothing is recorded and fails the suite.
+with() {
+  local out
+  if out="$(printf '%s\n' "$good_entry" | sed "$1")" && [ "$out" != "$good_entry" ]; then printf '%s\n' "$out"
+  else printf '%s\n' "$1" >> "$WORK/bad-edits"; fi
+}
+lit() { printf '%s' "$1" | sed 's/[|&]/\\&/g'; }   # | and & pass through the s|...| replacement literally
+regex() { with "s|^regexes = .*|regexes = [${T3}$(lit "$1")${T3}]|"; }
+path() { with "s|^paths = .*|paths = [${T3}$(lit "$1")${T3}]|"; }
 
 shape_case "a reasoned exact-value, exact-file entry is accepted" "0:ran" "$good_entry"
 shape_case "two such entries are accepted" "0:ran" "$(printf '%s\n\n%s' "$good_entry" "$(path '^b\\.txt$')")"
@@ -205,6 +213,12 @@ shape_case "a multi-line paths array with two paths is refused" "2:not-run" \
   ${T3}^a\\\\.txt\$${T3},\\
   ${T3}^b\\\\.txt\$${T3},\\
 ]|")"
+shape_case "a bare dot in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE.000$')"
+shape_case "a wildcard-class value is refused" "2:not-run" "$(regex '^\\S\\S\\S\\S\\S\\S\\S\\S$')"
+shape_case "a digit-class value is refused" "2:not-run" "$(regex '^TOKEN=\\d\\d\\d\\d$')"
+shape_case "a word-class value is refused" "2:not-run" "$(regex '^TOKEN=\\w\\w\\w\\w$')"
+shape_case "a bare quantifier in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE0*00$')"
+shape_case "an alternation in the value is refused" "2:not-run" "$(regex '^TOKEN=ghp_FAKE|0000$')"
 shape_case "a match-anything regex is refused" "2:not-run" "$(regex '.*')"
 shape_case "an anchored match-anything regex is refused" "2:not-run" "$(regex '^.+$')"
 shape_case "a \\S* regex is refused" "2:not-run" "$(regex '^\\S*$')"
@@ -274,6 +288,7 @@ check "ci.yml's gate reads toJSON(needs)" "$(printf '%s\n' "$check_job" | grep -
 check "ci.yml's gate expects as many jobs as it needs" \
   "$(printf '%s\n' "$check_job" | sed -n 's/^[[:space:]]*EXPECT: \([0-9]*\)$/\1/p')" "$(printf '%s' "$needs" | wc -w | tr -d ' ')"
 
+if [ -s "$WORK/bad-edits" ]; then fail "test edits apply" "these sed edits failed or changed nothing: $(tr '\n' ' ' < "$WORK/bad-edits")"; fi
 echo "=============================================="
 echo "$total checks, $fails failed"
 [ "$total" -gt 0 ] || { echo "FAIL: no checks ran"; exit 1; }

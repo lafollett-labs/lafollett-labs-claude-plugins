@@ -5,8 +5,9 @@
 # is refused. Only CI checks the allow-list's shape. commit-msg scans the message. Enable once per clone:
 #   git config core.hooksPath scripts/hooks
 #   git config labs.denylistScan /path/to/private/scan.sh   # optional; never commit that file
-# The scanner gets two files and must exit non-zero on a hit; when it prints file:line for each hit,
-# the hook names the staged path or the path:line of the added line.
+# The scanner gets two files, the staged paths and the added lines, and must exit non-zero on a hit;
+# when it prints file:line for each hit, the hook names the staged path or the path:line of the added
+# line. Paths are written without git's quotes; control characters in a name stay escaped (\t, \n).
 set -u
 rc=0
 hint="gitleaks git --pre-commit --staged --redact --ignore-gitleaks-allow ."
@@ -41,12 +42,23 @@ if [ -n "$scan" ]; then
   where="$(mktemp)"
   out="$(mktemp)"
   trap 'rm -f "$paths" "$lines" "$where" "$out"' EXIT
-  git -c core.quotePath=false diff --cached --name-only --no-renames --diff-filter=d > "$paths"
+  # unq: a path as git prints it, without git's quotes: \\ and \" are undone, other escapes are kept.
+  unq='function unq(s,   r, i, c, n) {
+    if (s !~ /^".*"$/) return s
+    r = ""
+    for (i = 2; i < length(s); i++) {
+      c = substr(s, i, 1); n = substr(s, i + 1, 1)
+      if (c == "\\" && (n == "\\" || n == "\"")) { c = n; i++ }
+      r = r c
+    }
+    return r
+  }'
+  git -c core.quotePath=false diff --cached --name-only --no-renames --diff-filter=d | awk "$unq"'{ print unq($0) }' > "$paths"
   # Each added line goes to $lines, and its path:line to the same line of $where.
   git -c core.quotePath=false diff --cached -U0 --no-color --no-ext-diff --no-renames --src-prefix=a/ --dst-prefix=b/ \
-    | awk -v where="$where" '
+    | awk -v where="$where" "$unq"'
         /^diff --git / { h = 1; next }
-        h && /^\+\+\+ / { f = substr($0, 5); if (f ~ /^"/) f = substr(f, 2, length(f) - 2); sub(/^b\//, "", f); next }
+        h && /^\+\+\+ / { f = substr($0, 5); sub(/\t$/, "", f); f = unq(f); sub(/^b\//, "", f); next }
         /^@@/ { h = 0; split($3, a, ","); n = substr(a[1], 2) + 0; next }
         !h && /^\+/ { print substr($0, 2); print f ":" n > where; n++ }' > "$lines"
   if ! "$scan" "$paths" "$lines" > "$out"; then

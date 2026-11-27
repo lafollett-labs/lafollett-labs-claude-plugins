@@ -8,6 +8,9 @@
 #                 open or update the release PR; dispatch CI on it; enable squash auto-merge
 #   3. wait       poll the release PR up to RELEASE_MERGE_WAIT seconds; once merged, reconcile
 #
+# A release-titled commit without the Base: trailer is not tagged, so this run's plan re-bumps what it
+# released: the run then leaves the release PR for a human instead of arming auto-merge.
+#
 # The release PR merges as github-actions[bot], and pushes made with GITHUB_TOKEN trigger no
 # workflow, so a merge the wait misses is tagged by step 1 of the next run.
 #
@@ -112,7 +115,8 @@ reconcile() {
     # Only the release workflow's squash carries the Base: trailer; a look-alike subject is a plain commit.
     built_on="$(git log -1 --format=%b "$sha" | sed -n 's/^Base: \([0-9a-f]\{40\}\)$/\1/p' | head -n 1)"
     if [ -z "$built_on" ]; then
-      echo "::warning::$sha is titled like a release but has no Base: trailer, so it is not tagged. If it is the release PR's squash, release it by hand (gh release create $TAG_PREFIX$v --target $sha), or the next stamp bumps its plugins again"
+      echo "::warning::$sha is titled like a release but has no Base: trailer, so it is not tagged and this run does not arm auto-merge. If it is the release PR's squash, release it by hand (gh release create $TAG_PREFIX$v --target $sha) and re-run this workflow; otherwise merge the release PR by hand"
+      HELD="$sha"
       continue
     fi
     git show "$sha:$MARKETPLACE" > "$WORK/at.json" 2>/dev/null || die "no $MARKETPLACE at $sha"
@@ -152,6 +156,7 @@ open_pr() {
 
 fetch_state
 [ -n "$(newest_tag)" ] || seed_baseline
+HELD=
 reconcile
 
 BASE="$(newest_tag)"
@@ -248,6 +253,13 @@ log "release PR #$PR"
 if [ -n "$CI_WORKFLOW" ]; then
   "$GH" workflow run "$CI_WORKFLOW" --ref "$BRANCH" >/dev/null || die "cannot dispatch $CI_WORKFLOW on $BRANCH"
   log "dispatched $CI_WORKFLOW on $BRANCH"
+fi
+
+if [ -n "$HELD" ]; then
+  "$GH" pr merge "$PR" --disable-auto >/dev/null 2>&1 \
+    || echo "::warning::could not turn off auto-merge on release PR #$PR (it may already be off); check that it is off"
+  echo "::warning::release PR #$PR is left for a human: $HELD has a release title but no Base: trailer (see above)"
+  exit 0
 fi
 
 "$GH" pr merge "$PR" --auto --squash --subject "$TITLE" --body "$plugins_line

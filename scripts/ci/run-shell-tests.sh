@@ -5,8 +5,8 @@
 # and aggregates exit codes: ANY non-zero suite fails the run. A new suite that follows the
 # `test/run-*.sh` convention is discovered with no workflow edit.
 #
-# Deterministic: no network, no time/order dependence (discovery is sorted). Requires
-# bash + node on PATH (the suites themselves run node validators).
+# Deterministic: no network, no time/order dependence (discovery is sorted). Requires bash, node,
+# python3 3.11+ and gitleaks v8.19+ on PATH (the suites run node validators, check-allowlist.py and gitleaks).
 set -u
 
 # Repo root = two levels up from scripts/ci/, so the runner works from any CWD.

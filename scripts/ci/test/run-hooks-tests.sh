@@ -70,7 +70,8 @@ check "an --amend that fixes HEAD's message passes" "$(try --amend -m "fix: clea
 fresh
 echo "x $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt
 check "a hit in an added line blocks" "$(try -m "feat: a")" 1
-check "  and names the added line" "$(said 'staged paths or added lines'):$(said '  added line:  a.txt:1$')" "1:1"
+check "  and names the added line, with no locate command" \
+  "$(said 'staged paths or added lines'):$(said '  added line:  a.txt:1$'):$(said 'locate:')" "1:1:0"
 
 fresh
 mkdir -p "$R/sub"; printf 'one\ntwo\n' > "$R/sub/a.txt"; git -C "$R" add -A; try -m "chore: seed" >/dev/null
@@ -79,8 +80,17 @@ check "a hit in the second added line is named by its new line number" \
   "$(try -m "feat: a"):$(said '  added line:  sub/a.txt:3$')" "1:1"
 
 fresh
-echo "x $TERM_HIT" > "$R/q\"x.txt"; git -C "$R" add -A
-check "a path git quotes is named unquoted" "$(try -m "feat: a"):$(grep -cF '  added line:  q\"x.txt:1' "$W/err")" "1:1"
+echo "x $TERM_HIT" > "$R/q\"x.txt"; echo "x $TERM_HIT" > "$R/back\\slash.txt"; git -C "$R" add -A
+try -m "feat: a" >/dev/null
+check "paths git quotes are named as written" \
+  "$(grep -cxF '  added line:  q"x.txt:1' "$W/err"):$(grep -cxF '  added line:  back\slash.txt:1' "$W/err")" "1:1"
+echo ok > "$R/q\"$TERM_HIT.txt"; git -C "$R" add -A
+check "  in staged paths too" "$(try -m "feat: a"):$(grep -cxF "  staged path: q\"$TERM_HIT.txt" "$W/err")" "1:1"
+
+fresh
+mkdir -p "$R/my dir"; echo "x $TERM_HIT" > "$R/my dir/a b.txt"; git -C "$R" add -A
+check "a path with a space is named without git's trailing tab" \
+  "$(try -m "feat: a"):$(grep -cx '  added line:  my dir/a b\.txt:1' "$W/err")" "1:1"
 
 fresh
 echo ok > "$R/$TERM_HIT.txt"; git -C "$R" add -A
@@ -157,6 +167,13 @@ check "a hit in the message blocks" "$(try -m "feat: $TERM_HIT")" 1
 check "  in commit-msg" "$(said 'hit in the commit message')" 1
 check "a -m line starting with # is recorded, so a term there blocks" "$(try -m "fix: a" -m "#21 follow-up for $TERM_HIT")" 1
 check "  and names its line in the recorded message" "$(said '  line 3 of the message git will record')" 1
+# The editor writes the subject, 4 blank lines, then the term: git collapses them, except in verbatim.
+for want in whitespace:3 verbatim:6; do
+  git -C "$R" config commit.cleanup "${want%:*}"
+  check "with commit.cleanup ${want%:*} the named line counts blank lines as git records them" \
+    "$(EDIT_SUBJECT="fix: a" EDIT_BODY="$(printf '\n\n\nx %s' "$TERM_HIT")" GIT_EDITOR="$W/edit" try):$(said "  line ${want#*:} of the message git will record")" "1:1"
+done
+git -C "$R" config --unset commit.cleanup
 git -C "$R" config commit.cleanup strip
 check "with commit.cleanup strip git drops a -m # line, so it does not block" "$(try -m "fix: a" -m "#21 $TERM_HIT")" 0
 git -C "$R" config --unset commit.cleanup
@@ -200,16 +217,29 @@ if [ -z "$(printf '// x\n' | git -c core.commentString=// stripspace --strip-com
   echo ok > "$R/a.txt"; git -C "$R" add a.txt
   check "with core.commentString '//' the -v diff does not block" \
     "$(GIT_EDITOR="sed -i.bak '1s/^/fix: remove it/'" try -v)" 0
+
+  fresh
+  git -C "$R" config core.commentChar ';'
+  git -C "$R" config core.commentString '//'
+  echo "x $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt; try --no-verify -m "chore: seed" >/dev/null
+  echo ok > "$R/a.txt"; git -C "$R" add a.txt
+  check "with core.commentChar then core.commentString set, the last one set cuts the -v diff" \
+    "$(GIT_EDITOR="sed -i.bak '1s/^/fix: remove it/'" try -v)" 0
 else
   echo "SKIP: core.commentString needs git 2.45+"
 fi
 
 fresh
-git -C "$R" config core.commentChar auto
+git -C "$R" config core.commentChar Auto   # git reads auto in any case
 echo "x $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt; try --no-verify -m "chore: seed" >/dev/null
 echo ok > "$R/a.txt"; git -C "$R" add a.txt
-check "with core.commentChar auto the -v diff does not block" "$(GIT_EDITOR="sed -i.bak '1s/^/fix: remove it/'" try -v)" 0
+check "with core.commentChar Auto the -v diff does not block" "$(GIT_EDITOR="sed -i.bak '1s/^/fix: remove it/'" try -v)" 0
+echo "y $TERM_HIT" > "$R/a.txt"; git -C "$R" add a.txt; try --no-verify -m "chore: again" >/dev/null
+echo ok > "$R/a.txt"; git -C "$R" add a.txt
+check "  nor when git picks ';' for a message that starts with #" "$(GIT_EDITOR=true try -e -v -m "#21 fix: remove it")" 0
 echo more > "$R/b.txt"; git -C "$R" add b.txt
+check "  and a first line starting with # that git records is scanned" \
+  "$(GIT_EDITOR=true try -e -m "#21 $TERM_HIT"):$(said 'hit in the commit message')" "1:1"
 check "  but an editor's # line is scanned (git may pick another comment char)" \
   "$(EDIT_SUBJECT="fix: b" EDIT_BODY="#21 $TERM_HIT" GIT_EDITOR="$W/edit" try):$(said 'hit in the commit message')" "1:1"
 
