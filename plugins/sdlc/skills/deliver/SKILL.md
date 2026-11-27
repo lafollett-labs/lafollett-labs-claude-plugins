@@ -223,6 +223,7 @@ goto Phase 1
 notice "Invoking sdlc:implement {session.ticket_key} ..."
 start_over = (session.implement_mode == "--start-over")
 head_before = `git rev-parse HEAD`
+t0          = `date +%s`
 # implement STOPs a start-over under --auto; the engineer just chose it in the menu, so implement runs interactive
 invoke skill sdlc:implement with $ARGUMENTS = join_nonempty([session.ticket_key, ("--auto" if session.auto and not start_over else ""),
   ("--incident" if session.incident else ""), session.implement_mode], " ")   # --resume reuses the ticket's branch; --start-over sets it aside
@@ -239,7 +240,7 @@ session.commits_ahead       = `git rev-list --count 'origin/{session.base}..HEAD
 session.spike_present       = (Glob("docs/spikes/" + session.key_slug + "-*.md") is non-empty)
 session.code_outside_spikes = `git diff --name-only 'origin/{session.base}...HEAD'` has any path NOT under docs/spikes/
 
-if `git rev-parse HEAD` == head_before:              # implement stopped before committing or switching branch
+if `git rev-parse HEAD` == head_before or int(`git log -1 --format=%ct HEAD`) < t0:   # no commit made during this run (a resumed branch's tip predates t0)
   finish("✅ Done — sdlc:implement added no commits on {session.branch}; re-run sdlc:deliver {session.ticket_key} when ready")
 
 if session.spike_present and not session.code_outside_spikes:
@@ -459,7 +460,7 @@ invoke skill sdlc:pull-request with $ARGUMENTS = join_nonempty([("--auto" if ses
 if ec != 0 or v.state != "OPEN":
   finish("✅ Done — stopped before the PR: sdlc:pull-request exited without opening one (see its output above)")
 if v.headRefOid != `git rev-parse HEAD`:
-  finish("⚠️ PR #{v.number} {v.url} is open but HEAD is not on it — push {session.branch}, then re-run sdlc:pull-request")
+  finish("⚠️ PR #{v.number} {v.url} is open but HEAD is not on it — see sdlc:pull-request's output above for why the push stopped")
 session.pr_number = v.number; session.pr_url = v.url
 goto End
 ```

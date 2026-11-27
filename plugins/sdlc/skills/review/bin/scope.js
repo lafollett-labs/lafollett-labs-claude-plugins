@@ -18,8 +18,8 @@
  * pe-tiers prints { pe: tier }: a PE whose files are all non-code artifacts, none security- or
  *   content-risk-flagged, runs TRIVIAL; every other PE runs the round tier.
  *
- * Exit codes: 0 success; 2 error ({ error } on stdout); 3 nothing to review (only excluded files
- * changed) — stdout carries { stop, excluded }.
+ * Exit codes: 0 success; 2 error ({ error } on stdout); 3 nothing to review (no changes, or only
+ * excluded files changed) — stdout carries { stop, excluded }.
  */
 
 const { execFileSync } = require('child_process');
@@ -205,7 +205,11 @@ function classify(opts) {
   }
   const excluded = all.filter((r) => REVIEW_EXCLUDE.some((re) => re.test(r.file))).map((r) => r.file);
   const kept = all.filter((r) => !excluded.includes(r.file));
-  if (!kept.length) return { exit: 3, out: { stop: 'only excluded files changed — nothing to review', excluded } };
+  if (!kept.length) {
+    const stop = excluded.length ? 'only excluded files changed — nothing to review'
+      : opts.mode === 'staged' ? 'nothing staged — nothing to review' : 'no changes against the base — nothing to review';
+    return { exit: 3, out: { stop, excluded } };
+  }
 
   const changed = kept.map((r) => r.file);
   const added = kept.reduce((n, r) => n + r.added, 0);

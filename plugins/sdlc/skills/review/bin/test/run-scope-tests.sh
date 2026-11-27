@@ -126,6 +126,13 @@ out="$(classify "$R")"; code=$?
 if [ "$code" -eq 3 ]; then pass "a review-doc-only diff exits 3 (nothing to review)"; else fail "review-doc-only diff exit $code"; fi
 check "the stop reason names the excluded files" "$out" 'o.stop && o.excluded.includes("docs/code-reviews/42-code-review.md")'
 
+R="$TMP/empty-index"; new_repo "$R"
+out="$(node "$CLI" classify --root "$R" --mode staged)"; code=$?
+if [ "$code" -eq 3 ]; then pass "an empty index exits 3 (nothing to review)"; else fail "empty index exit $code"; fi
+check "an empty index says nothing is staged, not excluded" "$out" 'o.stop === "nothing staged — nothing to review" && o.excluded.length === 0'
+R="$TMP/no-commits"; new_repo "$R"
+check "a branch with no commits says no changes" "$(classify "$R")" 'o.stop === "no changes against the base — nothing to review"'
+
 R="$TMP/mixed"; new_repo "$R"; put "$R" docs/code-reviews/42-code-review.md 500; put "$R" src/a.py 4; commit "$R"
 check "excluded files never inflate the counts or tier" "$(classify "$R")" \
   'o.changed_files.join() === "src/a.py" && o.lines_added === 4 && o.tier === "STANDARD" && o.excluded.length === 1'

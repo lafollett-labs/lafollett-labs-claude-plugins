@@ -391,7 +391,7 @@ check "gate1: no review yet" "$(node "$CLI" parse --root "$TMP/nowhere" --name 4
 PARTIAL="OPEN — not a branch review; no findings ledger"
 cp "$FIX/gate1-locked.md" "$TMP/partial.md"
 clean 6e6e6e6 "$PARTIAL" | node "$CLI" render --file "$TMP/partial.md" >/dev/null
-check "gate1: a Files / Folder / Ad-hoc round after the lock leaves it locked" "$(node "$CLI" parse --file "$TMP/partial.md")" \
+check "gate1: a Staged / Files / Folder / Ad-hoc round after the lock leaves it locked" "$(node "$CLI" parse --file "$TMP/partial.md")" \
   'o.gate1.state === "locked" && o.gate1.round === 3 && o.latest.n === 4 && JSON.stringify(o.partial_rounds) === "[4]"'
 if grep -qx '## Review Round 4' "$TMP/partial.md"; then pass "a partial-scope round carries no Gate 1 note"; else fail "partial-scope round heading: $(grep -m1 '^## Review Round 4' "$TMP/partial.md")"; fi
 node -e 'const r=require(process.argv[1]); r.head_sha="7f7f7f7"; r.gate_status=process.argv[2]; console.log(JSON.stringify(r))' "$FIX/gate1-initial.json" "$PARTIAL" \

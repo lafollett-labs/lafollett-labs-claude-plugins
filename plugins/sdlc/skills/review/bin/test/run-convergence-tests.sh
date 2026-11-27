@@ -506,7 +506,7 @@ check "status after lock → locked"      "$(jget "$(node "$CTL" status --ledger
 S="$(node "$CTL" status --ledger "$WORK/missing.json" 2>/dev/null)"
 check "status on missing ledger → zero" "$(jget "$S" 'j.consecutive_clean_rounds+":"+j.last_clean')" "0:null"
 
-# --- --skip: Files / Folder / Ad-hoc round numbers in the review file are never a ledger gap ---
+# --- --skip: Staged / Files / Folder / Ad-hoc round numbers in the review file are never a ledger gap ---
 L="$WORK/skip.json"
 rec "$L" 1 "[]"
 OUT="$(printf '[]' | node "$CTL" record --ledger "$L" --target feat/42-t --round 3 --sha sha3 --skip 2 2>/dev/null)"

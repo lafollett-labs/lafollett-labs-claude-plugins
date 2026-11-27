@@ -385,7 +385,7 @@ if session.ledger:
 
 if session.gate == "Gate 1" and not session.ledger:
   session.gate_status = "OPEN — not a branch review; no findings ledger"
-  session.convergence = {decision: "CONTINUE", reasons: []}     # files / folder / ad-hoc rounds never lock Gate 1
+  session.convergence = {decision: "CONTINUE", reasons: []}     # staged / files / folder / ad-hoc rounds never lock Gate 1
 elif session.gate == "Gate 1":
   parsed = session.convergence as JSON, else null
   if exit != 0 or parsed is null:                # fail closed — never fall back to prose-parse convergence
