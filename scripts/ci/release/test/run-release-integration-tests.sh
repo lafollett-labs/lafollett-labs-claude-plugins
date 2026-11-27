@@ -54,6 +54,9 @@ case "$1 $2" in
     ref=; sha=
     for a in "$@"; do case "$a" in ref=*) ref="${a#ref=}" ;; sha=*) sha="${a#sha=}" ;; esac; done
     git --git-dir="$ORIGIN" rev-parse -q --verify "$ref" >/dev/null && { echo "Reference already exists (HTTP 422)" >&2; exit 1; }
+    # As GitHub did (run 45939130910): no new tag from a workflow token on a commit whose workflows differ from main's.
+    git --git-dir="$ORIGIN" diff --quiet "$sha" main -- .github/workflows \
+      || { echo "Resource not accessible by integration (HTTP 403)" >&2; exit 1; }
     git --git-dir="$ORIGIN" update-ref "$ref" "$sha" ;;
   "pr merge")
     case " $* " in *" --disable-auto "*) exit 0 ;; esac
@@ -107,16 +110,19 @@ write_marketplace() { # <dir> <version> <plugins...>
     printf '\n  ]\n}\n'; } > "$d/.claude-plugin/marketplace.json"
 }
 
-git init -q --bare "$ORIGIN"
-git clone -q "$ORIGIN" "$DEV" 2>/dev/null
-mkdir -p "$DEV/.claude-plugin" "$DEV/changelog.d"
-write_plugin "$DEV" alpha 1.0.0
-write_plugin "$DEV" beta 2.3.4
-write_marketplace "$DEV" 1.0.0 alpha beta
-printf '# Changelog\n\nIntro line.\n\n## [1.0.0] — 2026-01-01\n\nFirst.\n' > "$DEV/CHANGELOG.md"
-echo "# Fragments" > "$DEV/changelog.d/README.md"
-git -C "$DEV" add -A && git -C "$DEV" commit -qm "chore: initial" && git -C "$DEV" push -q origin main
-C0="$(git -C "$DEV" rev-parse HEAD)"
+# fixture: a bare $ORIGIN with one commit (alpha 1.0.0, beta 2.3.4, marketplace 1.0.0) and its clone $DEV.
+fixture() {
+  git init -q --bare "$ORIGIN"
+  git clone -q "$ORIGIN" "$DEV" 2>/dev/null
+  mkdir -p "$DEV/.claude-plugin" "$DEV/changelog.d"
+  write_plugin "$DEV" alpha 1.0.0
+  write_plugin "$DEV" beta 2.3.4
+  write_marketplace "$DEV" 1.0.0 alpha beta
+  printf '# Changelog\n\nIntro line.\n\n## [1.0.0] — 2026-01-01\n\nFirst.\n' > "$DEV/CHANGELOG.md"
+  echo "# Fragments" > "$DEV/changelog.d/README.md"
+  git -C "$DEV" add -A && git -C "$DEV" commit -qm "chore: initial" && git -C "$DEV" push -q origin main
+}
+fixture
 
 # merge <subject> [body]: commit whatever is staged in DEV and push it to main (a squash-merged PR).
 merge() {
@@ -126,12 +132,12 @@ merge() {
   git -C "$DEV" push -q origin main
 }
 
-# release [VAR=value ...]: run the orchestrator in a fresh clone of main, as CI does.
-RUN=0
+# release [VAR=value ...]: run the orchestrator in a fresh clone of main, as CI does. Callers run it in
+# $(...), so the clone dir comes from mktemp, not a counter the subshell would lose.
 release() {
-  RUN=$((RUN + 1))
-  local ci="$W/ci-$RUN"
-  git clone -q "$ORIGIN" "$ci" 2>/dev/null
+  local ci
+  ci="$(mktemp -d "$W/ci.XXXXXX")/repo"
+  if ! git clone -q "$ORIGIN" "$ci" 2>/dev/null; then echo 99; return; fi
   : > "$STATE/calls"
   (cd "$ci" && env PATH="$W/bin:$PATH" RELEASE_DATE=2026-02-03 RELEASE_MERGE_WAIT=0 RELEASE_MERGE_POLL=1 \
     "$@" bash "$RELEASE") > "$W/out" 2>&1
@@ -144,14 +150,16 @@ calls() { grep -c -- "$1" "$STATE/calls" 2>/dev/null || true; }
 
 echo "=== release orchestrator integration tests ==="
 
-# 1. Activation: the first run seeds v1.0.0 at main^1 and, with only a root change, releases nothing.
-mkdir -p "$DEV/.github" && echo "on: push" > "$DEV/.github/ci.yml"
+# 1. Activation: the parent of the merge adding the release workflow lacks it, which the token may
+#    not tag, and the merge adds only workflows, so the first run seeds v1.0.0 on main and releases nothing.
+mkdir -p "$DEV/.github/workflows" && echo "on: push" > "$DEV/.github/workflows/release.yml"
 merge "ci: add workflows"
 code="$(release)"
 check "seed: exits 0" "$code" 0
-check "seed: v1.0.0 tags the activation merge's first parent" "$(tag_sha v1.0.0)" "$C0"
+check "seed: v1.0.0 tags the activation merge" "$(tag_sha v1.0.0)" "$(git --git-dir="$ORIGIN" rev-parse main)"
 check "seed: nothing to release" "$(grep -c 'nothing to release' "$W/out")" 1
 check "seed: no PR" "$(calls 'pr create')" 0
+check "seed: no GitHub Release for the seed" "$(calls 'release create')" 0
 check "seed: tag created through the API" "$(calls 'api repos/{owner}/{repo}/git/refs -f ref=refs/tags/v1.0.0 -f sha=')" 1
 
 # 2. A feat merge on alpha opens the release PR.
@@ -293,6 +301,70 @@ code="$(release)"
 check "mismatch: exits 1" "$code" 1
 check "mismatch: says why" "$(grep -c 'says v9.9.9 but its marketplace version is' "$W/out")" 1
 check "mismatch: no v9.9.9 tag" "$(tag_sha v9.9.9 || echo none)" none
+
+# 14. A fresh repo: tags the token may not create (workflows differ from main's).
+ORIGIN="$W/origin2.git" DEV="$W/dev2" STATE="$W/gh-state2"
+mkdir -p "$STATE/releases" && cp "$W/gh-state/squash-merge" "$STATE/"
+export ORIGIN STATE
+fixture
+C0="$(git -C "$DEV" rev-parse HEAD)"
+
+# 14a. Before any commit adds the release workflow there is nothing to anchor the seed to.
+code="$(release)"
+check "no workflow: exits 1" "$code" 1
+check "no workflow: says why" "$(grep -c 'cannot seed: no commit on main adds .github/workflows/release.yml' "$W/out")" 1
+
+# 14b. The activation merge adds the workflow and changes beta: seeding on main would skip beta, so
+#      the run stops before any tag call and names the tag to create by hand.
+mkdir -p "$DEV/.github/workflows" && echo "on: push" > "$DEV/.github/workflows/release.yml"
+echo "z" >> "$DEV/plugins/beta/README.md"
+merge "feat(beta): ship with the release workflow (#1)"
+code="$(release GH_REPO=example/repo)"
+check "seed refused: exits 1" "$code" 1
+check "seed refused: no tag" "$(git --git-dir="$ORIGIN" tag -l | wc -l | tr -d ' ')" 0
+check "seed refused: no tag call" "$(calls 'git/refs')" 0
+HAND="create it by hand (gh api repos/example/repo/git/refs -f ref=refs/tags/v1.0.0 -f sha=$C0) and re-run"
+check "seed refused: names the hand command" "$(grep -c "would skip releasing what followed; $HAND" "$W/out")" 1
+
+# 14c. A later merge, even one editing the workflow, does not move the seed: the run still refuses,
+#      and once a human tags the parent, both merges release.
+echo "z" >> "$DEV/plugins/alpha/README.md"
+echo "# edited" >> "$DEV/.github/workflows/release.yml"
+merge "fix(alpha): mend (#2)"
+code="$(release GH_REPO=example/repo)"
+check "seed still refused: exits 1" "$code" 1
+check "seed still refused: same command" "$(grep -c "$HAND" "$W/out")" 1
+git --git-dir="$ORIGIN" update-ref refs/tags/v1.0.0 "$C0"
+code="$(release)"
+check "seed by hand: exits 0" "$code" 0
+check "seed by hand: alpha patch" "$(version_at release/next plugins/alpha/.claude-plugin/plugin.json)" 1.0.1
+check "seed by hand: beta minor, nothing skipped" "$(version_at release/next plugins/beta/.claude-plugin/plugin.json)" 2.4.0
+check "seed by hand: no GitHub Release for the seed" "$(calls 'release create')" 0
+
+# 14d. The release merges, then a workflow change lands before the next run: that run may not tag the
+#      release commit, so it stops naming the command; once a human tags it, the run carries on.
+"$STATE/squash-merge" >/dev/null 2>&1
+R1="$(git --git-dir="$ORIGIN" rev-parse main)"
+REL="$(git --git-dir="$ORIGIN" log -1 --format=%s main | sed -n 's/^chore(release): //p')"
+check "tag refused: the release merged" "$REL" v1.0.1
+echo "on: [push, workflow_dispatch]" > "$DEV/.github/workflows/release.yml"
+merge "ci: let the release be dispatched (#4)"
+code="$(release)"
+check "tag refused: exits 1" "$code" 1
+check "tag refused: no $REL" "$(tag_sha "$REL" || echo none)" none
+check "tag refused: says why and names the hand command" \
+  "$(grep -c "failed to create tag $REL at $R1: its .github/workflows differs from main's; create it by hand (gh api repos/{owner}/{repo}/git/refs -f ref=refs/tags/$REL -f sha=$R1)" "$W/out")" 1
+git --git-dir="$ORIGIN" update-ref "refs/tags/$REL" "$R1"
+code="$(release)"
+check "tag by hand: exits 0" "$code" 0
+check "tag by hand: release published" "$(test -f "$STATE/releases/$REL" && echo yes)" yes
+check "tag by hand: the workflow change releases nothing" "$(grep -c 'nothing to release' "$W/out")" 1
+
+# 14e. A hand tag whose name disagrees with its release commit's subject gets no GitHub Release.
+git --git-dir="$ORIGIN" update-ref refs/tags/v9.0.0 "$R1"
+code="$(release)"
+check "mis-tag: exits 0" "$code" 0
+check "mis-tag: no release for it" "$(calls 'release create')" 0
 
 echo "=============================================="
 echo "$total checks, $fails failed"
