@@ -1,0 +1,5 @@
+[
+  {"name":"build","workflow":"CI","state":"SUCCESS","bucket":"pass","link":"https://github.com/octo-org/octo-repo/actions/runs/1001/job/2001"},
+  {"name":"test","workflow":"CI","state":"SUCCESS","bucket":"pass","link":"https://github.com/octo-org/octo-repo/actions/runs/1001/job/2002"},
+  {"name":"deploy-preview","workflow":"Preview","state":"SKIPPED","bucket":"skipping","link":"https://github.com/octo-org/octo-repo/actions/runs/1002/job/2003"}
+]

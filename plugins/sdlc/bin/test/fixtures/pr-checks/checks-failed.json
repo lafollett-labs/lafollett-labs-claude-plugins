@@ -1,0 +1,6 @@
+[
+  {"name":"build","workflow":"CI","state":"SUCCESS","bucket":"pass","link":"https://github.com/octo-org/octo-repo/actions/runs/1001/job/2001"},
+  {"name":"test","workflow":"CI","state":"FAILURE","bucket":"fail","link":"https://github.com/octo-org/octo-repo/actions/runs/1001/job/2002"},
+  {"name":"lint","workflow":"Lint","state":"PENDING","bucket":"pending","link":"https://github.com/octo-org/octo-repo/actions/runs/1003/job/2004"},
+  {"name":"external/ci","workflow":"","state":"FAILURE","bucket":"fail","link":"https://ci.example.com/build/55"}
+]
