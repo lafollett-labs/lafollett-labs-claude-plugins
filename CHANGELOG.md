@@ -9,6 +9,30 @@ from the `changelog.d/` fragments: the heading is the marketplace version, and
 **Plugins** lists the plugin versions it bumped. Unreleased work lives in
 `changelog.d/`; never edit this file by hand.
 
+## [1.35.0] — 2026-11-28
+
+**Plugins:** issue-manager 1.1.0, live-stock 0.1.0 (new), sdlc 1.0.0 (new)
+
+### Added
+- **live-stock**: a new plugin. `herd` runs a work plan's GitHub issues or local
+  story codes as parallel Claude Code lanes in herdr, each in its own worktree and
+  each going through `sdlc:implement`, `sdlc:review --auto` and `sdlc:pull-request`.
+  It answers lane gates as the engineer would, merges approved PRs behind a head-SHA
+  guard, finishes each issue and stops when the run file's goal holds.
+- **sdlc**: a new plugin for the delivery loop on GitHub. `plan` writes issues and
+  sub-issues, `implement` builds a ticket test-first, `review` runs principal-engineer
+  agents and keeps the review in the repo, `pull-request` opens the PR and gates on
+  its checks, `copilot-review` triages Copilot's review threads, and `deliver` runs
+  the loop end to end. Slack is optional and off by default.
+
+### Changed
+- **sdlc**: the PE-agent contract suite runs its mutation cases in parallel, so it finishes in
+  seconds rather than minutes. Test-only; the plugin's behaviour is unchanged.
+
+### Deprecated
+- **issue-manager**: use `sdlc:plan`, which covers its templates, quality checklist
+  and `gh-issues.js` sync.
+
 ## [1.34.1] — 2026-11-26
 
 Everything through marketplace 1.34.1, recorded by hand before automated
