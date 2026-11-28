@@ -398,6 +398,25 @@ printf '```md\n## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n```\n' "$HDR" 
 put "$R" src/a.go 1; put "$R" src/b.py 1; commit "$R"
 check "a table with no separator row, or one inside a code fence, is no Stack Map, with a note" "$(classify "$R")" \
   'o.stack_map === null && o.routing["src/b.py"] === "pe-general-purpose" && o.routing["src/a.go"] === "pe-go" && o.stack_map_notes.join().includes("CLAUDE.md: Stack Map ignored") && Object.keys(o.stack_commands).length === 0'
+n=0
+for pre in $'Drives `sdlc:review`.\nPath globs route files.' \
+           $'example:\n\n    | Path | PE |\n    | - | - |\n    | src/** | pe-rust |' \
+           $'Run:\n```bash\n| Path | PE |\n| - | - |\n| src/** | pe-rust |\n```' \
+           '| see note'; do
+  n=$((n + 1)); R="$TMP/map-prose-$n"; new_repo "$R"
+  printf '## Stack Map\n\n%s\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$pre" "$HDR" > "$R/CLAUDE.md"; on_main "$R"
+  put "$R" src/b.py 1; commit "$R"
+  check "prose, indented code, a fenced snippet or a lone '|' line before the table is skipped ($n)" "$(classify "$R")" \
+    'o.stack_map.file === "CLAUDE.md" && o.routing["src/b.py"] === "pe-go" && !o.stack_map_notes.join().includes("ignored")'
+done
+n=0
+for stop in '### Other' '#' $'Other\n-----' '***' $'```text\nunclosed'; do
+  n=$((n + 1)); R="$TMP/map-stop-$n"; new_repo "$R"
+  printf '## Stack Map\n\nSee below.\n\n%s\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$stop" "$HDR" > "$R/CLAUDE.md"; on_main "$R"
+  put "$R" src/b.py 1; commit "$R"
+  check "a table after a later heading, thematic break or open fence is no Stack Map, with a note ($n)" "$(classify "$R")" \
+    'o.stack_map === null && o.routing["src/b.py"] === "pe-general-purpose" && o.stack_map_notes.join().includes("CLAUDE.md: Stack Map ignored")'
+done
 R="$TMP/map-nopecol"; new_repo "$R"
 printf '## Stack Map\n\n| Path | Stack |\n| - | - |\n| src/** | Go |\n' > "$R/CLAUDE.md"
 printf '## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$HDR" > "$R/AGENTS.md"; on_main "$R"
