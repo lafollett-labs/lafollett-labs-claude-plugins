@@ -194,20 +194,38 @@ function peName(cell) {
   return name === 'generic' ? 'pe-general-purpose' : name;
 }
 // The first "## Stack Map" heading outside a code fence, then its table: header, separator, data rows.
+// Prose, indented code and fenced snippets may sit between the heading and the table; the table starts at
+// the first pair of unindented '|' lines, and the next heading (ATX or setext) or thematic break ends the search.
 // A fence closes only on a bare run of its own character at least as long as the opening one.
+const FENCE = /^\s*(`{3,}|~{3,})(.*)$/;
+const closesFence = (f, fence) => f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim();
+const tableLine = (line) => line !== undefined && /^ {0,3}\|/.test(line);
 function parseStackMap(text) {
   const lines = text.split(/\r?\n/);
   let fence = null;
   let at = -1;
   for (let i = 0; i < lines.length && at < 0; i++) {
-    const f = lines[i].match(/^\s*(`{3,}|~{3,})(.*)$/);
+    const f = lines[i].match(FENCE);
     if (fence) {
-      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = null;
+      if (closesFence(f, fence)) fence = null;
     } else if (f) fence = f[1];
     else if (/^##\s+Stack Map\s*$/i.test(lines[i])) at = i + 1;
   }
   if (at < 0) return null;
-  while (at < lines.length && !lines[at].trim()) at++;
+  fence = null;
+  for (; at < lines.length; at++) {
+    const line = lines[at];
+    const f = line.match(FENCE);
+    if (fence) {
+      if (closesFence(f, fence)) fence = null;
+      continue;
+    }
+    if (f) { fence = f[1]; continue; }
+    if (/^ {0,3}#{1,6}(\s|$)/.test(line)) break;                                          // ATX heading
+    if (/^ {0,3}(=+|-+)\s*$/.test(line) && lines[at - 1] && lines[at - 1].trim()) break; // setext underline
+    if (/^ {0,3}([-*_])( *\1){2,}\s*$/.test(line)) break;                                 // thematic break
+    if (tableLine(line) && tableLine(lines[at + 1])) break;
+  }
   const table = [];
   for (; at < lines.length && lines[at].trim().startsWith('|'); at++) table.push(cells(lines[at]));
   if (table.length < 2 || !table[1].every((c) => /^:?-+:?$/.test(c))) return { malformed: 'no header and separator row' };
