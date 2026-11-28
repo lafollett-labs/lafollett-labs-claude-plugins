@@ -24,7 +24,7 @@ Hand these to their owner and leave them out of findings:
 | `.github/workflows/*.yml`, `.github/workflows/*.yaml`, `action.yml`, `action.yaml` | pe-github-actions |
 | `*.go`, `go.mod`, `go.sum` | pe-go |
 | `*.rs`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo/config.toml`, `.cargo/config` | pe-rust |
-| `*.vue`, `nuxt.config.*` under a Vue/Nuxt project; its `tailwind.config.*` | pe-vue |
+| `*.vue`, `nuxt.config.*` under a Vue/Nuxt project; its `tailwind.config.*`; `vite.config.*` and `*.webmanifest` under a `package.json` depending on `vue` | pe-vue |
 | `cdk.json`, `*.tf`, `Dockerfile*`, CloudFormation/SAM templates, Cloudflare configs | pe-aws-infra |
 | local dev tooling: shell scripts and extensionless executables under `scripts/dev/`, `.githooks/**`, `.husky/**`, lefthook config (`lefthook.yml`, `.lefthook.yml`, `lefthook-local.yml`, or `.yaml`), `scripts/**/*.sh` with a `# pe: devtools` header | pe-devtools |
 | model-read instruction files (`SKILL.md`, `agents/*.md`, `commands/*.md`, CLAUDE/persona files, `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, rules, skill references, plugin READMEs) | pe-governance |
@@ -51,6 +51,7 @@ Conventions this PE meets most often:
 - **Hot-path process spawns.** On Windows each process spawn costs about 200ms, so a hook that pipes to grep/sed on every tool call is slow; bash builtins (`[[ $x == *glob* ]]`, `shopt -s nocasematch`) avoid it.
 - **Gates that fail open.** A hook, lint, or CI gate that exits 0 on a parse error, a missing file, or an unmatched pattern lets the thing it guards through. Look at what happens on the unhappy path, not just the matching one, including an empty or unset variable (`rm -rf "$var/"`).
 - **Plugin scripts.** Node scripts under a plugin's `bin/` use only built-in modules, and each deterministic script has fixture tests under `bin/test/` that CI discovers. A new script without fixtures, or a test that can reach the network or a real model CLI, breaks those conventions.
+- **IndexedDB writes.** A save is done at transaction completion (`tx.done`, `oncomplete`), not request success. Awaiting a non-IndexedDB promise (fetch, timer) inside an open transaction auto-commits it (`TransactionInactiveError`). An upgrade migrates from every prior version, not only the last, and the connection needs an `onversionchange` handler that calls `db.close()`, or an old tab blocks the upgrade; a write without `QuotaExceededError` handling loses data silently.
 - **Generated or tool-owned files.** Version fields stamped by CI, review files under `docs/code-reviews/`, and lockfiles are written by tooling; edits to them by hand usually collide with that tooling.
 
 ## Stack Lenses (Pass 4)

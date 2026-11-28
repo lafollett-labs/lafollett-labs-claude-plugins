@@ -270,7 +270,8 @@ for file in plan.key_files:          # a preview; skills/review/bin/scope.js hol
     case "*.go" | "go.mod" | "go.sum"                   → matched_pes += ["sdlc:pe-go"]
     case "*.rs" | "Cargo.toml" | "Cargo.lock"
        | "rust-toolchain*" | ".cargo/config.toml" | ".cargo/config" → matched_pes += ["sdlc:pe-rust"]
-    case "*.vue" | "nuxt.config.*" | "tailwind.config.*" → matched_pes += ["sdlc:pe-vue"]
+    case "*.vue" | "nuxt.config.*" | "tailwind.config.*"
+       | "vite.config.*" | "*.webmanifest" under a package.json depending on vue → matched_pes += ["sdlc:pe-vue"]
     case "cdk.json" | "*.tf" | "Dockerfile*"
        | "template.yml" | "*.template.yaml"             → matched_pes += ["sdlc:pe-aws-infra"]
     case "scripts/dev/**" shell or extensionless | ".githooks/**" | ".husky/**" | "lefthook*.yml" | ".lefthook.yml"

@@ -225,6 +225,17 @@ check "staged mode reads the header from the index" "$(node "$CLI" classify --ro
 git -C "$R" add -A; git -C "$R" commit -qm change; printf '#!/usr/bin/env bash\n' > "$R/scripts/b.sh"
 check "branch mode reads the header from HEAD" "$(classify "$R")" 'o.routing["scripts/b.sh"] === "pe-devtools"'
 
+# --- vite.config / webmanifest: pe-vue only in a Vue project -------------------
+R="$TMP/vite"; new_repo "$R"
+mkdir -p "$R/app" "$R/react"; printf '{"dependencies":{"vue":"^3.4.0"}}\n' > "$R/app/package.json"
+printf '{"dependencies":{"react":"^18.0.0"}}\n' > "$R/react/package.json"
+put "$R" app/vite.config.ts 1; put "$R" app/public/site.webmanifest 1; put "$R" react/vite.config.ts 1; put "$R" app/src/db.ts 1
+commit "$R"; out="$(classify "$R")"
+check "vite.config and webmanifest route to pe-vue under a package.json depending on vue" "$out" \
+  'o.routing["app/vite.config.ts"] === "pe-vue" && o.routing["app/public/site.webmanifest"] === "pe-vue"'
+check "a non-Vue vite.config and a standalone storage module stay with pe-general-purpose" "$out" \
+  'o.routing["react/vite.config.ts"] === "pe-general-purpose" && o.routing["app/src/db.ts"] === "pe-general-purpose"'
+
 # --- domain PEs ----------------------------------------------------------------
 R="$TMP/audio"; new_repo "$R"
 put "$R" web/src/audio/Tuner.vue 1; put "$R" engine/crates/pitch/src/yin.rs 1; put "$R" web/src/lib/PitchWorklet.ts 1
