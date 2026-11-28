@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # backticks in the Stack Map printf formats are literal Markdown
 # Fixture tests for scope.js — the review tier classifier and PE glob routing baseline.
 # Each case builds a throwaway git repo, commits a change, and asserts the JSON scope.js prints.
 # No npm packages — bash + git + node only. Ends "<n> checks, <m> failed"; exit 1 on any failure.
@@ -260,6 +261,97 @@ check "an audio directory matches as a whole word in any case" "$out" \
 check "a directory word that only contains audio or dsp does not match" "$out" \
   '!["src/audiobook-store/cart.ts","src/dispatch/queue.ts"].some(f => o.domain_pes["pe-audio"].files.includes(f))'
 check "matched_pes is the stack and domain union on an audio change" "$out" "$UNION"
+
+# --- Stack Map -----------------------------------------------------------------
+# on_main <repo> — commit and make that commit the base, so the Stack Map is read from main.
+on_main() { commit "$1"; git -C "$1" branch -f main HEAD; }
+HDR='| Path | Stack | Built-in PE | Test Command |
+| - | - | - | - |'
+R="$TMP/map"; new_repo "$R"
+cat > "$R/AGENTS.md" <<EOF
+# Agents
+
+## Stack Map
+
+$HDR
+| gen/**/*.go | Generated Go | Generic | \`make gen-check\` |
+| lib/special/** | Rust bindings | \`sdlc:pe-rust\` | \`cargo test -p special\` |
+| lib/** | Go | \`code-reviewer:pe-go\` | \`go vet ./...\`, \`go test ./lib/...\` |
+| lib/special/old/** | Old | (skip) | n/a |
+| vendor/**, README.md | Third party | (skip) | n/a |
+| frontend/ | Vue | pe-vue | \`cd frontend && npm test\` |
+| ops/** | Python | pe-python | \`pytest\` |
+| engine/{synth,fx}/** | Audio (domain) | pe-audio | n/a (stack PE runs suites) |
+| docs/adr/** | ADRs | pe-general-purpose | # TODO |
+| | Empty | pe-go | |
+EOF
+on_main "$R"
+put "$R" gen/api/types.go 1; put "$R" lib/special/bind.go 1; put "$R" lib/core.go 1; put "$R" lib/special/old/x.go 1
+put "$R" vendor/dep/a.go 1; put "$R" README.md 3; put "$R" docs/README.md 1; put "$R" frontend/server.ts 1; put "$R" apps/frontend/main.go 1
+put "$R" ops/run.py 1; put "$R" engine/synth/osc.rs 1; put "$R" engine/fx/delay.rs 1; put "$R" web/src/audio/Tuner.vue 1
+put "$R" docs/adr/0001.md 1; put "$R" svc/main.go 1
+commit "$R"
+out="$(classify "$R")"
+check "a Stack Map row wins over the built-in glob (Generic is pe-general-purpose; sdlc: and code-reviewer: prefixes)" "$out" \
+  'o.routing["gen/api/types.go"] === "pe-general-purpose" && o.routing["lib/special/bind.go"] === "pe-rust" && o.routing["frontend/server.ts"] === "pe-vue" && o.routing["svc/main.go"] === "pe-go"'
+check "Stack Map rows match in table order: an earlier row wins over a later (skip)" "$out" \
+  'o.routing["lib/core.go"] === "pe-go" && o.routing["lib/special/old/x.go"] === "pe-rust" && !o.excluded.includes("lib/special/old/x.go")'
+check "Stack Map paths anchor at the repo root unless they have no slash" "$out" \
+  'o.routing["apps/frontend/main.go"] === "pe-go" && o.excluded.includes("docs/README.md")'
+check "a (skip) row excludes its files like docs/code-reviews" "$out" \
+  '["vendor/dep/a.go","README.md"].every(f => o.excluded.includes(f) && !o.changed_files.includes(f) && !(f in o.routing)) && o.lines_added === 12'
+check "a domain-PE row adds files to domain_pes, keeps the default globs, and never routes" "$out" \
+  '["engine/synth/osc.rs","engine/fx/delay.rs","web/src/audio/Tuner.vue"].every(f => o.domain_pes["pe-audio"].files.includes(f)) && o.routing["engine/synth/osc.rs"] === "pe-rust" && !Object.values(o.routing).includes("pe-audio")'
+check "an unknown PE row is ignored with a note" "$out" \
+  'o.routing["ops/run.py"] === "pe-general-purpose" && o.stack_map_notes.some(n => n.includes("row 7") && n.includes("unknown PE \"pe-python\"")) && o.stack_map_notes.some(n => n.includes("row 10") && n.includes("no paths"))'
+check "stack_commands lists each PE's commands from the rows that routed a changed file" "$out" \
+  'Object.keys(o.stack_commands).sort().join() === "pe-general-purpose,pe-go,pe-rust,pe-vue" && o.stack_commands["pe-go"].join("|") === "go vet ./...|go test ./lib/..." && o.stack_commands["pe-general-purpose"].join() === "make gen-check" && o.stack_commands["pe-rust"].join() === "cargo test -p special" && o.stack_commands["pe-vue"].join() === "cd frontend && npm test"'
+check "stack_map names the file and the revision it was read from" "$out" \
+  'o.stack_map.file === "AGENTS.md" && o.stack_map.from === "main" && o.stack_map.rows === 8'
+git -C "$R" branch -f main HEAD; put "$R" vendor/dep/b.go 1; commit "$R"
+classify "$R" >/dev/null; code=$?
+if [ "$code" -eq 3 ]; then pass "a diff of only (skip) files exits 3"; else fail "skip-only diff exit $code"; fi
+
+# The map is read from the range's base: a change cannot skip or re-route its own files.
+R="$TMP/map-base"; new_repo "$R"
+printf '## Stack Map\n\n%s\n| src/** | Go | pe-go | `go test ./...` |\n' "$HDR" > "$R/AGENTS.md"; on_main "$R"
+printf '## Stack Map\n\n%s\n| src/** | Hidden | (skip) | n/a |\n' "$HDR" > "$R/AGENTS.md"; put "$R" src/a.py 2; commit "$R"
+check "branch mode reads the Stack Map from the base, not the change" "$(classify "$R")" \
+  'o.routing["src/a.py"] === "pe-go" && !o.excluded.includes("src/a.py") && o.stack_map_notes.some(n => n.includes("apply once merged"))'
+R2="$TMP/map-new"; new_repo "$R2"
+printf '## Stack Map\n\n%s\n| src/** | Hidden | (skip) | n/a |\n' "$HDR" > "$R2/AGENTS.md"; put "$R2" src/a.py 2; commit "$R2"
+check "a Stack Map added by the change applies once merged, with a note" "$(classify "$R2")" \
+  'o.stack_map === null && o.routing["src/a.py"] === "pe-general-purpose" && o.stack_map_notes.some(n => n.includes("apply once merged"))'
+check "files mode reads the working-tree Stack Map" "$(node "$CLI" classify --root "$R" --mode files --targets src,AGENTS.md)" \
+  'o.excluded.join() === "src/a.py" && o.stack_map.from === "worktree"'
+
+R="$TMP/map-imports"; new_repo "$R"
+printf '@AGENTS.md\n' > "$R/CLAUDE.md"; printf '## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$HDR" > "$R/AGENTS.md"; on_main "$R"
+put "$R" src/a.py 1; commit "$R"
+check "a CLAUDE.md that only imports @AGENTS.md reads AGENTS.md's Stack Map" "$(classify "$R")" \
+  'o.stack_map.file === "AGENTS.md" && o.routing["src/a.py"] === "pe-go" && Object.keys(o.stack_commands).length === 0'
+R="$TMP/map-both"; new_repo "$R"
+printf '# Project\n@AGENTS.md\n\n## Stack Map\n\n%s\n| src/** | Rust | pe-rust | n/a |\n' "$HDR" > "$R/CLAUDE.md"
+printf '## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$HDR" > "$R/AGENTS.md"; on_main "$R"
+put "$R" src/a.py 1; commit "$R"
+check "CLAUDE.md's Stack Map wins over AGENTS.md's when CLAUDE.md is not import-only" "$(classify "$R")" \
+  'o.stack_map.file === "CLAUDE.md" && o.routing["src/a.py"] === "pe-rust"'
+
+R="$TMP/map-malformed"; new_repo "$R"
+printf '## Stack Map\n\n| Path | PE |\n| src/** | pe-go |\n' > "$R/CLAUDE.md"
+printf '```md\n## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n```\n' "$HDR" > "$R/AGENTS.md"; on_main "$R"
+put "$R" src/a.go 1; put "$R" src/b.py 1; commit "$R"
+check "a table with no separator row, or one inside a code fence, is no Stack Map, with a note" "$(classify "$R")" \
+  'o.stack_map === null && o.routing["src/b.py"] === "pe-general-purpose" && o.routing["src/a.go"] === "pe-go" && o.stack_map_notes.join().includes("CLAUDE.md: Stack Map ignored") && Object.keys(o.stack_commands).length === 0'
+R="$TMP/map-nopecol"; new_repo "$R"
+printf '## Stack Map\n\n| Path | Stack |\n| - | - |\n| src/** | Go |\n' > "$R/CLAUDE.md"
+printf '## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$HDR" > "$R/AGENTS.md"; on_main "$R"
+put "$R" src/b.py 1; commit "$R"
+check "a table with no PE column falls through to the next instruction file" "$(classify "$R")" \
+  'o.stack_map.file === "AGENTS.md" && o.routing["src/b.py"] === "pe-go" && o.stack_map_notes.some(n => n.includes("no Path or PE column"))'
+R="$TMP/map-none"; new_repo "$R"; put "$R" src/b.py 1; commit "$R"
+check "no instruction file means no Stack Map and no notes" "$(classify "$R")" \
+  'o.stack_map === null && o.stack_map_notes.length === 0 && Object.keys(o.stack_commands).length === 0'
 
 # --- files-mode targets --------------------------------------------------------
 R="$TMP/targets"; new_repo "$R"

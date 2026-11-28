@@ -198,7 +198,7 @@ else:
 
 ### Scope classification
 
-`scope.js` owns the changed-file set, the `docs/code-reviews/**` exclusion, the tier signals and classifier tier, the first-match glob routing of each file to one stack PE, and `domain_pes`: each domain PE (`kind: domain`, e.g. `pe-audio`) with the files its globs match, reviewed beside their stack PE, never instead of it.
+`scope.js` owns the changed-file set, the `docs/code-reviews/**` exclusion, the tier signals and classifier tier, the first-match glob routing of each file to one stack PE, and `domain_pes`: each domain PE (`kind: domain`, e.g. `pe-audio`) with the files its globs match, reviewed beside their stack PE, never instead of it. A repo `## Stack Map` table (CLAUDE.md, else AGENTS.md; written by `sdlc:init-project`; read from the target branch for Branch Diff and PR Review) routes before the globs, first row wins: a `(skip)` row adds to `excluded`, a domain row adds to `domain_pes`, and `stack_commands` holds each PE's test commands from the rows that matched; the judgment pass never re-routes a file a Stack Map row routed.
 
 ```text
 mode, extra = match review_type:
@@ -210,7 +210,7 @@ mode, extra = match review_type:
 scope = stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/scope.js" classify --root "{session.review_root}" --mode {mode} {extra}`
 if exit == 3:
   🛑 stop — {scope.stop} ({scope.excluded}); restore_stash(); exit
-bind changed_files, files_changed, lines_added, lines_removed, diff_cmd, signals, security_files from scope
+bind changed_files, files_changed, lines_added, lines_removed, diff_cmd, signals, security_files, stack_commands from scope; print each scope.stack_map_notes line
 session.tier = scope.tier; session.tier_source = scope.tier_source; session.tier_signals = scope.tier_signals; session.routing = scope.routing; session.domain_pes = scope.domain_pes; session.matched_pes = scope.matched_pes; session.ledger = scope.ledger
 ```
 
