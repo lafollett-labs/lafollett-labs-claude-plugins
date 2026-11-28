@@ -1,9 +1,11 @@
 ---
 name: code-reviewer
-description: Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-rust, pe-aws-infra, pe-governance, pe-devtools) plus the pe-audio domain PE on real-time audio/DSP paths. Five-pass protocol with mandatory adversarial re-read plus seven review moves with per-move coverage, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop with hard 3-round cap until APPROVED (LOW + INFO are awareness-only and do NOT block). pe-devtools calibrated for single-operator local threat model. Changes linked to an issue or story with acceptance criteria — a GitHub issue, or a local code such as feat/LT-02-live-tuner resolved from docs/epics, no GitHub required — additionally run Phase 4.5 Spec Coverage, asserting every acceptance criterion is genuinely discharged or explicitly deferred.
+description: DEPRECATED, use sdlc:review. Code reviews with stack-specific PE dispatch (pe-go, pe-vue, pe-rust, pe-aws-infra, pe-governance, pe-devtools) plus the pe-audio domain PE on real-time audio/DSP paths. Five-pass protocol with mandatory adversarial re-read plus seven review moves with per-move coverage, scope discipline, SHA-locked rounds, de-duplicated findings in ./docs/code-reviews/. Engineer-driven multi-round loop with hard 3-round cap until APPROVED (LOW + INFO are awareness-only and do NOT block). pe-devtools calibrated for single-operator local threat model. Changes linked to an issue or story with acceptance criteria — a GitHub issue, or a local code such as feat/LT-02-live-tuner resolved from docs/epics, no GitHub required — additionally run Phase 4.5 Spec Coverage, asserting every acceptance criterion is genuinely discharged or explicitly deferred.
 ---
 
 # Expert Code Review
+
+Deprecated: if the `sdlc` plugin is installed, use `sdlc:review` instead and stop here.
 
 Lean, pragmatic code reviews with scope discipline. Stack-specific PE sub-agents do the heavy lifting; the parent skill orchestrates dispatch and consolidates findings.
 

@@ -11,7 +11,7 @@ See [README.md](./README.md) for the full plugin list and repository tree.
 .claude-plugin/
   marketplace.json          # Marketplace registry
 plugins/
-  code-reviewer/            # PE-powered five-pass code reviews + review moves
+  code-reviewer/            # PE code reviews (deprecated: use sdlc:review)
   context-handoff/          # /handoff-context + /resume-context
   issue-manager/            # GitHub Issue management (deprecated: use sdlc:plan)
   live-stock/               # herd: parallel sdlc lanes in herdr, merged and finished

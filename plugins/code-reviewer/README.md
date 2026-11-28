@@ -1,5 +1,17 @@
 # code-reviewer
 
+> **Deprecated: use `sdlc:review`** (`/plugin install sdlc`). It runs the same PEs, review
+> moves, finding lineage and test budget, adds a two-gate model and a findings ledger, and
+> keeps your `## Stack Map` and `docs/code-reviews/` files working.
+>
+> | code-reviewer | sdlc |
+> | - | - |
+> | `/code-reviewer` (branch, PR, staged, files) | `/sdlc:review` |
+> | `/code-reviewer:init-project` | `/sdlc:init-project` |
+> | `code-reviewer:pe-*` agents | `sdlc:pe-*` (plus pe-csharp, pe-angular, pe-sql-server, pe-github-actions, pe-general-purpose) |
+>
+> It stays installable for one more minor release.
+
 Code reviews that dispatch a principal engineer for the stack you actually
 touched, then consolidate what they found. Seven PE sub-agents ship with the
 plugin; anything they do not cover falls back to a generic review.

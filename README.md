@@ -11,7 +11,7 @@ do.
 
 | Plugin | What it does | |
 | - | - | - |
-| **code-reviewer** | Reviews that dispatch a principal engineer per stack — Go, Vue (Nuxt or Vite PWA), Rust/WASM, AWS IaC, agent governance, dev tooling, plus real-time audio — then consolidate the findings | [Usage & tips](./plugins/code-reviewer/README.md) |
+| **code-reviewer** | *Deprecated: use `sdlc:review`.* Reviews that dispatch a principal engineer per stack — Go, Vue (Nuxt or Vite PWA), Rust/WASM, AWS IaC, agent governance, dev tooling, plus real-time audio — then consolidate the findings | [Usage & tips](./plugins/code-reviewer/README.md) |
 | **context-handoff** | Carry a session's working state, decisions, and next steps across a `/clear` | [Usage & tips](./plugins/context-handoff/README.md) |
 | **issue-manager** | *Deprecated: use `sdlc:plan`.* GitHub Issues that define what and why, never how — authored locally, pushed without duplicates | [Usage & tips](./plugins/issue-manager/README.md) |
 | **live-stock** | `herd` runs a work plan's issues as parallel Claude Code lanes in herdr — each one implement → review → pull request on `sdlc` — then merges and finishes them | [Usage & tips](./plugins/live-stock/README.md) |
