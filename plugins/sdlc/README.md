@@ -36,7 +36,9 @@ Slack is optional and off by default.
 `review` dispatches one agent per stack the diff touches: `pe-go`, `pe-rust`, `pe-vue`, `pe-angular`,
 `pe-csharp`, `pe-sql-server`, `pe-aws-infra`, `pe-github-actions`, `pe-governance`, `pe-devtools`
 (local dev scripts and hooks, under a single-operator threat model), and
-`pe-general-purpose` for anything no specialist owns. `plan-reviewer` answers
+`pe-general-purpose` for anything no specialist owns. `pe-audio` is a domain PE: it reviews
+audio and DSP paths (`audio/`, `dsp/`, `pitch/`, worklets) beside their stack PE and runs no
+suites. `plan-reviewer` answers
 `implement`'s plan gate under `--incident`.
 
 ## Tickets, branches and status

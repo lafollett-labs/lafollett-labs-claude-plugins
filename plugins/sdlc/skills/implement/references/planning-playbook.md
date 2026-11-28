@@ -280,6 +280,8 @@ for file in plan.key_files:          # a preview; skills/review/bin/scope.js hol
        | ".claude/rules/**"
        | governance references/*.md, model-consumed assets/*.md, plugin/skill READMEs
                                                         → matched_pes += ["sdlc:pe-governance"]
+  if file is under audio/, dsp/, or pitch/, or its name contains worklet:
+    matched_pes += ["sdlc:pe-audio"]                    # domain PE: beside the stack PE above, never instead
 
 session.matched_pes = unique(matched_pes)
 

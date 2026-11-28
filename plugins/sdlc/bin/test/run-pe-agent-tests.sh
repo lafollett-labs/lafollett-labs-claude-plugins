@@ -352,7 +352,7 @@ check_lean_agent() {
 check_agent_set() {
   local root="$1" f name want
   for want in pe-go pe-rust pe-vue pe-aws-infra pe-governance pe-csharp pe-angular pe-sql-server pe-github-actions \
-              pe-devtools pe-general-purpose plan-reviewer; do
+              pe-devtools pe-general-purpose pe-audio plan-reviewer; do
     [ -f "$root/agents/$want.md" ] || echo "agents: missing $want"
   done
   for f in "$root"/agents/*.md; do

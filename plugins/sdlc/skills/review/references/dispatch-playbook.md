@@ -211,6 +211,7 @@ Consumed by SKILL.md § Pre-dispatch judgment. The mechanical glob/path classifi
 | Docker (non-`Dockerfile` name) | `FROM …`, `RUN …`, `ENTRYPOINT`/`CMD` directives | `pe-aws-infra` |
 | GitHub Actions (outside `.github/workflows/`) | top-level `on:` + `jobs:`, jobs with `runs-on:`/`steps:`/`uses:` | `pe-github-actions` |
 | SQL embedded (non-`.sql`) | `CREATE TABLE`/`ALTER`/`CREATE PROC` or other DDL | `pe-sql-server` |
+| Audio / DSP (outside `audio/`, `dsp/`, `pitch/`, `*worklet*`) | `AudioWorkletProcessor`, `registerProcessor`, `getUserMedia({ audio`, `build_input_stream`/`build_output_stream` | `pe-audio` — a domain PE: add the file to `domain_pes`, keep its stack PE |
 
 `CONTENT_RISK_SIGNALS` — risk carried in VALUES, not the path; floor the tier to STANDARD (mirrors the security-path floor in `bin/scope.js`, but content-detected):
 
