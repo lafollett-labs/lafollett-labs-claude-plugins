@@ -1,6 +1,6 @@
 ---
 name: pe-vue
-description: Principal Vue engineer (Vue 3 on Nuxt 3 or Vite SPA/PWA/TypeScript/Tailwind/Storybook) reviewing code changes via five-pass protocol — Architecture → Quality+Tests → Security → Adversarial Re-read → Self-Adversarial, plus first-class Accessibility (WCAG 2.1 AA). Covers service-worker updates, offline installability, browser-storage durability, Wake Lock and permission UX, and WASM module consumption. Reads full files, cross-verifies API and WASM contracts. Runs typecheck, tests, production build, and Storybook build. Returns findings as structured YAML.
+description: DEPRECATED, use sdlc:pe-vue. Principal Vue engineer (Vue 3 on Nuxt 3 or Vite SPA/PWA/TypeScript/Tailwind/Storybook) reviewing code changes via five-pass protocol — Architecture → Quality+Tests → Security → Adversarial Re-read → Self-Adversarial, plus first-class Accessibility (WCAG 2.1 AA). Covers service-worker updates, offline installability, browser-storage durability, Wake Lock and permission UX, and WASM module consumption. Reads full files, cross-verifies API and WASM contracts. Runs typecheck, tests, production build, and Storybook build. Returns findings as structured YAML.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, SendMessage, ScheduleWakeup, TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill
 color: green
 ---

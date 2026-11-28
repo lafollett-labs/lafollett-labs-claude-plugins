@@ -1,9 +1,17 @@
 ---
 name: init-project
-description: Scan the project and write a Stack Map to AGENTS.md or CLAUDE.md for /code-reviewer. Detects languages, frameworks, Cargo workspaces and wasm32 crates, Vite-only Vue apps, audio/DSP paths, and test commands. PEs (pe-go, pe-vue, pe-rust, pe-aws-infra, pe-governance, pe-devtools, and the pe-audio domain PE) ship with the plugin.
+description: DEPRECATED, use sdlc:init-project. Scan the project and write a Stack Map to AGENTS.md or CLAUDE.md for /code-reviewer. Detects languages, frameworks, Cargo workspaces and wasm32 crates, Vite-only Vue apps, audio/DSP paths, and test commands. PEs (pe-go, pe-vue, pe-rust, pe-aws-infra, pe-governance, pe-devtools, and the pe-audio domain PE) ship with the plugin.
 ---
 
 # Initialize Project for Code Review
+
+Deprecated:
+
+```text
+if the sdlc:init-project skill is available and `node` is on PATH:
+  tell the user "code-reviewer is deprecated; running sdlc:init-project" and invoke sdlc:init-project with the same request; stop
+else: continue with this skill
+```
 
 Bootstraps the `/code-reviewer` skill into any project by scanning the repo
 and writing a Stack Map into the project's `AGENTS.md` or `CLAUDE.md` (or `.code-reviewer.yml`).

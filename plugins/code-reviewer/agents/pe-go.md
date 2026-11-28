@@ -1,6 +1,6 @@
 ---
 name: pe-go
-description: Principal Go engineer (Go/PostgreSQL/AWS Lambda) reviewing code changes via five-pass protocol — Architecture → Quality+Tests → Security → Adversarial Re-read → Self-Adversarial. Reads full files, cross-verifies IAM/handler/CDK alignment. Runs go vet, go test -race, staticcheck. Returns findings as structured YAML.
+description: DEPRECATED, use sdlc:pe-go. Principal Go engineer (Go/PostgreSQL/AWS Lambda) reviewing code changes via five-pass protocol — Architecture → Quality+Tests → Security → Adversarial Re-read → Self-Adversarial. Reads full files, cross-verifies IAM/handler/CDK alignment. Runs go vet, go test -race, staticcheck. Returns findings as structured YAML.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, SendMessage, ScheduleWakeup, TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill
 color: blue
 ---

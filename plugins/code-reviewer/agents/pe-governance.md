@@ -1,6 +1,6 @@
 ---
 name: pe-governance
-description: Senior reviewer for agent governance markdown — agent definitions, skills, plugin instructions, CLAUDE.md and AGENTS.md files. Reviews via five-pass protocol — Architecture (audience boundary, schema consistency) → Quality (pseudocode determinism, lint-shaped checks) → Security (tool-permission consistency, authority scope) → Adversarial Re-read → Self-Adversarial. Reads full files, cross-verifies governance references. Returns findings as structured YAML.
+description: DEPRECATED, use sdlc:pe-governance. Senior reviewer for agent governance markdown — agent definitions, skills, plugin instructions, CLAUDE.md and AGENTS.md files. Reviews via five-pass protocol — Architecture (audience boundary, schema consistency) → Quality (pseudocode determinism, lint-shaped checks) → Security (tool-permission consistency, authority scope) → Adversarial Re-read → Self-Adversarial. Reads full files, cross-verifies governance references. Returns findings as structured YAML.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, SendMessage, ScheduleWakeup, TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill
 color: purple
 ---

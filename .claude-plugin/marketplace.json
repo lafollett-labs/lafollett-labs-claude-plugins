@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "code-reviewer",
-      "description": "PE-powered code reviews with five-pass protocol (Architecture \u2192 Quality+Tests \u2192 Security \u2192 Adversarial Re-read \u2192 Self-Adversarial) and project bootstrapping via init-project",
+      "description": "DEPRECATED, use sdlc:review. PE-powered code reviews with five-pass protocol (Architecture \u2192 Quality+Tests \u2192 Security \u2192 Adversarial Re-read \u2192 Self-Adversarial) and project bootstrapping via init-project",
       "source": "./plugins/code-reviewer",
       "category": "developer-tools",
       "homepage": "https://github.com/lafollett-labs/lafollett-labs-claude-plugins"
