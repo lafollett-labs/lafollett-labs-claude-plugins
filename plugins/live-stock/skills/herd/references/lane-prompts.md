@@ -10,7 +10,7 @@ Send each prompt to a lane verbatim after substituting the placeholders. Pass it
 | `<PR>` | `<project>#<n>` and its URL |
 | `<n>` | The PR's number |
 | `<branch>` | The lane's branch |
-| `<base>` | The PR's base branch, else the base `sdlc:implement` recorded for the branch |
+| `<base>` | The lane's base branch: the PR's base once it has a PR, else the row's Base |
 | `<reviewers-flag>` | `--model-by-review-tier` when the row's Model/effort cell ends `reviewers by tier`, else `--no-model-by-review-tier` |
 | `<files>` | Paths to carry, one per line |
 | `<note>` | A pasted review comment or review with its author |

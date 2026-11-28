@@ -30,7 +30,8 @@
  *              (blocked outranks hold, hold outranks wait)
  * merge re-runs ready, then PUTs …/pulls/<n>/merge with sha=<--sha> and the project's merge_method.
  *   prints { result: merged | queued | refused, pr, base, sha, merge_commit_sha?, reason?, verdict? }
- *   409 → refused (head moved). 405 naming a merge queue → gh pr merge --auto --match-head-commit → queued.
+ *   409 → refused (head moved). 405 → GraphQL repository.mergeQueue(branch: <base>): non-null → gh pr merge --auto
+ *   --match-head-commit → queued; null → refused with GitHub's message; an unreadable check → exit 2.
  *   Any other 4xx → refused with GitHub's message. merge_commit_sha is the commit main now has
  *   (gh pr view --json mergeCommit, else the PUT's sha).
  * rerequest POSTs …/requested_reviewers for --user, which keeps every other reviewer; prints { pr, reviewers: [login] }.
@@ -52,7 +53,8 @@ const CI = { passed: 'ok', pending: 'wait', failed: 'blocked', incomplete: 'bloc
 const RANK = { ready: 0, wait: 1, hold: 2, blocked: 3 };
 const DECISIVE = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
 const PR_FIELDS = 'number,state,isDraft,headRefOid,headRefName,baseRefName,mergeable,mergeStateStatus,mergeCommit,url';
-const MERGE_QUEUE = /merge queue/i;
+const MERGE_QUEUE_QUERY = 'query($owner: String!, $repo: String!, $branch: String!) '
+  + '{ repository(owner: $owner, name: $repo) { mergeQueue(branch: $branch) { id } } }';
 const SETTLE_S = 20;
 const THREAD_PAGES = 50;
 const THREADS_QUERY = 'query($owner: String!, $repo: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $repo) '
@@ -181,6 +183,7 @@ function ready(cfg, opts) {
   if (!approvalOk) {
     if (mine && mine.state === 'DISMISSED') flag('wait', `${opts.reviewer}'s approval was dismissed`);
     else if (!approved) flag('wait', `${opts.reviewer} has not approved`);
+    else if (!pos.has(mine.commit_id)) flag('wait', `${opts.reviewer}'s approval is on a commit no longer in the PR (${String(mine.commit_id).slice(0, 8)})`);
     else flag('wait', `${opts.reviewer}'s approval predates the target ${target.slice(0, 8)}`);
   }
 
@@ -206,7 +209,15 @@ function ready(cfg, opts) {
 
 const message = (e) => (e.body && typeof e.body.message === 'string' ? e.body.message : e.message);
 
-// The branch requires a merge queue: enqueue it (or enable auto-merge) pinned to --sha.
+// Whether <base> has a merge queue (Repository.mergeQueue is null when it has none). A failed read throws.
+function hasMergeQueue(repo, base) {
+  const [owner, name] = repo.split('/');
+  const data = ghGraphql(MERGE_QUEUE_QUERY, { owner, repo: name, branch: base });
+  if (!data.repository) throw new HerdError(`GitHub returned no repository ${repo} for the merge-queue check`);
+  return Boolean(data.repository.mergeQueue);
+}
+
+// The base branch has a merge queue: enqueue the PR pinned to --sha.
 function enqueue(proj, n, sha, out) {
   const r = ghRun(['pr', 'merge', String(n), '-R', proj.repo, '--auto', '--match-head-commit', sha, `--${proj.merge_method}`]);
   if (r.status === 0) return { result: 'queued', ...out };
@@ -228,7 +239,7 @@ function merge(cfg, opts) {
   } catch (e) {
     if (e.rateLimited || !(e.status >= 400 && e.status < 500)) throw e;
     if (e.status === 409) return { result: 'refused', ...out, reason: 'head moved since --sha (HTTP 409)' };
-    if (e.status === 405 && MERGE_QUEUE.test(message(e))) return enqueue(proj, ref.n, opts.sha, out);
+    if (e.status === 405 && hasMergeQueue(proj.repo, r.base)) return enqueue(proj, ref.n, opts.sha, out);
     return { result: 'refused', ...out, reason: `GitHub refused the merge (HTTP ${e.status}): ${message(e)}` };
   }
   if (res.merged !== true) return { result: 'refused', ...out, reason: `GitHub did not merge: ${res.message || 'no reason given'}` };

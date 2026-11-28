@@ -53,7 +53,7 @@ Run the lanes until Done-when holds:
 /live-stock:herd ~/.claude/plans/herd-example.md
 ```
 
-Dry pass: handle one batch of events and report the rows it would start, without starting a lane:
+One pass: reconcile and handle one batch of events (merges and finishes included), report the rows it would start, and start none:
 
 ```text
 /live-stock:herd ~/.claude/plans/herd-example.md --once
@@ -64,7 +64,7 @@ Dry pass: handle one batch of events and report the rows it would start, without
 | Form | Does |
 | - | - |
 | `/live-stock:herd <run-file>` | Preflight, reconcile, then loop until Done-when |
-| `/live-stock:herd <run-file> --once` | Preflight, reconcile, handle one batch of events, report the rows it would start, stop. Starts no lane |
+| `/live-stock:herd <run-file> --once` | Preflight, reconcile, handle one batch of events (it acts on them: merges, finishes, lane prompts), report the rows it would start, stop. Starts no lane |
 | `/live-stock:herd new <work-plan>` | Draft a run file from `assets/herd-run-template.md` (default `~/.claude/plans/herd-<plan-name>.md`) and stop for review |
 
 ## Scripts

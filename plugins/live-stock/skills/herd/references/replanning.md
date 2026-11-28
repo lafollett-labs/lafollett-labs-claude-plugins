@@ -37,12 +37,12 @@ for any change:
 
 ```text
 write the story file from the epic's story template: intent and acceptance criteria, no implementation steps
-for step in [create-standalone --file <file>,                  # prepares the file, creates the issue, reads it back
+for step in [create-standalone --file <file> --yes,            # unattended; prepares the file, creates the issue, reads it back
              reparent --key <new issue number> --parent <the story's epic issue number>]:
   result = sdlc:plan <step>
   if not (result ends with its "✅ Done" line and reports no readback findings):
     park the source row (Park) with sdlc:plan's last line, or "no result", as the Hold reason; stop here
-link it in the work plan per the plan's "on a finding while working":
+link it per the plan's "on a finding while working" (SKILL.md Preflight's default when the plan lacks it):
   new hard dependency -> add the new key (#<n>) to the row's Hard deps
   new outside blocker -> add a P row with an Owner and the rows it blocks
   open question       -> add a Q row with one Owner
@@ -56,7 +56,7 @@ The story file rides in a PR of its repo (Carries) when that repo is `pr-only`.
 
 ```text
 edit the story file: change only the affected criteria and scope lines
-result = sdlc:plan update --file <story file>      # prepares, publishes, reads the issue back; skip it when the row has no issue
+result = sdlc:plan update --file <story file> --yes      # unattended; prepares, publishes, reads the issue back; skip it when the row has no issue
 if not (result ends with its "✅ Done" line and reports no readback findings):
   park the row (Park) with sdlc:plan's last line, or "no result", as the Hold reason; stop here
 update the work plan row's cells you changed

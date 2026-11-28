@@ -14,7 +14,9 @@
  *         --key's) and the prompt (non-empty, not starting with "!" or "-"), then places the worktree at
  *         {dirname(checkout)}/.sdlc-worktrees/{basename(checkout)}/{key_slug}, starts claude in its root pane and sends
  *         the prompt.
- *         adopted = null       — a new branch off --base (default origin/main)
+ *         adopted = null       — a new branch off --base, else origin/HEAD's target (git symbolic-ref --short
+ *                                   refs/remotes/origin/HEAD), else origin/main; branch.<branch>.sdlc-base is set to
+ *                                   that base minus "origin/", so sdlc opens the PR against it
  *                 | branch        — the local branch exists without a worktree: a new worktree on it
  *                 | remote-branch — only origin/<branch> exists (as last fetched): a new worktree based on it
  *                 | worktree      — a worktree on the branch is already at the lane path: herdr opens it
@@ -22,7 +24,11 @@
  *                                   (moved_from), then herdr opens it
  *         Refused: a worktree at the lane path on another branch; a worktree already open in herdr; the branch checked
  *         out in the main checkout or in a worktree elsewhere with uncommitted changes.
- *         Prints { lane, pane_id, workspace_id, worktree, branch, adopted, moved_from?, session_id, model, effort }; model and effort are
+ *         An adopted branch keeps its sdlc-base untouched. --base must be a plain ref (git-conventions' safeRef: ≤ 255 of
+ *         letters, digits, . _ / -; starts with a letter or digit; no "..", "//", "/." or ".lock" component; no trailing
+ *         "/" or ".") and must not name HEAD.
+ *         Prints { lane, pane_id, workspace_id, worktree, branch, adopted, moved_from?, base, session_id, model, effort };
+ *         base = the ref a new branch was cut from, null when the branch was adopted. model and effort are
  *         the flag, else the config's lane_model / lane_effort, else null (the flag is left off). A failure after the
  *         worktree exists exits 2 with { error, ...those fields } (session_id is the id claude was started with).
  * restart refuses a working or blocked lane. An idle, done or unknown (wedged) lane gets /exit, waits to go, and
@@ -208,8 +214,27 @@ function placeWorktree(proj, wt, lane, opts) {
   const local = has(`refs/heads/${opts.branch}`);
   const remote = !local && has(`refs/remotes/origin/${opts.branch}`);
   const created = herdr(['worktree', 'create', '--cwd', proj.checkout, '--branch', opts.branch,
-    '--base', remote ? `origin/${opts.branch}` : opts.base || 'origin/main', '--path', wt, '--label', lane, '--no-focus']);
+    '--base', remote ? `origin/${opts.branch}` : opts.base, '--path', wt, '--label', lane, '--no-focus']);
   return { created, adopted: local ? 'branch' : remote ? 'remote-branch' : null };
+}
+
+// sdlc's plain-ref rule (git-conventions.js safeRef): safe as a git argument and as a config value.
+function safeRef(name) {
+  return typeof name === 'string' && name.length <= 255 && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(name)
+    && !/\.\.|\/\/|\/\.|\.lock(\/|$)|[/.]$/.test(name);
+}
+const baseBranch = (ref) => ref.replace(/^origin\//, '');
+
+function checkBase(base) {
+  if (!safeRef(base) || baseBranch(base) === 'HEAD') throw new HerdError(`--base "${base}" is not a plain ref name`);
+}
+
+// --base, else what origin/HEAD points at, else origin/main.
+function resolveBase(checkout, base) {
+  if (base !== undefined) return base;
+  const r = git(checkout, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']);
+  const head = r.status === 0 ? r.stdout.trim() : '';
+  return head.startsWith('origin/') && safeRef(head) && baseBranch(head) !== 'HEAD' ? head : 'origin/main';
 }
 
 function worktreePath(checkout, keySlug) {
@@ -256,6 +281,7 @@ function start(opts) {
   for (const f of ['lane', 'project', 'key', 'branch']) if (!opts[f]) throw new HerdError(`--${f} is required`);
   const lane = laneName(opts);
   const prompt = readPrompt();
+  if (opts.base !== undefined) checkBase(opts.base);
   const root = sdlcOrThrow();
   const key = ticketKey(root, opts.key);
   validateBranch(root, opts.branch, key);
@@ -264,12 +290,19 @@ function start(opts) {
   const d = config.defaults || {};
   const { model, effort } = laneModel(opts, d);
   const settings = laneSettings(d);
+  const base = resolveBase(proj.checkout, opts.base);
 
-  const { created, adopted, moved_from: movedFrom } = placeWorktree(proj, wt, lane, opts);
+  const { created, adopted, moved_from: movedFrom } = placeWorktree(proj, wt, lane, { ...opts, base });
   // From here on the worktree and pane exist: a failure still reports them, so the lane can be resumed or closed.
   const rec = { lane, pane_id: created.root_pane.pane_id, workspace_id: created.workspace.workspace_id, worktree: wt,
-    branch: opts.branch, adopted, ...(movedFrom && { moved_from: movedFrom }), session_id: crypto.randomUUID(), model, effort };
+    branch: opts.branch, adopted, ...(movedFrom && { moved_from: movedFrom }), base: adopted === null ? base : null,
+    session_id: crypto.randomUUID(), model, effort };
   try {
+    // A new branch records its base the way sdlc:implement does; the branch config is shared by every worktree.
+    if (adopted === null) {
+      const set = git(proj.checkout, ['config', `branch.${opts.branch}.sdlc-base`, baseBranch(base)]);
+      if (set.status !== 0) throw new HerdError(`git config branch.${opts.branch}.sdlc-base failed: ${(set.stderr || '').trim().split('\n')[0]}`);
+    }
     startClaude(lane, rec.pane_id, { settings, model, effort, session: rec.session_id });
     sendPrompt(lane, prompt);
   } catch (e) {

@@ -317,6 +317,48 @@ newcase; start_routes; g checkout -q -b feat/42-x
 run $START
 check "a branch checked out in the main checkout is refused" 2 "/main checkout|checkout itself/.test(o.error)"
 
+# --- start: the base a new branch is cut from ----------------------------------
+# sdlc_base <branch> — the branch's recorded sdlc-base in the checkout, empty when unset
+sdlc_base() { g config --get "branch.$1.sdlc-base"; }
+
+newcase; start_routes
+run $START
+check "with no --base and no origin/HEAD the base falls back to origin/main" 0 "o.base === 'origin/main' && o.adopted === null"
+named "the origin/main fallback records sdlc-base main" test "$(sdlc_base feat/42-x)" = main
+
+newcase; start_routes; g symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+run $START
+check "with no --base the base is origin/HEAD's target" 0 "o.base === 'origin/trunk'"
+named "the origin/HEAD base is what the worktree is cut from" logged '"worktree","create".*"--branch","feat/42-x","--base","origin/trunk"'
+named "the origin/HEAD base is recorded as sdlc-base without origin/" test "$(sdlc_base feat/42-x)" = trunk
+
+newcase; start_routes; g symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+run $START --base origin/release/2.0
+check "--base wins over origin/HEAD" 0 "o.base === 'origin/release/2.0'"
+named "a --base release branch is recorded as sdlc-base release/2.0" test "$(sdlc_base feat/42-x)" = release/2.0
+
+newcase; start_routes; g branch feat/42-x; g config branch.feat/42-x.sdlc-base release/1.0
+run $START --base origin/develop
+check "an adopted local branch reports no base" 0 "o.adopted === 'branch' && o.base === null"
+named "an adopted branch keeps its own sdlc-base" test "$(sdlc_base feat/42-x)" = release/1.0
+
+newcase; start_routes; g update-ref refs/remotes/origin/feat/42-x HEAD
+run $START
+check "a branch adopted from origin reports no base" 0 "o.adopted === 'remote-branch' && o.base === null"
+named "a branch adopted from origin gets no sdlc-base written" test -z "$(sdlc_base feat/42-x)"
+
+newcase; start_routes; mkdir -p "$(dirname "$WT")"; g worktree add -q -b feat/42-x "$WT"; herdr_worktrees "$WT|"
+run $START
+check "an adopted worktree reports no base" 0 "o.adopted === 'worktree' && o.base === null"
+named "an adopted worktree gets no sdlc-base written" test -z "$(sdlc_base feat/42-x)"
+
+for bad in 'origin/../x' '-x' 'a b' 'origin/main.lock' 'origin/' '.hidden' 'origin//main' 'origin/HEAD' 'HEAD' 'a;b'; do
+  newcase; start_routes
+  run $START --base "$bad"
+  check "start refuses --base '$bad'" 2 "/--base/.test(o.error) && /plain ref/.test(o.error)"
+  named "start --base '$bad' makes no herdr call" not logged '.'
+done
+
 # --- start: blocked gate -----------------------------------------------------
 newcase; route "worktree list" "worktree-list-none.json"; route "worktree create" "worktree-created.json"; route "agent start" "ok.json"; route "agent prompt" "ERR:err-blocked.json"
 run $START

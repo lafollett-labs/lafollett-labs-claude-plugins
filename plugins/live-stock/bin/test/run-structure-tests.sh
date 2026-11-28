@@ -101,16 +101,55 @@ check_triggers() {  # herd's description keeps its name and its /live-stock:herd
   [ -z "$miss" ] || echo "lost trigger phrases:$miss"
 }
 
-check_script_calls() {  # publish-body.js prepare and verify (by name or as node "{PB}") carry their required flags
-  local f line
+# script_usage <bin> — one |-separated row per Usage line of each herd-*.js header: script, subcommand (- for none),
+# required flags (outside [...]), every flag; a flag counts only when the script's source names it quoted, as parseArgs does
+script_usage() {
+  local js script sub req all f keep_req keep_all
+  for js in "$1"/herd-*.js; do
+    [ -f "$js" ] || continue
+    while IFS='|' read -r script sub req all; do
+      keep_req=""; keep_all=""
+      for f in $all; do grep -qF "'$f'" "$js" && keep_all="$keep_all $f"; done
+      for f in $req; do grep -qF "'$f'" "$js" && keep_req="$keep_req $f"; done
+      printf '%s|%s|%s|%s\n' "$script" "$sub" "$keep_req" "$keep_all"
+    done < <(awk -v s="${js##*/}" '
+      /^ \* +node herd-[a-z]+\.js/ {
+        line = $0; sub(/^ \* +node [^ ]+/, "", line)
+        split(line, t, " "); sb = (t[1] ~ /^[a-z]+$/) ? t[1] : "-"
+        req = ""; all = ""; d = 0; L = length(line)
+        for (k = 1; k <= L; k++) {
+          c = substr(line, k, 1)
+          if (c == "[") d++
+          else if (c == "]") d--
+          else if (substr(line, k, 2) == "--" && (k == 1 || substr(line, k - 1, 1) ~ /[ \[]/) && match(substr(line, k), /^--[a-z][a-z-]*/)) {
+            f = substr(line, k + 2, RLENGTH - 2); all = all " " f; if (d == 0) req = req " " f; k += RLENGTH - 1
+          }
+        }
+        printf "%s|%s|%s|%s\n", s, sb, req, all
+      }' "$js")
+  done
+}
+
+check_script_calls() {  # a herd-<x>.js call that passes a --flag names a Usage subcommand, only flags it takes, and (unless … elides some) all it requires
+  local f tbl
+  tbl="$(script_usage "$1/skills/herd/bin")"
   while IFS= read -r f; do
-    while IFS= read -r line; do
-      line="${line%% # *}"                    # a trailing pseudocode comment names a script; it does not run it
-      case "$line" in
-        *"publish-body.js prepare"*|*'{PB}" prepare'*) [[ "$line" == *--file* && "$line" == *--type* ]] || echo "${f#"$1"/}: $line" ;;
-        *"publish-body.js verify"*|*'{PB}" verify'*)   [[ "$line" == *--file* && "$line" == *--readback* ]] || echo "${f#"$1"/}: $line" ;;
-      esac
-    done < "$f"
+    grep -noE 'herd-[a-z]+\.js[^`;|]*' "$f" | awk -v file="${f#"$1"/}" '
+      FNR == NR { split($0, c, "|"); key = c[1] " " c[2]; known[key] = 1; req[key] = c[3]; all[key] = c[4] " "; next }
+      {
+        ln = $0; sub(/:.*/, "", ln); seg = $0; sub(/^[0-9]+:/, "", seg)
+        sub(/ # .*/, "", seg); sub(/ < .*/, "", seg)          # a pseudocode comment or a stdin redirect ends the call
+        if (seg !~ / \[?--[a-z]/) next                         # prose that names a script without calling it
+        split(seg, t, " "); sb = (t[2] ~ /^[a-z]+$/) ? t[2] : "-"; key = t[1] " " sb
+        if (!(key in known)) { print file ":" ln ": " t[1] " has no subcommand " sb; next }
+        rest = seg; used = " "
+        while (match(rest, /(^|[ \[])--[a-z][a-z-]*/)) {
+          f = substr(rest, RSTART, RLENGTH); sub(/^[ \[]*--/, "", f); used = used f " "
+          if (index(" " all[key], " " f " ") == 0) print file ":" ln ": " key " takes no --" f
+          rest = substr(rest, RSTART + RLENGTH)
+        }
+        if (seg !~ /…/) { m = split(req[key], rq, " "); for (j = 1; j <= m; j++) if (index(used, " " rq[j] " ") == 0) print file ":" ln ": " key " lacks --" rq[j] }
+      }' <(printf '%s\n' "$tbl") -
   done < <(instruction_docs "$1")
 }
 
@@ -159,7 +198,7 @@ run_check "references are one level deep" check_reference_depth "$PLUGIN"
 run_check "skills carry no ticket history" check_ticket_history "$PLUGIN"
 run_check "instructions use one term per concept" check_terms "$PLUGIN"
 run_check "herd keeps its /live-stock:herd triggers" check_triggers "$PLUGIN"
-run_check "publish-body.js prepare and verify calls carry their required flags" check_script_calls "$PLUGIN"
+run_check "herd script calls use real subcommands and flags" check_script_calls "$PLUGIN"
 run_check "sdlc:plan result gates continue only on the success shape" check_plan_result_gates "$PLUGIN"
 run_check "herd parks and escalates on a second changes-requested round" check_reviewer_twice "$PLUGIN"
 run_check "docs name no source platform, its tools, or an organisation drive" check_forbidden_terms "$PLUGIN"
@@ -187,10 +226,13 @@ if [ $# -eq 0 ]; then
   seed; echo 'needs a Gate-1 lock' >> "$H/references/gate-answers.md";              fires "Gate-1 term" check_terms
   seed; echo 'after the code review ends' >> "$H/references/lane-prompts.md";       fires "spaced code review" check_terms
   seed; sed -i.bak 's#"/live-stock:herd <run-file>"#"/sdlc:herd <run-file>"#' "$H/SKILL.md"; fires "lost /live-stock:herd trigger" check_triggers
-  seed; echo 'node publish-body.js prepare <file>' >> "$H/references/finish.md";    fires "bare publish-body prepare" check_script_calls
-  seed; echo 'node publish-body.js prepare --type Story --file <file>' >> "$H/references/finish.md"; silent "flagged publish-body prepare" check_script_calls
-  seed; echo 'sdlc:plan update --file <f>      # runs publish-body.js verify' >> "$H/references/finish.md"; silent "publish-body named in a comment" check_script_calls
-  seed; echo 'node "{PB}" verify --file x' >> "$H/references/finish.md";            fires "{PB} verify without --readback" check_script_calls
+  seed; echo 'v = herd-pr.js approve --pr octo#42 --reviewer octocat' >> "$H/SKILL.md";  fires "unknown herd-pr subcommand" check_script_calls
+  seed; echo 'r = herd-pr.js merge --pr octo#42 --reviewer octocat --sha <h> --admin' >> "$H/SKILL.md"; fires "flag the script does not take" check_script_calls
+  seed; echo 'r = herd-pr.js merge --pr octo#42 --reviewer octocat' >> "$H/SKILL.md";  fires "merge without its required --sha" check_script_calls
+  seed; sed -i.bak "s/'sha', //" "$H/bin/herd-pr.js";                                  fires "a header flag parseArgs no longer takes" check_script_calls
+  seed; echo 'r = herd-lane.js close --lane lane-42 --project octo --key 42 --pr 7' >> "$H/SKILL.md"; silent "a well-formed close" check_script_calls
+  seed; echo 'r = herd-lane.js start --branch <b> … < prompt' >> "$H/SKILL.md";         silent "an elided call skips the required-flag check" check_script_calls
+  seed; echo 'the review_round that herd-watch.js wait raises' >> "$H/SKILL.md";            silent "prose that names a script" check_script_calls
   seed; printf 'result = sdlc:plan update --file f --key K\nif result is "Done with errors":\n' >> "$H/references/finish.md"; fires "plan result gate on failure shapes" check_plan_result_gates
   seed; printf 'result = sdlc:plan update --file f --key K\nupdate the row\n' >> "$H/references/finish.md"; fires "plan result with no gate" check_plan_result_gates
   seed; printf 'result = sdlc:plan update --file f --key K\n  if not (result ends with its "✅ Done" line and reports no readback findings):\n' >> "$H/references/finish.md"; silent "plan result gate on the success shape" check_plan_result_gates

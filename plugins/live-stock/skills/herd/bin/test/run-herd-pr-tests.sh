@@ -75,7 +75,15 @@ other()     { route "^pr view $1 -R $REPO --json state\$" "{\"state\":\"$2\"}"; 
 commits()   { route "^api $P/commits --paginate --slurp\$" "[[$1]]"; }
 files_of()  { route "^api repos/$REPO/commits/$1\$" "{\"sha\":\"$1\",\"files\":$2}"; }
 reviews()   { route "^api $P/reviews --paginate --slurp\$" "[[$1]]"; }
-threads()   { route '^api graphql ' "$@"; }
+threads()   { route '^api graphql .*reviewThreads' "$@"; }
+# mq <reply> — the merge-queue check: mq yes | mq no | mq <token or JSON>
+mq() {
+  case "$1" in
+    yes) route '^api graphql .*mergeQueue' '{"data":{"repository":{"mergeQueue":{"id":"MQ_kwDOtest"}}}}' ;;
+    no)  route '^api graphql .*mergeQueue' '{"data":{"repository":{"mergeQueue":null}}}' ;;
+    *)   route '^api graphql .*mergeQueue' "$1" ;;
+  esac
+}
 checks()    { printf '{"state":"%s","head":"%s","checks":[],"failed_checks":[],"reason":"stub"}' "$1" "${2:-$A}" > "$CASE/fx/checks.json"; }
 merge_put() { route "^api $P/merge -X PUT " "$@"; }
 merged_view() { route "^pr view 42 -R $REPO --json mergeCommit\$" "$@"; }
@@ -185,7 +193,8 @@ ok_head; reviews "$(rv octocat APPROVED $A),$(rv octocat COMMENTED $A)"; run rea
 check "a later COMMENTED review keeps the approval" 0 "o.verdict === 'ready'"
 
 ok_head; reviews "$(rv octocat APPROVED $D)"; run ready --pr 'octo#42' --reviewer octocat
-check "an approval on a commit no longer in the PR (force-push) → wait" 0 "o.verdict === 'wait' && o.checks.approval.ok === false"
+check "an approval on a commit no longer in the PR (force-push) → wait, saying so" 0 \
+  "o.verdict === 'wait' && o.checks.approval.ok === false && o.reasons[0] === 'octocat\'s approval is on a commit no longer in the PR (dddddddd)'"
 
 ok_head; checks failed; run ready --pr 'octo#42' --reviewer octocat
 check "failed checks → blocked" 0 "o.verdict === 'blocked' && o.checks.ci.ok === false && o.reasons.includes('checks at the head are failed')"
@@ -311,7 +320,7 @@ check "a commit without a file list → exit 2" 2 "/no file list/.test(o.error)"
 ok_head; route "^api $P/reviews --paginate --slurp\$" RATE; run ready --pr 'octo#42' --reviewer octocat
 check "an unreadable review list → exit 2" 2 "/rate limit/.test(o.error) && o.verdict === undefined"
 
-ok_head; route '^api graphql ' EXIT:1; run ready --pr 'octo#42' --reviewer octocat
+ok_head; route '^api graphql .*reviewThreads' EXIT:1; run ready --pr 'octo#42' --reviewer octocat
 check "an unreadable thread list → exit 2" 2 "/failed/.test(o.error) && o.verdict === undefined"
 
 ok_head; rm "$CASE/fx/checks.json"; run ready --pr 'octo#42' --reviewer octocat
@@ -344,7 +353,7 @@ cat > "$CASE/fx/routes" <<ROUTES
 ^pr view 42 -R $REPO --json number,	pr.json
 ^api $P/commits --paginate --slurp\$	commits.json
 ^api $P/reviews --paginate --slurp\$	reviews.json
-^api graphql 	threads.json
+^api graphql .*reviewThreads	threads.json
 ^api repos/$REPO/commits/$C5\$	commit-$C5.json
 ^api repos/$REPO/commits/$C4\$	commit-$C4.json
 ^api repos/$REPO/commits/$C3\$	commit-$C3.json
@@ -396,27 +405,45 @@ run merge --pr 'octo#42' --reviewer octocat --sha "$A"
 check "merge when not ready → refused with the verdict" 0 "o.result === 'refused' && o.verdict === 'wait' && /has not approved/.test(o.reason) && o.base === 'main'"
 [ "$(writes)" = 0 ] && pass "no merge call when not ready" || fail "no merge call when not ready — $(calls)"
 
-ok_head; merge_put 'HTTPF:405:{"message":"Repository rule violations found\n\nChanges must be made through the merge queue"}'
+ok_head; merge_put 'HTTPF:405:{"message":"Repository rule violations found"}'; mq yes
 route "^pr merge 42 " '{}'
 run merge --pr 'octo#42' --reviewer octocat --sha "$A"
-check "a 405 naming a merge queue → queued" 0 "o.result === 'queued' && o.merge_commit_sha === undefined"
+check "a 405 on a base with a merge queue → queued, whatever the message says" 0 "o.result === 'queued' && o.merge_commit_sha === undefined"
+calls | grep 'mergeQueue' | grep -q '"-f","branch=main"' && calls | grep 'mergeQueue' | grep -q '"-f","owner=octo-org"' \
+  && pass "the merge-queue check asks about the PR's base branch" || fail "the merge-queue check asks about the PR's base branch — $(calls)"
 calls | grep '"merge","42"' | grep -q "\"--auto\",\"--match-head-commit\",\"$A\",\"--squash\"" \
   && pass "the queue call pins the head and the merge method" || fail "the queue call pins the head and the merge method — $(calls)"
 
-ok_head; merge_put 'HTTPF:405:{"message":"Changes must be made through the merge queue"}'
+ok_head; merge_put 'HTTPF:405:{"message":"Changes must be made through the merge queue"}'; mq yes
 route "^pr merge 42 " 'ERRF:1:GraphQL: Auto merge is not allowed for this repository (enablePullRequestAutoMerge)'
 run merge --pr 'octo#42' --reviewer octocat --sha "$A"
 check "a failed merge-queue enqueue → refused with gh's message" 0 "o.result === 'refused' && /merge queue/.test(o.reason) && /Auto merge is not allowed/.test(o.reason)"
 
-ok_head; merge_put 'HTTPF:405:{"message":"Changes must be made through the merge queue"}'
+ok_head; merge_put 'HTTPF:405:{"message":"Changes must be made through the merge queue"}'; mq yes
 route "^pr merge 42 " RATE
 run merge --pr 'octo#42' --reviewer octocat --sha "$A"
 check "a rate-limited merge-queue enqueue → exit 2" 2 "/rate limit/.test(o.error)"
 
-ok_head; merge_put 'HTTPF:405:{"message":"Required status check \"test\" is expected."}'
+ok_head; merge_put 'HTTPF:405:{"message":"Required status check \"test\" is expected."}'; mq no
 run merge --pr 'octo#42' --reviewer octocat --sha "$A"
 check "another 405 → refused with GitHub's message" 0 "o.result === 'refused' && /405/.test(o.reason) && /Required status check/.test(o.reason)"
-calls | grep -q '"merge","42"' && fail "no merge-queue call for another 405" || pass "no merge-queue call for another 405"
+calls | grep -q '"merge","42"' && fail "no enqueue for a 405 on a base without a merge queue" || pass "no enqueue for a 405 on a base without a merge queue"
+
+ok_head; merge_put 'HTTPF:405:{"message":"Changes must be made through the merge queue"}'; mq no
+run merge --pr 'octo#42' --reviewer octocat --sha "$A"
+check "a 405 that names a merge queue on a base without one → refused, not guessed" 0 "o.result === 'refused' && /HTTP 405/.test(o.reason)"
+
+ok_head; pr OPEN "$A" false MERGEABLE CLEAN release/2.x; merge_put 'HTTPF:405:{"message":"x"}'; mq yes; route "^pr merge 42 " '{}'
+run merge --pr 'octo#42' --reviewer octocat --sha "$A"
+check "the merge-queue check follows a non-main base" 0 "o.result === 'queued' && o.base === 'release/2.x'"
+calls | grep 'mergeQueue' | grep -q '"-f","branch=release/2.x"' && pass "the merge-queue check names release/2.x" || fail "the merge-queue check names release/2.x — $(calls)"
+
+for bad in EXIT:1 RATE '{"errors":[{"message":"Field mergeQueue does not exist"}]}' '{"data":{"repository":null}}'; do
+  ok_head; merge_put 'HTTPF:405:{"message":"Changes must be made through the merge queue"}'; mq "$bad"; route "^pr merge 42 " '{}'
+  run merge --pr 'octo#42' --reviewer octocat --sha "$A"
+  check "an unreadable merge-queue check ($bad) → exit 2, never queued or refused" 2 "typeof o.error === 'string' && !/non-JSON/.test(o.error) && o.result === undefined"
+  calls | grep -q '"merge","42"' && fail "no enqueue when the merge-queue check fails ($bad)" || pass "no enqueue when the merge-queue check fails ($bad)"
+done
 
 ok_head; merge_put 'HTTPF:422:{"message":"Merge method squash is not allowed on this repository"}'
 run merge --pr 'octo#42' --reviewer octocat --sha "$A"

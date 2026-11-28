@@ -49,7 +49,11 @@
  * Environment: HERD_CONFIG, HERD_GH, HERD_POLL_MS (default 10000), HERD_DEBOUNCE_MS (default 6000),
  *              HERD_GH_TIMEOUT_MS (default 60000), HERD_CI_NONE_MS (default 120000).
  *
- * Exit codes: 0 — result printed; 2 — usage error or invalid config, with { "error": "<reason>" } on stdout.
+ * Exit codes: 0 — result printed; 2 — with { "error": "<reason>" } on stdout: a usage error; an invalid config;
+ *             herdr answering JSON that does not parse or lacks its result, at any time; herdr not runnable or failing
+ *             while snapshot or the first baseline reads it; a run-dir or watch-baseline.json that cannot be written,
+ *             or a watch-baseline.json that does not parse (delete it to rebaseline). gh failures never exit 2: they
+ *             land in degraded[].
  */
 'use strict';
 
@@ -77,8 +81,15 @@ const RUN_FIELDS = 'databaseId,status,conclusion,workflowName,event,url';
 const DECISIVE = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
 const LANE_SLUG = /^(?:[0-9]+|[A-Z][A-Z0-9]*-[0-9]+)$/;
 const REF = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-const THREADS_QUERY = 'query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){'
-  + 'pullRequest(number:$number){comments{totalCount} reviewThreads(first:100){totalCount nodes{isResolved comments{totalCount}}}}}}';
+const THREAD_PAGES = 50;
+const THREADS_QUERY = 'query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){'
+  + 'pullRequest(number:$number){comments{totalCount} reviewThreads(first:100,after:$after){'
+  + 'nodes{isResolved comments{totalCount}} pageInfo{hasNextPage endCursor}}}}}';
+
+// herdr answering what is not its JSON: never degraded, since every later read of it would be guesswork.
+class HerdrReplyError extends HerdError {}
+// A HerdError that lands in degraded[] instead of ending the run.
+const degradable = (e) => e instanceof HerdError && !(e instanceof HerdrReplyError);
 
 function herdr(args) {
   const r = spawnSync('herdr', args, { encoding: 'utf8', timeout: HERDR_TIMEOUT_MS, killSignal: 'SIGKILL' });
@@ -86,14 +97,27 @@ function herdr(args) {
   return r;
 }
 
+// herdr's .result.<key> from a successful call's stdout.
+function herdrResult(args, r, key, ok) {
+  let v;
+  try {
+    v = JSON.parse(r.stdout).result[key];
+  } catch (e) {
+    throw new HerdrReplyError(`herdr ${args.join(' ')} returned malformed JSON: ${e.message}`);
+  }
+  if (!ok(v)) throw new HerdrReplyError(`herdr ${args.join(' ')} returned no result.${key}`);
+  return v;
+}
+
 // One lane's state, or null when herdr does not know it.
 function readLane(name) {
-  const r = herdr(['agent', 'get', name]);
+  const args = ['agent', 'get', name];
+  const r = herdr(args);
   if (r.status !== 0) {
     if (/agent_not_found/.test(r.stderr || '')) return null;
     throw new HerdError(`herdr agent get ${name} failed: ${(r.stderr || '').trim().split('\n')[0]}`);
   }
-  const a = JSON.parse(r.stdout).result.agent;
+  const a = herdrResult(args, r, 'agent', (v) => v && typeof v === 'object');
   let parked = false;
   if (a.agent_status === 'done' || a.agent_status === 'idle') {
     const t = herdr(['agent', 'read', name, '--source', 'recent', '--lines', '12']);
@@ -107,7 +131,7 @@ const GONE = { status: 'gone', pane_id: null, completion_seq: null, state_change
 function readAgents() {
   const r = herdr(['agent', 'list']);
   if (r.status !== 0) throw new HerdError(`herdr agent list failed: ${(r.stderr || '').trim().split('\n')[0]}`);
-  return JSON.parse(r.stdout).result.agents
+  return herdrResult(['agent', 'list'], r, 'agents', (v) => Array.isArray(v) && v.every((a) => a && typeof a.pane_id === 'string'))
     .map((a) => ({ pane_id: a.pane_id, name: a.name, cwd: a.cwd }))
     .sort((x, y) => x.pane_id.localeCompare(y.pane_id));
 }
@@ -221,22 +245,37 @@ function headChecks(ctx, repo, number) {
   return { state: 'passed' };
 }
 
+// Every review thread of a PR, page by page up to THREAD_PAGES pages; more is degraded, never a guess.
+function reviewThreads(ctx, repoFull, number) {
+  const [owner, repo] = repoFull.split('/');
+  const threads = [];
+  let issueComments = null;
+  let after = null;
+  for (let page = 0; page < THREAD_PAGES; page++) {
+    const data = ctx.graphql(THREADS_QUERY, { owner, repo, number, ...(after ? { after } : {}) });
+    const pr = data.repository && data.repository.pullRequest;
+    if (!pr || !pr.reviewThreads || !Array.isArray(pr.reviewThreads.nodes)) throw new HerdError(`GitHub GraphQL found no PR #${number} in ${repoFull}`);
+    if (issueComments === null) issueComments = pr.comments.totalCount;
+    threads.push(...pr.reviewThreads.nodes);
+    const info = pr.reviewThreads.pageInfo;
+    if (!info || !info.hasNextPage) return { issueComments, threads };
+    if (!info.endCursor) throw new HerdError(`GitHub GraphQL gave no cursor past page ${page + 1} of PR #${number}'s review threads`);
+    after = info.endCursor;
+  }
+  throw new HerdError(`PR #${number} has more than ${THREAD_PAGES * 100} review threads`);
+}
+
 // One open PR's review, thread and checks state.
 function openPr(ctx, p, number) {
   const v = ctx.json(['pr', 'view', String(number), '-R', p.repo, '--json', 'number,state,headRefOid,mergeable,mergeStateStatus']);
   if (!v || typeof v.headRefOid !== 'string' || typeof v.state !== 'string') throw new HerdError(`gh pr view ${number} returned no head`);
   const reviews = ctx.pages(`repos/${p.repo}/pulls/${number}/reviews`);
-  const [owner, repo] = p.repo.split('/');
-  const data = ctx.graphql(THREADS_QUERY, { owner, repo, number });
-  const pr = data.repository && data.repository.pullRequest;
-  if (!pr) throw new HerdError(`GitHub GraphQL found no PR #${number} in ${p.repo}`);
-  const threads = pr.reviewThreads.nodes;
-  if (pr.reviewThreads.totalCount > threads.length) throw new HerdError(`PR #${number} has more than ${threads.length} review threads`);
+  const { issueComments, threads } = reviewThreads(ctx, p.repo, number);
   return {
     sha: v.headRefOid,
     state: v.state,
     status: v.mergeable === 'UNKNOWN' || v.mergeStateStatus === 'UNKNOWN' ? 'pending' : v.mergeStateStatus,
-    comments: pr.comments.totalCount + threads.reduce((n, t) => n + t.comments.totalCount, 0)
+    comments: issueComments + threads.reduce((n, t) => n + t.comments.totalCount, 0)
       + reviews.filter((r) => r && typeof r.body === 'string' && r.body.trim()).length,
     resolved: threads.every((t) => t.isResolved),
     approved_by: approvers(reviews),
@@ -271,7 +310,7 @@ function fetchPrs(ctx, lanes, agents, prev = []) {
     try {
       out.push(...lanePrs(ctx, lane, agent.cwd, mine));
     } catch (e) {
-      if (!(e instanceof HerdError)) throw e;
+      if (!degradable(e)) throw e;
       ctx.degrade(`prs ${lane}: ${e.message}`);
       ctx.unread.add(`prs:${lane}`);
       out.push(...mine);
@@ -291,7 +330,7 @@ function fetchReviewRequests(ctx, prev = []) {
       .filter((pr) => pr.author && allowed.has(String(pr.author.login).toLowerCase()))
       .map((pr) => ({ ref: `${pr.repository.nameWithOwner}#${pr.number}`, url: pr.url, state: pr.state, author: pr.author.login }));
   } catch (e) {
-    if (!(e instanceof HerdError)) throw e;
+    if (!degradable(e)) throw e;
     ctx.degrade(`review requests: ${e.message}`);
     ctx.unread.add('review_requests');
     return prev;
@@ -342,7 +381,7 @@ function fetchCi(ctx, entries, prev = {}) {
         out[e.key] = { sha, status, empty_since: since };
       }
     } catch (err) {
-      if (!(err instanceof HerdError)) throw err;
+      if (!degradable(err)) throw err;
       ctx.degrade(`ci ${e.key}: ${err.message}`);
       if (e.key in prev) out[e.key] = prev[e.key];
     }
@@ -393,7 +432,7 @@ function reviewRounds(w) {
         rec.review_round = round;
       }
     } catch (e) {
-      if (!(e instanceof HerdError)) throw e;
+      if (!degradable(e)) throw e;
       w.ctx.degrade(`lane ${a.name}: ${e.message}`);
     }
   }
@@ -443,7 +482,7 @@ function laneEvents(w) {
         w.seen.delete(name);
       }
     } catch (e) {
-      if (!(e instanceof HerdError)) throw e;
+      if (!degradable(e)) throw e;
       w.ctx.degrade(`lane ${name}: ${e.message}`);
     }
   }
@@ -512,7 +551,7 @@ function slowEvents(w) {
     for (const a of agents) if (!known.has(a.pane_id)) events.push({ type: 'agent_new', ...a });
     state.agents = agents;
   } catch (e) {
-    if (!(e instanceof HerdError)) throw e;
+    if (!degradable(e)) throw e;
     ctx.degrade(`agents: ${e.message}`);
   }
   events.push(...reviewRounds(w));
@@ -566,10 +605,28 @@ function wait(opts) {
   const ctx = githubContext(config);
   const ci = parseCi(opts, config);
 
-  fs.mkdirSync(opts['run-dir'], { recursive: true });
   const file = path.join(opts['run-dir'], 'watch-baseline.json');
-  const save = (st) => fs.writeFileSync(file, `${JSON.stringify(st)}\n`);
-  let state = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+  // written beside itself and renamed into place, so a kill or a full disk never leaves half a baseline
+  const save = (st) => {
+    const tmp = `${file}.${process.pid}.tmp`;
+    try {
+      fs.mkdirSync(opts['run-dir'], { recursive: true });
+      fs.writeFileSync(tmp, `${JSON.stringify(st)}\n`);
+      fs.renameSync(tmp, file);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch { /* never written */ }
+      throw new HerdError(`baseline ${file} not writable: ${e.message}`);
+    }
+  };
+  let state = null;
+  if (fs.existsSync(file)) {
+    try {
+      state = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('not a JSON object');
+    } catch (e) {
+      throw new HerdError(`baseline ${file} unreadable: ${e.message}; delete it to rebaseline`);
+    }
+  }
   if (!state) save(state = takeBaseline(lanes, ctx, ci));
   state = { lanes: {}, agents: [], prs: [], review_requests: [], ci: {}, unread: [], ...state }; // a baseline written by an older watcher lacks some parts
 

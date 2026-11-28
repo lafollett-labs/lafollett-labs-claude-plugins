@@ -18,7 +18,7 @@
 
 `story_file` is the `docs/epics/` file for the row: the story code's file, or the file whose `.github-state.json` maps the row's issue; none for a bare issue with no file.
 
-Each step is logged in Decisions as `finish <KEY> step <n> done` when it completes, so a finish interrupted by a compaction resumes where it stopped. Every step checks its own result first (ticks present, body matches, issue closed, line posted) and skips what is already done.
+Each step is logged in Decisions as `finish | <KEY> | step <n> done` when it completes, so a finish interrupted by a compaction resumes where it stopped. Every step checks its own result first (ticks present, body matches, issue closed, line posted) and skips what is already done.
 
 ```text
 require: the PR is merged and the base CI is green or main_ci is false (a release workflow, when the story ships one, has finished)
@@ -26,7 +26,7 @@ State finishing; write it to the run file now     # a compaction inside finish t
 unproven = Definition of Done items this run cannot prove (a manual deploy step, a human settings change), from story_file, else from the issue body
 for n, step in [1 tick the story file, 2 sync the issue body and verify the readback, 3 close the issue as completed,
                 4 post the Done line, 5 run the plan's finish(row), 6 record carries for the next PR of that repo]:
-  if Decisions has "finish <KEY> step <n> done": continue
+  if Decisions has "finish | <KEY> | step <n> done": continue
   if unproven and n in (3, 4, 5):
     skip it                                   # the story is not done until the stand-in settles the rest
     continue
@@ -34,7 +34,7 @@ for n, step in [1 tick the story file, 2 sync the issue body and verify the read
   if the step stopped (sdlc:plan update did not end with its "✅ Done" line free of readback findings, the issue could not be closed as completed, a gh error):
     State parked; Hold "<KEY> finish stopped at step <n>: <reason>"; add it to the "For <stand-in>" list
     escalate to the stand-in once (Escalation message); return
-  log "finish <KEY> step <n> done"
+  log "finish | <KEY> | step <n> done"
 if unproven:
   State parked; Hold "<KEY> DoD <items> need <stand-in>"; add each item to the "For <stand-in>" list
 else:
@@ -64,7 +64,7 @@ Delegate the edit to a haiku / low subagent; read the diff before committing.
 Skip this step, logging it done, when the row has no issue or no story_file.
 
 ```text
-result = sdlc:plan update --file <story file>      # publishes the body, then reads the issue back
+result = sdlc:plan update --file <story file> --yes      # unattended: publishes past prepare problems, then reads the issue back
 if not (result ends with its "✅ Done" line and reports no readback findings):
   the step stopped (Order, failure exit) with sdlc:plan's last line, or "no result", as its reason
 ```
@@ -125,4 +125,4 @@ Run `node <skill-dir>/bin/herd-usage.js` with a `--session` for every session id
 
 ## Default without a plan finish
 
-With no plan `finish(row)`, run Order with step 5 skipped and log "default used for finish" in Decisions.
+With no plan `finish(row)`, run Order with step 5 skipped and log "default | - | used for finish" in Decisions.

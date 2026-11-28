@@ -136,7 +136,7 @@ prs() {
       w(`reviews-${n}.json`, [(reviews || "").split("+").filter(Boolean).map((r, i) => { const [login, st, body] = r.split(":");
         return { user: { login }, state: st, body: body || "", commit_id: sha, submitted_at: `2026-01-01T00:0${i}:00Z` }; })]);
       const t = (threads || "").split("+").filter(Boolean).map((x) => ({ isResolved: x[0] === "r", comments: { totalCount: +x.slice(1) } }));
-      w(`gql-${n}.json`, { data: { repository: { pullRequest: { comments: { totalCount: +comments || 0 }, reviewThreads: { totalCount: t.length, nodes: t } } } } });
+      w(`gql-${n}.json`, { data: { repository: { pullRequest: { comments: { totalCount: +comments || 0 }, reviewThreads: { nodes: t, pageInfo: { hasNextPage: false, endCursor: null } } } } } });
       w(`checks-${n}.json`, (ck[checks] || []).map((b, i) => ({ name: `job${i}`, state: b.toUpperCase(), bucket: b })));
     }' "$CASE/fx" "$@"
   groute "$PRLIST_RE" prlist.json
@@ -312,13 +312,33 @@ run snapshot --lanes lane-a
 check "a gh pr checks failure that is not 'no checks' degrades instead of reading none" 0 \
   "o.prs.length === 0 && o.degraded.some((d) => /lane-a/.test(d))"
 
+# thread_page <file> <resolved> <unresolved> <next cursor or ""> — one GraphQL page of review threads, 1 comment each
+thread_page() {
+  "$NODE" -e 'const [f, r, u, cur] = process.argv.slice(1);
+    const t = [...Array(+r).fill(true), ...Array(+u).fill(false)].map((isResolved) => ({ isResolved, comments: { totalCount: 1 } }));
+    require("fs").writeFileSync(f, JSON.stringify({ data: { repository: { pullRequest: { comments: { totalCount: 2 },
+      reviewThreads: { nodes: t, pageInfo: { hasNextPage: Boolean(cur), endCursor: cur || null } } } } } }))' "$@"
+}
 newcase
 lane lane-a working:null; lane_wt
-prs "5|OPEN|aaaa0005|CLEAN|0|r1|"
-"$NODE" -e 'const f = process.argv[1]; const o = require(f); o.data.repository.pullRequest.reviewThreads.totalCount = 101; require("fs").writeFileSync(f, JSON.stringify(o))' "$CASE/fx/gql-5.json"
+prs "5|OPEN|aaaa0005|CLEAN|0||"
+thread_page "$CASE/fx/gql-5.json" 100 0 CUR1; thread_page "$CASE/fx/gql-5-p2.json" 49 1 ""
+groute "^api graphql .* -F number=5 -f after=CUR1$" "gql-5-p2.json"
 run snapshot --lanes lane-a
-check "more review threads than one page degrades instead of reading resolved" 0 \
-  "o.prs.length === 0 && o.degraded.some((d) => /review threads/.test(d))"
+check "150 review threads over two pages are all read: the open one on page 2 counts" 0 \
+  "o.prs.length === 1 && o.prs[0].resolved === false && o.prs[0].comments === 152 && o.degraded.length === 0"
+[ "$(grep -c '"graphql"' "$CASE/fx/gh-calls.log")" -eq 2 ] && grep -q '"after=CUR1"' "$CASE/fx/gh-calls.log" \
+  && pass "the second thread page is asked for with the first page's cursor" || fail "the second thread page is asked for with the first page's cursor"
+
+newcase
+lane lane-a working:null; lane_wt
+prs "5|OPEN|aaaa0005|CLEAN|0||"
+thread_page "$CASE/fx/gql-5.json" 100 0 CURX
+groute "^api graphql .* -F number=5 -f after=CURX$" "gql-5.json"
+run snapshot --lanes lane-a
+check "review threads past the page cap degrade instead of reading resolved" 0 \
+  "o.prs.length === 0 && o.degraded.some((d) => /more than 5000 review threads/.test(d))"
+[ "$(grep -c '"graphql"' "$CASE/fx/gh-calls.log")" -eq 50 ] && pass "the thread pages stop at the cap" || fail "the thread pages stop at the cap"
 
 newcase
 lane lane-a working:null; lane_wt
@@ -394,6 +414,41 @@ run wait --lanes lane-a --run-dir "$CASE/run/nested" --max 0.3
 check "a quiet wait ends in a heartbeat at --max" 0 \
   "o.events.length === 1 && o.events[0].type === 'heartbeat' && o.events[0].quiet_min === 0 && o.waited_s >= 0.3 && Array.isArray(o.degraded)"
 if [ -f "$CASE/run/nested/watch-baseline.json" ]; then pass "the first wait creates the run-dir and its baseline"; else fail "the first wait creates the run-dir and its baseline"; fi
+[ -z "$(find "$CASE/run/nested" -name '*.tmp')" ] && pass "the baseline is renamed into place, no temp file left" || fail "the baseline is renamed into place, no temp file left"
+
+newcase
+lane lane-a working:null; base
+printf '{"lanes":{"lane-a":' > "$CASE/run/watch-baseline.json"
+wait_run
+check "a truncated baseline exits 2 naming the file and the way out" 2 \
+  "/^baseline .*watch-baseline\.json unreadable: .*; delete it to rebaseline$/.test(o.error) && !/internal error/.test(o.error)"
+printf '[]' > "$CASE/run/watch-baseline.json"
+wait_run
+check "a baseline that is not a JSON object exits 2 the same way" 2 "/unreadable: not a JSON object/.test(o.error)"
+
+newcase
+lane lane-a working:null
+: > "$CASE/runfile"
+run wait --lanes lane-a --run-dir "$CASE/runfile/sub" --max 0
+check "a run-dir that cannot be created exits 2 naming the baseline" 2 "/^baseline .* not writable: /.test(o.error)"
+
+newcase
+lane lane-a working:null; base
+printf 'not json' > "$CASE/fx/garbage.txt"; hroute "agent get lane-a" garbage.txt
+wait_run
+check "malformed herdr JSON during a wait exits 2 naming the herdr command" 2 \
+  "/^herdr agent get lane-a returned malformed JSON/.test(o.error) && !/internal error/.test(o.error)"
+
+newcase
+lane lane-a working:null
+printf '{"result":{}}' > "$CASE/fx/no-agents.json"; hroute "agent list" no-agents.json
+run snapshot --lanes lane-a
+check "a herdr reply without its result exits 2 naming the herdr command" 2 "/^herdr agent list returned no result\.agents/.test(o.error)"
+newcase
+lane lane-a working:null; base
+printf '{"result":{"agents":[{}]}}' > "$CASE/fx/odd-agents.json"; hroute "agent list" odd-agents.json
+wait_run
+check "a herdr agent list without pane ids during a wait exits 2, not degraded" 2 "/^herdr agent list returned no result\.agents/.test(o.error)"
 
 # --- wait: lane events -----------------------------------------------------
 newcase

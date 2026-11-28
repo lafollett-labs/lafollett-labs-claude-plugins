@@ -27,7 +27,7 @@ Run a work plan's stories as lanes until the run file's Done-when holds. herd de
 | work plan | The project's shared plan of story rows and the operations in its "How Agents Use This Plan" section |
 | run file | herd's own state for one run, made from [assets/herd-run-template.md](assets/herd-run-template.md) |
 | live lane | A lanes-table row whose State is implementing, reviewing or pr-open. Only live lanes go to `snapshot` and `wait` |
-| base branch | The PR's target branch (`baseRefName`; `base` in `herd-pr.js` results) |
+| base branch | The lane's real base: the PR's target branch (`baseRefName`; `base` in `herd-pr.js` results) once it has a PR, else the row's Base. Never assume `main`. The pin and Main green take it only from `herd-pr.js`'s `base` or the PR's `baseRefName` |
 | settled row | A row that is finished or closed, or parked with only stand-in items open |
 | Slack on | For a project: sdlc's merged settings for its checkout (`~/.claude/sdlc.json`, then `<checkout>/.claude/sdlc.json`) have `slack.enabled` true and a non-empty `slack.channel` |
 
@@ -36,7 +36,7 @@ Run a work plan's stories as lanes until the run file's Done-when holds. herd de
 | Form | Does |
 | - | - |
 | `/live-stock:herd <run-file>` | Preflight, reconcile, then loop until Done-when |
-| `/live-stock:herd <run-file> --once` | Preflight, reconcile, handle one batch of events, report the rows it would start, stop. Starts no lane |
+| `/live-stock:herd <run-file> --once` | Preflight, reconcile, handle one batch of events (it acts on them: merges, finishes, lane prompts), report the rows it would start, stop. Starts no lane |
 | `/live-stock:herd new <work-plan>` | Draft a run file from the template next to the plan's run files (`~/.claude/plans/herd-<plan-name>.md` by default) and stop for the engineer to review it |
 
 ## Scripts
@@ -49,7 +49,7 @@ Run a work plan's stories as lanes until the run file's Done-when holds. herd de
 | `node <skill-dir>/bin/herd-pr.js ready --pr <project>#<n> --reviewer <login> [--after <project>#<n>]...` | Merge verdict: `ready`, `wait`, `hold` or `blocked`, with `head` and `reasons[]` |
 | `node <skill-dir>/bin/herd-pr.js merge … --sha <head>` | Merge pinned to the checked head with the project's `merge_method`: `merged`, `queued` (merge queue or auto-merge) or `refused` |
 | `node <skill-dir>/bin/herd-pr.js rerequest --pr <project>#<n> --user <login>` | Re-request a reviewer, keeping every current one |
-| `node <skill-dir>/bin/herd-lane.js start --lane <n> --project <p> --key <KEY> --branch <b> [--model m] [--effort e] < prompt` | Worktree (new, or the story's existing branch or worktree adopted), session, first prompt |
+| `node <skill-dir>/bin/herd-lane.js start --lane <n> --project <p> --key <KEY> --branch <b> [--base <ref>] [--model m] [--effort e] < prompt` | Worktree (new, or the story's existing branch or worktree adopted), session, first prompt. Without `--base` it cuts a new branch from origin/HEAD's branch and records `branch.<b>.sdlc-base`; `base` is the ref it cut from, or null when it adopted the branch |
 | `node <skill-dir>/bin/herd-lane.js restart --lane <n> [--pane <id>] [--resume <uuid>] [--model m] [--effort e] < prompt` | Fresh or resumed session in the lane's pane |
 | `node <skill-dir>/bin/herd-lane.js close --lane <n> --project <p> --key <KEY> --pr <n>` | Exit and remove the worktree, only when worktree-cleanup classifies it `safe` |
 | `node <skill-dir>/bin/herd-usage.js --session <uuid> [--session <uuid>]...` | A lane's tokens (input, cache write, cache read, output) and assistant turns, in total and by model, subagents included |
@@ -65,8 +65,8 @@ for project in run's Projects in play: log "preflight | <project> | Slack on|off
 if (any project is Slack on, or the run file sets a Progress channel or a Slack user id) and the Slack MCP tools are not loadable (ToolSearch):
   report and stop
 read the work plan's "How Agents Use This Plan"
-for op in [on every session, next_work, start, on opening a pull request, finish, post_progress]:
-  if the plan does not define op: use its default (table below) and log "default used for <op>" in Decisions
+for op in [on every session, next_work, start, on opening a pull request, on a finding while working, finish, post_progress]:
+  if the plan does not define op: use its default (table below) and log "default | - | used for <op>" in Decisions
 print: /goal <run.Done-when>        # the engineer sets it; herd stops when it holds
 ```
 
@@ -76,6 +76,7 @@ print: /goal <run.Done-when>        # the engineer sets it; herd stops when it h
 | `next_work(owner)` | The run file's Candidates in order; Next startable skips what cannot start |
 | `start(row)` | When the row has an issue: `gh issue edit <n> -R <repo> --add-assignee <stand-in login>`; `sdlc:implement` sets `status:in-progress` |
 | `on opening a pull request` | Nothing beyond `sdlc:pull-request`'s own announcement |
+| `on a finding while working` | Add the new key to the run file's Candidates; a blocker or open question for someone else goes to the "For <stand-in>" list |
 | `finish(row)` | [references/finish.md](references/finish.md) without the plan steps |
 | `post_progress` | Skip |
 
@@ -113,7 +114,7 @@ for row in run.lanes where row.State not in (queued, closed):
         failed | canceled                      -> Park on main (below)
         none, and the PR merged > 15 min ago   -> Park on main (below) with status "no CI run"
         else                                   -> nothing; the next ci_done or heartbeat asks again
-  if state == finishing: finish(row)               # resumes at the first step without "finish <KEY> step <n> done"
+  if state == finishing: finish(row)               # resumes at the first step without "finish | <KEY> | step <n> done"
   if (state == finished and the row has no "lane kept" Hold) or the row's "lane kept" Hold was cleared: Close the lane (Merge)
   if state == parked and the row's "<KEY> merge refused" Hold was cleared: State pr-open; Merge
   if state == pr-open and (the row's "<KEY> announcement not posted" Hold was cleared, or it is still held and row.Announcement is set):
@@ -153,13 +154,13 @@ loop:
     branch = git-conventions.js new --type <feat|fix|chore> --key <row.Key> < <its issue title, else its story file's H1>   # <sdlc>/bin, from herd-env
     if not branch.ok: report branch.error; mark the row parked with a Hold "<KEY> branch: <branch.error>"; continue
     start(row)                                         # the plan's operation
-    r = herd-lane.js start --branch <branch.branch> … < references/lane-prompts.md "start"
+    r = herd-lane.js start --branch <branch.branch> [--base origin/<run's Base for the project> when it is set] … < references/lane-prompts.md "start"
     if r.error and r.pane_id:                          # the lane exists but did not take its prompt
       record the row from r (pane, session); read the pane; answer per gate-answers (folder trust)
       then send the prompt with `herdr agent prompt <lane> <text> --wait --until working`
     elif r.error: report it; mark the row parked with a Hold naming the error; continue
     if r.adopted: log "start | <KEY> | adopted <r.adopted> <r.moved_from if any>"
-    fill row's queued lanes-table row if it has one, else add a lane row: State implementing, Session = r.session_id and r.pane_id,
+    fill row's queued lanes-table row if it has one, else add a lane row: State implementing, Base = r.base, or when it is null (adopted) the `base` of `git-conventions.js base --branch <branch>` run in the checkout, Session = r.session_id and r.pane_id,
       Model/effort = the cell Model routing wrote, plus ", reviewers by tier" when reviewers is by tier
   if run.Done-when holds:
     for item in the "For <stand-in>" list:
@@ -184,7 +185,7 @@ Next startable:                                  # one row or none
   loop:
     rows = next_work(run's "Owner name for next_work") evaluated in the plan's order as if every row in skipped were not in the plan
            # except as a Hard dep: a Hard dep is met only when its issue is CLOSED with stateReason COMPLETED
-           # (a story code with no issue: every Definition of Done item in its story file is ticked on origin/HEAD), skipped or not
+           # (a story code with no issue: every Definition of Done item in its story file is ticked on origin/<the project's Base setting, else HEAD>), skipped or not
     if rows is empty or every r in rows is in skipped: return none
     for r in rows:
       i = gh issue view <r's issue> -R <repo> --json state,stateReason,labels,assignees     # when r has an issue
@@ -197,7 +198,7 @@ Next startable:                                  # one row or none
         i.state != OPEN, or i.labels has status:in-progress, status:in-review or status:done
                                                                  -> report "<r.Key> <state or label>, not startable"; skipped += r.Key
         i.assignees is not empty and the stand-in's login is not in it -> report "<r.Key> assigned to <logins>"; skipped += r.Key
-        r has no issue and its story file's Definition of Done is all ticked on origin/HEAD -> report "<r.Key> done"; skipped += r.Key
+        r has no issue and its story file's Definition of Done is all ticked on origin/<the project's Base setting, else HEAD> -> report "<r.Key> done"; skipped += r.Key
         r.After is not met                                       -> skipped += r.Key
         else                                                     -> return r
 ```

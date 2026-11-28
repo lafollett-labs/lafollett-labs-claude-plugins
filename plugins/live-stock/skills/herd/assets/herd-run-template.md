@@ -53,12 +53,13 @@ Used only when the plan has no next_work. Ordered.
 | max_lanes | <number, or default> |
 | Watch CI | <project:ref[@sha],project:ref[@sha]> (comma-separated, no spaces, sha 40 hex; empty when nothing is watched) |
 | Lane ceiling | <model/effort that caps every rung, such as opus/high, or none> |
+| Base | <project:branch,project:branch> a project's new lane branches are cut from (a branch name, never HEAD), or none (herd-lane.js's default: origin/HEAD's branch) |
 
 ## Lanes
 
-| Lane | Key | Project | After | Model/effort | State | PR | Announcement | Session |
-| - | - | - | - | - | - | - | - | - |
-| <lane-42> | <#42> | <project> | <project#n or none> | <R3 opus/high, R3 opus/high (ceiling), R3 opus/high, reviewers by tier, or the stand-in's choice> | <queued> | <project#n> | <Slack link of the PR's announcement, off when the project's Slack is off, or empty> | <session ids, newest last; pane id> |
+| Lane | Key | Project | Base | After | Model/effort | State | PR | Announcement | Session |
+| - | - | - | - | - | - | - | - | - | - |
+| <lane-42> | <#42> | <project> | <base: start's base, or for an adopted branch the one git-conventions.js base resolves> | <project#n or none> | <R3 opus/high, R3 opus/high (ceiling), R3 opus/high, reviewers by tier, or the stand-in's choice> | <queued> | <project#n> | <Slack link of the PR's announcement, off when the project's Slack is off, or empty> | <session ids, newest last; pane id> |
 
 States: queued, implementing, reviewing, pr-open, merged, finishing, finished, closed, parked.
 
