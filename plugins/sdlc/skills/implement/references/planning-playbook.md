@@ -258,7 +258,7 @@ session.matched_pes = result of PE_DOMAIN_HINT pseudocode below
 `PE_DOMAIN_HINT` (informational only — actual PE dispatch happens in the `review` skill):
 
 ```text
-matched_pes = []
+matched_pes = []; domain_pes = []
 
 for file in plan.key_files:          # a preview; skills/review/bin/scope.js holds the authoritative globs
   match file:
@@ -280,8 +280,13 @@ for file in plan.key_files:          # a preview; skills/review/bin/scope.js hol
        | ".claude/rules/**"
        | governance references/*.md, model-consumed assets/*.md, plugin/skill READMEs
                                                         → matched_pes += ["sdlc:pe-governance"]
+  if (file ends in .rs | .vue | .js | .ts | .mjs | .cjs | .mts | .cts | .jsx | .tsx
+      and a directory word is audio, dsp, or pitch)
+     or (file ends in .js | .ts | .mjs | .cjs | .mts | .cts | .jsx | .tsx and its name contains worklet):
+    domain_pes += ["sdlc:pe-audio"]                     # beside the file's stack PE, never instead
+    if no case above matched: matched_pes += ["sdlc:pe-general-purpose"]
 
-session.matched_pes = unique(matched_pes)
+session.matched_pes = unique(matched_pes + domain_pes)
 
 if session.matched_pes is not empty:
   print "Review will dispatch: " + join(session.matched_pes, ", ")

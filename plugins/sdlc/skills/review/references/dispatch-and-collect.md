@@ -208,11 +208,11 @@ DISPATCH_PROMPT(pe, tier = pe_tier(pe)):   # tier keys BOTH the TIER line and it
 You are reviewing {session.name} as the {pe} agent.
 
 DIFF COMMAND (run this yourself — do NOT ask the caller to paste it):
-  {diff_cmd} -- {file patterns for this PE's domain}
+  {diff_cmd} -- {file patterns for this PE's domain; a domain PE: each of session.domain_pes[pe].files as a quoted literal path}
   # diff_cmd null: Specific Files / Folder → review the KEY FILES below in full; Ad-hoc → review PASTED CODE
 
 KEY FILES CHANGED:
-  {bullet list of changed files relevant to this PE's domain, from `--stat` output}
+  {bullet list of changed files relevant to this PE's domain, from `--stat` output; a domain PE: session.domain_pes[pe].files}
 
 SCOPE:          {review_type}
 TARGET BRANCH:  {target_branch}
@@ -244,6 +244,8 @@ and your agent's stack lenses (they augment, never replace them):
 {optional} PASTED CODE (Ad-hoc only — review this in full; there is no file or diff):
   {session.adhoc_code}
 {optional} PRIOR LEDGER:   {session.ledger_path if session.ledger_path and it exists}   # Gate 1 only; prior findings' raw title + category per round
+{optional} TEST BUDGET:    none — run no build, test, or lint suite; the stack PE reviewing these files runs them
+                           # only when pe in session.domain_pes (kind: domain)
 {optional} BUILD PLAN:     one line per p in build_plans(pe): "- {p.dir} ({p.kind}): {p.status}{" · checks: skip" if p.checks == "skip" else ""} — {p.command or p.reason} · receipt: {p.receipt}"
                            # only when build_plans(pe) is non-empty
 

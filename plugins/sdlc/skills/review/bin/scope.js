@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Review scope for sdlc:review — the deterministic baseline the skill's pre-dispatch judgment refines:
- * which files are reviewed, the classifier tier, and the glob routing of each file to one PE.
+ * which files are reviewed, the classifier tier, the glob routing of each file to one stack PE, and the
+ * domain PEs that review one concern beside it.
  *
  * Usage:
  *   node scope.js classify --root <dir> --mode branch|pr --range <base>...HEAD
@@ -12,7 +13,9 @@
  *
  * classify prints { changed_files, excluded, files_changed, lines_added, lines_removed, signals:
  *   { size_small, size_large, config_only, security_path, deps_or_schema }, security_files, tier,
- *   tier_source: "classifier", tier_signals, routing, matched_pes, diff_cmd, ledger }.
+ *   tier_source: "classifier", tier_signals, routing, domain_pes, matched_pes, diff_cmd, ledger }.
+ *   domain_pes is { pe: { kind: "domain", files } } for each domain PE whose globs match a changed file;
+ *   those files keep their routing entry, and matched_pes holds both kinds.
  *   diff_cmd is the command PEs run for their diff (null for files / adhoc); ledger says whether the
  *   round belongs in the branch findings ledger (branch, pr) or not (staged, files, adhoc: the index or a subset is not the branch HEAD).
  * pe-tiers prints { pe: tier }: a PE whose files are all non-code artifacts, none security- or
@@ -127,6 +130,21 @@ function routingTable(root, mode) {
   ];
 }
 
+// Domain PEs review one concern across stacks, beside each file's stack PE, never instead of it.
+// An audio directory is a segment with a whole word audio, dsp, or pitch ("audio-engine", "Audio", "pitchDetector";
+// not "audiobook-store" or "dispatch").
+const AUDIO_SOURCE = /\.(rs|vue|[cm]?[jt]s|[jt]sx)$/;
+const WORKLET_SOURCE = /\.([cm]?[jt]s|[jt]sx)$/;
+const AUDIO_WORDS = new Set(['audio', 'dsp', 'pitch']);
+const isAudioPath = (f) => {
+  const dirs = path.posix.dirname(f).split('/');
+  return (AUDIO_SOURCE.test(f) && dirs.some((d) => words(d).some((w) => AUDIO_WORDS.has(w))))
+    || (WORKLET_SOURCE.test(f) && /worklet/i.test(path.posix.basename(f)));
+};
+const DOMAIN_PES = [
+  ['pe-audio', isAudioPath],
+];
+
 class CliError extends Error {}
 
 function parseArgs(argv) {
@@ -222,7 +240,7 @@ function classify(opts) {
       changed_files: [], excluded: [], files_changed: 0, lines_added: lines, lines_removed: 0,
       signals: { size_small: lines <= 50, size_large: lines >= 400, config_only: false, security_path: false, deps_or_schema: false },
       security_files: [], tier, tier_source: 'classifier', tier_signals: `${lines} pasted lines`,
-      routing: {}, matched_pes: ['pe-general-purpose'], diff_cmd: null, ledger,
+      routing: {}, domain_pes: {}, matched_pes: ['pe-general-purpose'], diff_cmd: null, ledger,
     };
   }
   const excluded = all.filter((r) => REVIEW_EXCLUDE.some((re) => re.test(r.file))).map((r) => r.file);
@@ -261,10 +279,15 @@ function classify(opts) {
   const table = routingTable(opts.root, opts.mode);
   const routing = {};
   for (const f of changed) routing[f] = (table.find(([m]) => m(f)) || [null, 'pe-general-purpose'])[1];
+  const domainPes = {};
+  for (const [pe, m] of DOMAIN_PES) {
+    const files = changed.filter(m);
+    if (files.length) domainPes[pe] = { kind: 'domain', files };
+  }
   return {
     changed_files: changed, excluded, files_changed: changed.length, lines_added: added, lines_removed: removed,
     signals, security_files: securityFiles, tier, tier_source: 'classifier', tier_signals: evidence,
-    routing, matched_pes: [...new Set(Object.values(routing))], diff_cmd: diffCmd, ledger,
+    routing, domain_pes: domainPes, matched_pes: [...new Set([...Object.values(routing), ...Object.keys(domainPes)])], diff_cmd: diffCmd, ledger,
   };
 }
 

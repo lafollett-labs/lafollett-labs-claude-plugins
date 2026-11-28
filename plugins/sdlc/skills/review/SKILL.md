@@ -198,7 +198,7 @@ else:
 
 ### Scope classification
 
-`scope.js` owns the changed-file set, the `docs/code-reviews/**` exclusion, the tier signals and classifier tier, and the first-match glob routing of each file to one PE.
+`scope.js` owns the changed-file set, the `docs/code-reviews/**` exclusion, the tier signals and classifier tier, the first-match glob routing of each file to one stack PE, and `domain_pes`: each domain PE (`kind: domain`, e.g. `pe-audio`) with the files its globs match, reviewed beside their stack PE, never instead of it.
 
 ```text
 mode, extra = match review_type:
@@ -211,7 +211,7 @@ scope = stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/scope.js" class
 if exit == 3:
   🛑 stop — {scope.stop} ({scope.excluded}); restore_stash(); exit
 bind changed_files, files_changed, lines_added, lines_removed, diff_cmd, signals, security_files from scope
-session.tier = scope.tier; session.tier_source = scope.tier_source; session.tier_signals = scope.tier_signals; session.routing = scope.routing; session.matched_pes = scope.matched_pes; session.ledger = scope.ledger
+session.tier = scope.tier; session.tier_source = scope.tier_source; session.tier_signals = scope.tier_signals; session.routing = scope.routing; session.domain_pes = scope.domain_pes; session.matched_pes = scope.matched_pes; session.ledger = scope.ledger
 ```
 
 `pe-governance` owns model-audience instruction files (skills, agents, commands, the CLAUDE.md family, `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, rules, skill references and model-consumed assets, plugin READMEs); `pe-github-actions` owns workflows and composite actions; human docs and structured data route to `pe-general-purpose`, the last-resort fallback. The primary agent never reviews code itself.
@@ -232,12 +232,12 @@ The scope.js tier and routing are the deterministic baseline and safety floor. B
 Read `{diff_cmd}` (the full patch; when `signals.size_large`, read headers for every file plus hunks of the pe-general-purpose residual and any file matching `CONTENT_RISK_SIGNALS`). Decide (a) which specialist each file truly needs — does its content reveal a stack the glob missed? — and (b) whether the change is riskier or more novel than its size implies (gate type, blast radius, and secrets/IAM/auth/money/data-integrity/migration semantics carried in values, not paths). Then merge:
 
 ```text
-routing_baseline = copy(session.routing); tier_baseline = session.tier
+routing_baseline = copy(session.routing); domain_baseline = copy(session.domain_pes); tier_baseline = session.tier
 
 # ROUTING — additive only
-for file whose content reveals a specialist the glob missed: session.routing[file] = that specialist
-session.matched_pes = unique(session.routing.values()) if session.routing else session.matched_pes   # Ad-hoc: keep scope.js's pe-general-purpose
-assert every changed_file maps to exactly one PE; every glob-matched specialist is still matched; matched_pes non-empty
+for file whose content reveals a specialist the glob missed: session.routing[file] = that specialist; a domain: add it to session.domain_pes[pe].files (kind: domain), routing unchanged
+session.matched_pes = unique((session.routing.values() if session.routing else session.matched_pes) + keys(session.domain_pes))   # Ad-hoc: keep scope.js's pe-general-purpose
+assert every changed_file maps to exactly one stack PE; every glob-matched specialist is still matched; every domain_baseline key and file is still in session.domain_pes; matched_pes non-empty
 
 # TIER — raise freely; lower only to the floor
 session.content_risk_files = changed files whose hunks match CONTENT_RISK_SIGNALS
