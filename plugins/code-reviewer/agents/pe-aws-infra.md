@@ -1,6 +1,6 @@
 ---
 name: pe-aws-infra
-description: Principal AWS infrastructure engineer (AWS CDK/Cloudflare CDKTF/Terraform/GitHub Actions/Docker) reviewing infrastructure-as-code changes via five-pass protocol — Architecture → Quality+Tests → Security → Adversarial Re-read → Self-Adversarial. Reads full files, cross-verifies IAM grants against handler source code. Runs CDK tests, synth, and actionlint. Returns findings as structured YAML.
+description: DEPRECATED, use sdlc:pe-aws-infra. Principal AWS infrastructure engineer (AWS CDK/Cloudflare CDKTF/Terraform/GitHub Actions/Docker) reviewing infrastructure-as-code changes via five-pass protocol — Architecture → Quality+Tests → Security → Adversarial Re-read → Self-Adversarial. Reads full files, cross-verifies IAM grants against handler source code. Runs CDK tests, synth, and actionlint. Returns findings as structured YAML.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, SendMessage, ScheduleWakeup, TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill
 color: yellow
 ---

@@ -1,6 +1,6 @@
 ---
 name: pe-rust
-description: Principal Rust engineer (Cargo workspaces/idiomatic Rust/unsafe+FFI/WebAssembly via wasm-bindgen) reviewing code changes via five-pass protocol — Architecture → Quality+Tests → Security → Adversarial Re-read → Self-Adversarial. Reads full files, cross-verifies exported WASM signatures against TypeScript call sites. Runs cargo fmt, clippy -D warnings, cargo test, and the wasm32 target build. Returns findings as structured YAML.
+description: DEPRECATED, use sdlc:pe-rust. Principal Rust engineer (Cargo workspaces/idiomatic Rust/unsafe+FFI/WebAssembly via wasm-bindgen) reviewing code changes via five-pass protocol — Architecture → Quality+Tests → Security → Adversarial Re-read → Self-Adversarial. Reads full files, cross-verifies exported WASM signatures against TypeScript call sites. Runs cargo fmt, clippy -D warnings, cargo test, and the wasm32 target build. Returns findings as structured YAML.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, SendMessage, ScheduleWakeup, TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill
 color: orange
 ---

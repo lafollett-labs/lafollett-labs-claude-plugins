@@ -6,9 +6,14 @@
 >
 > | code-reviewer | sdlc |
 > | - | - |
-> | `/code-reviewer` (branch, PR, staged, files) | `/sdlc:review` |
+> | `/code-reviewer:code-reviewer` (branch, PR, staged, files) | `/sdlc:review` |
 > | `/code-reviewer:init-project` | `/sdlc:init-project` |
 > | `code-reviewer:pe-*` agents | `sdlc:pe-*` (plus pe-csharp, pe-angular, pe-sql-server, pe-github-actions, pe-general-purpose) |
+>
+> sdlc reads the `## Stack Map` table only, never `.code-reviewer.yml`: run `/sdlc:init-project`
+> to move its stacks into a table (`max_parallel_pes` becomes `"review": { "maxParallelPes": N }`
+> in `.claude/sdlc.json`). In sdlc the first matching Stack Map row wins, so put specific rows
+> above broad ones.
 >
 > It stays installable for one more minor release.
 

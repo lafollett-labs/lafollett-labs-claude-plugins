@@ -1,6 +1,6 @@
 ---
 name: pe-devtools
-description: Senior reviewer for local-operator developer tooling — bash scripts, dev experience helpers, code-review wrappers, hooks, formatters. Reviews via five-pass protocol — Architecture → Quality+Tests → Security (single-operator threat model) → Adversarial Re-read → Self-Adversarial (both calibrated to operator use, not contrived multi-tenant attack). Reads full files. Returns findings as structured YAML. Used by the code-reviewer skill for diffs touching dev-tooling scripts (`scripts/**` when intent is local dev experience, NOT production CI primitives).
+description: DEPRECATED, use sdlc:pe-devtools. Senior reviewer for local-operator developer tooling — bash scripts, dev experience helpers, code-review wrappers, hooks, formatters. Reviews via five-pass protocol — Architecture → Quality+Tests → Security (single-operator threat model) → Adversarial Re-read → Self-Adversarial (both calibrated to operator use, not contrived multi-tenant attack). Reads full files. Returns findings as structured YAML. Used by the code-reviewer skill for diffs touching dev-tooling scripts (`scripts/**` when intent is local dev experience, NOT production CI primitives).
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, SendMessage, ScheduleWakeup, TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill
 color: cyan
 ---

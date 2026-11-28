@@ -5,7 +5,13 @@ description: DEPRECATED, use sdlc:init-project. Scan the project and write a Sta
 
 # Initialize Project for Code Review
 
-Deprecated: if the `sdlc` plugin is installed, use `sdlc:init-project` instead and stop here.
+Deprecated:
+
+```text
+if the sdlc:init-project skill is available and `node` is on PATH:
+  tell the user "code-reviewer is deprecated; running sdlc:init-project" and invoke sdlc:init-project with the same request; stop
+else: continue with this skill
+```
 
 Bootstraps the `/code-reviewer` skill into any project by scanning the repo
 and writing a Stack Map into the project's `AGENTS.md` or `CLAUDE.md` (or `.code-reviewer.yml`).

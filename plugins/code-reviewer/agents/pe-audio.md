@@ -1,6 +1,6 @@
 ---
 name: pe-audio
-description: Principal real-time audio / DSP engineer reviewing audio-path changes in Rust and TypeScript via five-pass protocol — Architecture (thread topology) → Quality (real-time rules, windows, sample rate, signal hygiene, scheduling, mic capture, numerical accuracy, fixture coverage) → Security (privacy, mic lifetime, untrusted audio) → Adversarial Re-read → Self-Adversarial. Domain PE dispatched alongside the language PE (pe-rust, pe-vue) on audio-path files; runs no suites. Returns findings as structured YAML.
+description: DEPRECATED, use sdlc:pe-audio. Principal real-time audio / DSP engineer reviewing audio-path changes in Rust and TypeScript via five-pass protocol — Architecture (thread topology) → Quality (real-time rules, windows, sample rate, signal hygiene, scheduling, mic capture, numerical accuracy, fixture coverage) → Security (privacy, mic lifetime, untrusted audio) → Adversarial Re-read → Self-Adversarial. Domain PE dispatched alongside the language PE (pe-rust, pe-vue) on audio-path files; runs no suites. Returns findings as structured YAML.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, SendMessage, ScheduleWakeup, TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill
 color: pink
 ---

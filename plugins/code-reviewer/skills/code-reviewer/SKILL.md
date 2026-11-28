@@ -5,7 +5,13 @@ description: DEPRECATED, use sdlc:review. Code reviews with stack-specific PE di
 
 # Expert Code Review
 
-Deprecated: if the `sdlc` plugin is installed, use `sdlc:review` instead and stop here.
+Deprecated:
+
+```text
+if the sdlc:review skill is available and `node` is on PATH:
+  tell the user "code-reviewer is deprecated; running sdlc:review" and invoke sdlc:review with the same request; stop
+else: continue with this skill
+```
 
 Lean, pragmatic code reviews with scope discipline. Stack-specific PE sub-agents do the heavy lifting; the parent skill orchestrates dispatch and consolidates findings.
 
