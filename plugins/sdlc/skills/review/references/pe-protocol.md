@@ -56,7 +56,7 @@ The dispatch prompt provides metadata; the PE pulls its own diff and reads full 
 Each pass reads the diff for one concern. The agent definition's stack heuristics say what tends to break in that stack; apply them with judgment, verify each suspicion with a command or a full-file read, and rate what survives from § Severity Definitions.
 
 - **Pass 1 — Architecture.** Boundaries and dependency direction hold; public contracts (signatures, schemas, endpoints, config keys) still match every caller and consumer, including consumers this diff edits; new invariants are enforced, not assumed.
-- **Pass 2 — Quality + Tests.** Run the build, test, and lint commands first, as TEST BUDGET allows. Then error handling, resource lifecycle, concurrency, dead code, and whether each new behavior has a test that would fail without it. Comments the diff adds should be one-line notes on a non-obvious constraint; report ones that carry ticket keys, change narration, or test pointers, or that restate the code (`maintainability`).
+- **Pass 2 — Quality + Tests.** Run the build, test, and lint commands first, as TEST BUDGET allows. Then error handling, resource lifecycle, concurrency, dead code, and whether each new behavior has a test that would fail without it. Passing suites cover only what they test: probe each new branch with REVIEW MOVES M3's inputs; a green suite is never the review's conclusion. Comments the diff adds should be one-line notes on a non-obvious constraint; report ones that carry ticket keys, change narration, or test pointers, or that restate the code (`maintainability`).
 - **Pass 2b — Impact propagation.** Trace each changed public symbol, data shape, or migration to its callers and persisted data inside SEARCH_ROOTS, and imagine what breaks on deploy.
 - **Pass 3 — Security.** Injection, authn/authz order and ownership checks, secrets, transport security, unsafe deserialization, and what reaches logs.
 
@@ -148,8 +148,10 @@ for each finding in draft:
   verification_receipt:
     "Do the source or command results prove reachable conditions, the actual path and the incorrect result?"
     if a regression is claimed: compare base and head under the same conditions
-    if the actual problem cannot be established:
-      move to verification_receipts[], preserving the original claim and missing proof in attestation
+    if the proof is not in hand: build the triggering input or state and run the code under review on it
+      # a run showing the incorrect result is the proof
+    if the actual problem still cannot be established:
+      move to verification_receipts[], preserving the original claim, the run attempted and the missing proof in attestation
       use claim: indeterminate + missing_source for an identified source outside SEARCH_ROOTS, otherwise below_bar
     else: include the key evidence in the finding
 
@@ -169,11 +171,11 @@ for each finding in draft:
 
   provenance_check:   # input-validation / normalization / malformed-input findings
     producer = who writes the flagged input (name the file, skill, or command)
-    if producer is this repo's own code/skill/tool with an enum/schema contract,
-       or a file only our tooling writes:
+    if producer is deterministic code in this repo that checks its output against an enum/schema,
+       and nothing writes the input around that check:
       if no real producer is shown emitting or permitting the bad value (test or source-backed trace):
         move to verification_receipts[] (non-gating), not findings[]
-    else:   # human-authored, developer environment, external/network input
+    else:   # model output (agent YAML, a prose-driven skill step), human-authored, git state, developer environment, external/network input
       keep; apply REPORTING BAR
 
   negative_receipt_proof:   # every verification_receipts[] entry

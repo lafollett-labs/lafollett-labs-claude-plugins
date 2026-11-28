@@ -38,7 +38,8 @@ M1 Ripple:
 M2 Lifecycle:
   for each piece of state the unit reads or writes:
     trace it through every entry point, early return, retry, restart, reset, scope change, rollback,
-      interruption, partial failure, and both deploy orders (old code + new data, new code + old data)
+      interruption, partial failure, both deploy orders (old code + new data, new code + old data),
+      every invocation mode the contract defines, and a history rewrite (rebase, force-push, amend, a SHA that no longer exists)
     list what is lost, left stale, never cleared, applied twice, or keyed by an identity that can recur
   for each gap between a check and its use, including across blocking I/O and awaits:
     interleave a second actor (concurrent request, second tab, retry, cancel, timeout, next turn) in both orders
