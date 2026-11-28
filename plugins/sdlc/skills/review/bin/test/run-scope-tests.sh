@@ -187,7 +187,8 @@ check "a Cargo.toml change floors at STANDARD as a dependency manifest" "$(class
   'o.tier === "STANDARD" && o.signals.deps_or_schema && o.signals.security_path'
 
 R="$TMP/devtools"; new_repo "$R"
-for f in scripts/dev/fmt.sh scripts/dev/lib/util.py .githooks/pre-commit tools/.githooks/pre-push lefthook.yml; do put "$R" "$f" 1; done
+for f in scripts/dev/fmt.sh scripts/dev/bootstrap scripts/dev/lib/util.py scripts/dev/seed.ts .githooks/pre-commit tools/.githooks/pre-push \
+         .husky/pre-commit lefthook.yml lefthook-local.yml .lefthook.yaml .cargo/config; do put "$R" "$f" 1; done
 mkdir -p "$R/scripts/ci" "$R/scripts/release" "$R/scripts/local"
 printf '#!/usr/bin/env bash\n# Format staged files.\n#pe:devtools\n' > "$R/scripts/local/fmt.sh"
 printf '#!/usr/bin/env bash\r\n# pe: devtools\r\n' > "$R/scripts/local/crlf.sh"
@@ -198,8 +199,11 @@ printf '#!/usr/bin/env bash\n# pe: devtools\n' > "$R/tools/dev.sh"
 put "$R" scripts/dev/main.go 1
 commit "$R"
 out="$(classify "$R")"
-check "scripts/dev, .githooks, and lefthook.yml route to pe-devtools" "$out" \
-  '["scripts/dev/fmt.sh","scripts/dev/lib/util.py",".githooks/pre-commit","tools/.githooks/pre-push","lefthook.yml"].every(f => o.routing[f] === "pe-devtools")'
+check "scripts/dev shell and extensionless scripts, .githooks, .husky, and lefthook config route to pe-devtools" "$out" \
+  '["scripts/dev/fmt.sh","scripts/dev/bootstrap",".githooks/pre-commit","tools/.githooks/pre-push",".husky/pre-commit","lefthook.yml","lefthook-local.yml",".lefthook.yaml"].every(f => o.routing[f] === "pe-devtools")'
+check "a non-shell script under scripts/dev keeps its own reviewer" "$out" \
+  'o.routing["scripts/dev/lib/util.py"] === "pe-general-purpose" && o.routing["scripts/dev/seed.ts"] === "pe-general-purpose"'
+check "the extensionless .cargo/config routes to pe-rust" "$out" 'o.routing[".cargo/config"] === "pe-rust"'
 check "a scripts/**/*.sh with a # pe: devtools header line routes to pe-devtools (CRLF too)" "$out" \
   'o.routing["scripts/local/fmt.sh"] === "pe-devtools" && o.routing["scripts/local/crlf.sh"] === "pe-devtools"'
 check "a near-miss header, a header past line 10, a non-.sh file, or a script outside scripts/ stays with pe-general-purpose" "$out" \
@@ -209,6 +213,15 @@ R="$TMP/devtools-deleted"; new_repo "$R"; mkdir -p "$R/scripts"; printf '# pe: d
 git -C "$R" branch -f main HEAD; git -C "$R" rm -q scripts/gone.sh; put "$R" src/a.py 1; commit "$R"
 check "a deleted headed script has no header to read and falls back to pe-general-purpose" "$(classify "$R")" \
   'o.routing["scripts/gone.sh"] === "pe-general-purpose"'
+# The header is read from the content under review, never from unstaged or uncommitted edits.
+R="$TMP/devtools-rev"; new_repo "$R"; mkdir -p "$R/scripts"
+printf '#!/usr/bin/env bash\n# pe: devtools\n' > "$R/scripts/a.sh"; printf '#!/usr/bin/env bash\n' > "$R/scripts/b.sh"
+git -C "$R" add -A
+printf '#!/usr/bin/env bash\n' > "$R/scripts/a.sh"; printf '#!/usr/bin/env bash\n# pe: devtools\n' > "$R/scripts/b.sh"
+check "staged mode reads the header from the index" "$(node "$CLI" classify --root "$R" --mode staged)" \
+  'o.routing["scripts/a.sh"] === "pe-devtools" && o.routing["scripts/b.sh"] === "pe-general-purpose"'
+git -C "$R" add -A; git -C "$R" commit -qm change; printf '#!/usr/bin/env bash\n' > "$R/scripts/b.sh"
+check "branch mode reads the header from HEAD" "$(classify "$R")" 'o.routing["scripts/b.sh"] === "pe-devtools"'
 
 # --- files-mode targets --------------------------------------------------------
 R="$TMP/targets"; new_repo "$R"

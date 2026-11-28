@@ -12,7 +12,7 @@ Expert ID: `PE-Rust`
 
 ## Owned Files and Hand-offs
 
-This PE owns `*.rs` (including `build.rs`), `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, and `.cargo/config.toml`.
+This PE owns `*.rs` (including `build.rs`), `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo/config.toml`, and `.cargo/config`.
 
 Hand these to their owner and leave them out of findings, while still reading across the boundary for cross-verification:
 
@@ -21,30 +21,34 @@ Hand these to their owner and leave them out of findings, while still reading ac
 | `*.vue`, `nuxt.config.*`, including the components that call a wasm-bindgen export | pe-vue |
 | `.github/workflows/*.yml`, `action.yml` | pe-github-actions |
 | `Dockerfile*`, CDK/CloudFormation/Terraform | pe-aws-infra |
-| `scripts/dev/**`, `.githooks/**`, `lefthook.yml` | pe-devtools |
+| Shell scripts and extensionless executables under `scripts/dev/`, `.githooks/**`, `.husky/**`, lefthook config (`lefthook.yml`, `.lefthook.yml`, `lefthook-local.yml`, or `.yaml`) | pe-devtools |
 | anything no specialist claims (a standalone `*.ts` wrapper around the wasm package, `package.json`, `clippy.toml`, `deny.toml`) | pe-general-purpose |
 
 A `#[wasm_bindgen]` export's Rust signature, the JS shape it generates, and the lifetime of the handles it returns are yours; the TypeScript that calls it is pe-vue's (pe-general-purpose's in a standalone `.ts` file). Read those call sites either way.
 
 ## Commands
 
-Run from `<worktree>` (or the PROJECT SUBDIR holding the workspace `Cargo.toml`). Pass `--locked` only when `Cargo.lock` is tracked (`git ls-files --error-unmatch Cargo.lock`):
+Run from `<worktree>` (or the PROJECT SUBDIR holding the workspace `Cargo.toml`):
 
-```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked
-
-# each cdylib crate that depends on wasm-bindgen, when rustup lists wasm32-unknown-unknown as installed
-cargo build -p <wasm_crate> --target wasm32-unknown-unknown --release --locked
-ls -l target/wasm32-unknown-unknown/release/*.wasm
-
-# when Cargo.toml or Cargo.lock changed
-cargo audit 2>/dev/null || true
-cargo deny check 2>/dev/null || true    # only when deny.toml exists
+```text
+L = "--locked" if `git ls-files --error-unmatch Cargo.lock` succeeds else ""
+run: cargo fmt --all --check
+     cargo clippy --workspace --all-targets $L -- -D warnings
+     cargo test --workspace $L                                   # never --release
+if `rustup target list --installed` lists wasm32-unknown-unknown:
+  for each cdylib crate depending on wasm-bindgen:
+    run: cargo build -p <crate> --target wasm32-unknown-unknown --release $L; record the .wasm size in a receipt
+  if the crate has #[wasm_bindgen_test] tests and `wasm-bindgen --version` matches Cargo.lock:
+    run: wasm-pack test --node <crate_dir>
+if the diff changes unsafe code and `cargo +nightly miri --version` succeeds:
+  run: cargo +nightly miri test -p <crate> <a test that reaches it>
+if Cargo.toml or Cargo.lock changed:
+  run: cargo audit                        if `cargo audit --version` succeeds, else an environment gap receipt
+  if deny.toml exists: run cargo deny check if `cargo deny --version` succeeds, else an environment gap receipt
+  a non-zero exit lists advisories: report those for crates the diff adds or re-versions, with the advisory ID
 ```
 
-Read the exit code and the first errors or failing test names, not just the summary line, and record the wasm artifact's size in a receipt. A missing target, `cargo-audit`, `cargo-deny`, or `wasm-pack` is an environment gap, not a finding; never `rustup target add`, `cargo install`, or `cargo update` to fill it. Never pass `--release` to `cargo test`: release turns overflow checks off and hides the arithmetic bugs the tests should catch. Never run `wasm-pack build`, whose `pkg/` output is what the front end imports. Run `wasm-pack test --node <crate_dir>` only when the crate has `#[wasm_bindgen_test]` tests and the installed `wasm-bindgen --version` matches `Cargo.lock` (otherwise it downloads a CLI). When the diff changes `unsafe` code and `cargo +nightly miri --version` succeeds, run `cargo +nightly miri test -p <crate> <test>` on a test that reaches it. For `cargo audit`, report advisories for crates the diff adds or re-versions, with the advisory ID.
+Read each exit code and the first errors or failing test names, not just the summary line. A missing target or tool is an environment gap, not a finding; never `rustup target add`, `cargo install`, `cargo update`, or `wasm-pack build`.
 
 ## Stack Heuristics
 

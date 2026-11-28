@@ -76,17 +76,24 @@ function isSecurityPath(file) {
 const isDepsOrSchema = (f) => isManifest(f) || isMigration(f) || /schema/i.test(path.posix.basename(f));
 
 // First match wins, so every file has exactly one PE.
-// A shell script under any scripts/ dir opts into pe-devtools with a "# pe: devtools" line among its first 10.
+// A shell script under any scripts/ dir opts into pe-devtools with a "# pe: devtools" line among its first 10,
+// read from the content under review: the index (staged), HEAD (branch, pr), else the working tree.
 const isScriptsShell = matcher('scripts/**/*.sh');
 const DEVTOOLS_HEADER = /^#[ \t]*pe:[ \t]*devtools[ \t]*\r?$/;
-function devtoolsHeader(root) {
+function devtoolsHeader(root, mode) {
+  const rev = mode === 'staged' ? ':' : ['branch', 'pr'].includes(mode) ? 'HEAD:' : null;
   return (f) => {
     if (!isScriptsShell(f)) return false;
     let text;
-    try { text = fs.readFileSync(path.join(root, f), 'utf8'); } catch { return false; }   // deleted or unreadable: no header
+    try {
+      text = rev ? execFileSync('git', ['-C', root, 'show', `${rev}${f}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+        : fs.readFileSync(path.join(root, f), 'utf8');
+    } catch { return false; }   // deleted or unreadable: no header
     return text.split('\n', 10).some((l) => DEVTOOLS_HEADER.test(l));
   };
 }
+// Under scripts/dev, only shell scripts and extensionless executables; other languages keep their own reviewer.
+const isDevScript = (f) => matcher('scripts/dev/**')(f) && (/\.(sh|bash|zsh)$/.test(f) || !path.posix.basename(f).includes('.'));
 function angularProject(root) {
   return (f) => /\.(ts|html)$/.test(f) && (() => {
     for (let dir = path.posix.dirname(f); ; dir = path.posix.dirname(dir)) {
@@ -95,18 +102,19 @@ function angularProject(root) {
     }
   })();
 }
-function routingTable(root) {
+function routingTable(root, mode) {
   return [
     [anyOf(['*.cs', '*.csproj', '*.sln']), 'pe-csharp'],
     [angularProject(root), 'pe-angular'],
     [anyOf(['*.sql', 'migrations/*', 'sprocs/*']), 'pe-sql-server'],
     [isCi, 'pe-github-actions'],
     [anyOf(['*.go', 'go.mod', 'go.sum']), 'pe-go'],
-    [anyOf(['*.rs', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain*', '.cargo/config.toml']), 'pe-rust'],
+    [anyOf(['*.rs', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain*', '.cargo/config.toml', '.cargo/config']), 'pe-rust'],
     [anyOf(['*.vue', 'nuxt.config.*', 'tailwind.config.*']), 'pe-vue'],
     [anyOf(['cdk.json', '*.tf', 'Dockerfile*', 'template.yml', '*.template.yaml']), 'pe-aws-infra'],
-    [anyOf(['scripts/dev/**', '.githooks/**', 'lefthook.yml']), 'pe-devtools'],
-    [devtoolsHeader(root), 'pe-devtools'],
+    [isDevScript, 'pe-devtools'],
+    [anyOf(['.githooks/**', '.husky/**', 'lefthook.yml', 'lefthook.yaml', '.lefthook.yml', '.lefthook.yaml', 'lefthook-local.yml', 'lefthook-local.yaml']), 'pe-devtools'],
+    [devtoolsHeader(root, mode), 'pe-devtools'],
     [anyOf([
       '**/SKILL.md', '**/agents/*.md', '**/commands/*.md',
       '**/CLAUDE.md', '**/CLAUDE.*.md', '**/*.code.md', '**/*.ceo.md',
@@ -250,7 +258,7 @@ function classify(opts) {
     evidence = `${size} / config-only`;
   }
 
-  const table = routingTable(opts.root);
+  const table = routingTable(opts.root, opts.mode);
   const routing = {};
   for (const f of changed) routing[f] = (table.find(([m]) => m(f)) || [null, 'pe-general-purpose'])[1];
   return {

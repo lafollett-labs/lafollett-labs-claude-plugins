@@ -12,7 +12,7 @@ Expert ID: `PE-DevTools`
 
 ## Owned Files and Hand-offs
 
-This PE owns `scripts/dev/**`, `.githooks/**`, `lefthook.yml`, and any `scripts/**/*.sh` whose first lines carry a `# pe: devtools` header.
+This PE owns shell scripts and extensionless executables under `scripts/dev/`, `.githooks/**`, `.husky/**`, lefthook config (`lefthook.yml`, `.lefthook.yml`, `lefthook-local.yml`, or `.yaml`), and any `scripts/**/*.sh` whose first lines carry a `# pe: devtools` header.
 
 Hand these to their owner and leave them out of findings, while still reading across the boundary for cross-verification:
 
@@ -20,11 +20,11 @@ Hand these to their owner and leave them out of findings, while still reading ac
 | - | - |
 | `.github/workflows/**`, `.github/actions/**`, `action.yml`, including the jobs that call a script | pe-github-actions |
 | `Dockerfile*`, CDK/CloudFormation/Terraform, and the cloud resources a deploy or release touches | pe-aws-infra |
-| release, deploy, and CI-step scripts without a `# pe: devtools` header, and any other script | pe-general-purpose |
+| release, deploy, and CI-step scripts without a `# pe: devtools` header, and non-shell scripts under `scripts/dev/` | pe-general-purpose |
 | `*.rs`, `Cargo.toml` | pe-rust |
 | `*.go`, `go.mod` | pe-go |
 
-A file routed here that is really a production CI primitive (a workflow step runs it to release or deploy, or it changes shared or production state) is outside this threat model: say so in a receipt naming the caller so the lead re-routes it, and do not review it under the local model.
+A file routed here that is really a production CI primitive (a workflow step runs it to release or deploy, or it changes shared or production state) is outside this threat model: review it under a production threat model instead, and name the caller in each finding.
 
 ## Threat Model
 
