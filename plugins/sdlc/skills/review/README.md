@@ -7,7 +7,7 @@ Stack-specialized code review with a two-gate model and a severity-gated verdict
 ## When to use it
 
 - You want a rigorous review of your branch before opening a PR (**Gate 1** — author self-review).
-- You're the requested reviewer on someone else's PR (**Gate 2** — independent peer review).
+- You're the requested reviewer on someone else's PR (**Gate 2** — independent peer review). **Deprecated:** for an outside review, use [`sdlc:copilot-review`](../copilot-review/README.md). Gate 2 still runs, with a warning, and will be removed in a later release.
 - You want a focused review of specific files, a folder, or staged changes.
 
 **Triggers:** `review my branch` · `review PR #7` · `code review` · `review the src/auth folder` · `/sdlc:review`
@@ -34,7 +34,7 @@ The mechanical steps are tested scripts in `bin/`, not model judgment: `scope.js
 
 ```text
 review my branch                 # Gate 1, before you open the PR
-review PR #7                     # Gate 2, as the peer reviewer
+review PR #7                     # Gate 2, as the peer reviewer (deprecated)
 review these files: internal/auth/limiter.go, internal/auth/limiter_test.go
 /sdlc:review cleanup             # remove review worktrees whose PR is finished
 ```
