@@ -104,6 +104,15 @@ check_tree() {
   grep -qF 'if REVIEW_MOVES is empty or lacks "moves_coverage":' "$skill" \
     || echo "review: dispatch does not stop on an empty or unreadable review moves file"
   section "$proto" '^## Output Format' | grep -qF 'moves_coverage:' || echo "protocol: Output Format missing moves_coverage:"
+  # lineage: the dispatch carries the fix diff + ripple receipts, validate gets the prior ids, the moves define the keys
+  docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF 'FIX DIFF:' || echo "review: dispatch prompt does not carry FIX DIFF"
+  docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF 'RIPPLE RECEIPTS:' || echo "review: dispatch prompt does not carry RIPPLE RECEIPTS"
+  grep -qF 'prior_ids: session.prior_ids}' "$skill" || echo "review: validate does not get the prior round's ids"
+  grep -qF 'if v.gating: print review-moves.md § Remediation Pre-flight' "$skill" || echo "review: a round with gating findings does not print the remediation pre-flight"
+  section "$proto" '^## Output Format' | grep -qF 'introduced_by:' || echo "protocol: Output Format missing introduced_by:"
+  for want in '## Round 2+' '## Finding Keys' '## Remediation Pre-flight'; do
+    grep -qxF -- "$want" "$root/skills/review/references/review-moves.md" 2>/dev/null || echo "moves: $want missing"
+  done
   for want in 'M1 Ripple' 'M2 Lifecycle' 'M3 Inputs' 'M4 Attack the guard' 'M5 Failure path' 'M6 Falsify the test' 'M7 Fact check'; do
     grep -qF -- "| $want |" "$root/skills/review/references/review-moves.md" 2>/dev/null || echo "moves: $want missing from the move table"
   done
@@ -577,6 +586,18 @@ mutant moves-coverage-not-asked \
 mutant move-dropped \
   'grep -vF "| M6 Falsify the test |" skills/review/references/review-moves.md > t && mv t skills/review/references/review-moves.md' \
   'moves: M6 Falsify the test missing from the move table'
+mutant fix-diff-not-dispatched \
+  'sedall "s/FIX DIFF:/FIX:/"' \
+  'review: dispatch prompt does not carry FIX DIFF'
+mutant prior-ids-not-validated \
+  'sedall "s/, prior_ids: session.prior_ids}/}/"' \
+  'review: validate does not get the prior round'"'"'s ids'
+mutant preflight-dropped \
+  'sedall "s/; if v.gating: print review-moves.md § Remediation Pre-flight[^#]*//"' \
+  'review: a round with gating findings does not print the remediation pre-flight'
+mutant finding-keys-dropped \
+  'sedall "s/^## Finding Keys$/## Keys/"' \
+  'moves: ## Finding Keys missing'
 mutant protocol-not-dispatched \
   'sedall "s/{PE_PROTOCOL}//"' \
   'review: dispatch prompt does not inline the PE protocol'

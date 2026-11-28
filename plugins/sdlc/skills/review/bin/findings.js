@@ -5,16 +5,17 @@
  * Usage:
  *   node findings.js validate < { outputs: { <teammate>: { pe, expert?, findings, verification_receipts?,
  *                                   moves_coverage?, tier_escalation? } }, redispatched?: { <kind>: [teammate, ...] },
- *                                   moves_checked?: [teammate, ...] }
+ *                                   moves_checked?: [teammate, ...], prior_ids?: [finding id, ...] }
  *   node findings.js dedup    < { outputs: { <teammate>: { pe, findings } } }
  *
  * validate prints { outputs, redispatch: [{ name, kinds, note }], category_fallbacks, demoted, coverage_gaps }.
  *   Severity is normalized first ("🔴 CRITICAL" → CRITICAL). Each teammate is re-dispatched at most
- *   once per kind (findings | recommendation | severity | category | claim | moves). When a kind was already
+ *   once per kind (findings | recommendation | severity | category | claim | moves | lineage). When a kind was already
  *   re-dispatched, the still-invalid item falls back instead: a finding without a concrete
  *   recommendation becomes a below_bar receipt, an invalid severity becomes MEDIUM (still gating),
  *   an invalid category becomes "general", an invalid receipt claim becomes "absence", and an incomplete
- *   moves_coverage is kept and named in coverage_gaps. Fallbacks apply only to teammates with nothing left to
+ *   moves_coverage is kept and named in coverage_gaps, and a finding with invalid lineage keeps siblings: []
+ *   and introduced_by: null and is named in coverage_gaps. Fallbacks apply only to teammates with nothing left to
  *   re-dispatch, so a pending replacement is never half-applied. `expert` is set from the dispatched pe.
  *   An output whose findings is not a list (an error body, a missing key) is never a clean review: it is
  *   re-dispatched once, then validate exits 2.
@@ -28,7 +29,13 @@
  *   leading M1..M7, so "M2 Lifecycle" is M2), status applied | n/a; an applied entry's checked names what was
  *   examined with a count (a digit), and is not wholly a <...> placeholder or the reference's own example; an n/a
  *   entry has a note. A finding's move is its leading M1..M7, else none. Teammates in moves_checked (a partial
- *   reply whose coverage Phase 4 already settled) skip the coverage check.
+ *   reply whose coverage Phase 4 already settled) skip the coverage and lineage checks.
+ * Lineage (references/review-moves.md § Finding Keys): a finding's siblings, when present (null reads as missing),
+ *   is a list of path:line strings; when prior_ids is given (round 2+, the latest prior round's finding ids), its
+ *   introduced_by is one of prior_ids or still-present | new | missed | pre-existing; without prior_ids it is dropped.
+ *   A moves_checked teammate's bad lineage falls back at once, with a coverage_gaps entry.
+ * dedup keeps the top-severity copy's move and introduced_by (on a tie, a prior id over still-present, new, missed,
+ *   pre-existing) and unions siblings.
  *
  * Exit codes: 0 success; 2 any error ({ error } on stdout).
  */
@@ -46,6 +53,8 @@ const VAGUE = /^\s*(consider|review whether|think about|maybe|perhaps)\b/i;
 const MOVES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'];
 const MOVES_EXAMPLE = '2 changed contracts → 9 consumers, 3 doc restatements; 1 fix → 4 sibling sites grepped';
 const moveOf = (v) => { const m = String(v || '').trim().toUpperCase().match(/^M[1-7](?![0-9])/); return m ? m[0] : null; };
+const LINEAGE = ['still-present', 'new', 'missed', 'pre-existing'];
+const PATH_LINE = /^[^\s:]+:\d+(-\d+)?$/;   // repo-relative path:line or path:start-end
 const oneLine = (v) => JSON.stringify(String(v ?? '')).slice(0, 80);   // PE text quoted on one line, never markdown
 
 // What is wrong with a PE's moves_coverage, as short phrases; [] when it is complete.
@@ -76,6 +85,7 @@ const NOTES = {
   category: (titles) => `Finding(s) ${titles} have a category outside the enum. Every finding needs an enum category. Re-emit with one.`,
   claim: (titles) => `Receipt(s) ${titles} have a claim outside absence|positive|below_bar|indeterminate. Re-emit with one.`,
   findings: () => 'Your output has no findings list. Re-emit your full YAML block; a clean review returns findings: [].',
+  lineage: (titles) => `Finding(s) ${titles} lack lineage (REVIEW MOVES § Finding Keys): siblings must be a list of path:line (empty allowed), and on round 2+ introduced_by must be a prior finding id or still-present | new | missed | pre-existing. Re-emit your full YAML block.`,
   moves: (problems) => `Your moves_coverage is incomplete (${problems}). Apply every move in REVIEW MOVES and re-emit your full YAML block with moves_coverage: M1..M7 once each, status applied (checked names what you examined, with a count) or n/a (note says why no unit triggered it).`,
 };
 
@@ -123,9 +133,15 @@ function validate(input) {
         severity: String(f.severity || '').toUpperCase().replace(/[^A-Z]/g, ''),
         category: String(f.category || '').trim().toLowerCase(),
         move: moveOf(f.move) || 'none',
+        ...(Array.isArray(input.prior_ids) ? {} : { introduced_by: undefined }),   // round 1 has no lineage to name
       };
     });
-    const coverage = (input.moves_checked || []).includes(name) ? [] : coverageProblems(raw.moves_coverage);
+    const settled = (input.moves_checked || []).includes(name);
+    const coverage = settled ? [] : coverageProblems(raw.moves_coverage);
+    const priors = Array.isArray(input.prior_ids) ? input.prior_ids.map(String) : null;
+    const siblingsOk = (f) => f.siblings == null || (Array.isArray(f.siblings) && f.siblings.every((s) => typeof s === 'string' && PATH_LINE.test(s.trim())));
+    const lineageOk = (f) => siblingsOk(f)
+      && (!priors || priors.includes(f.introduced_by) || LINEAGE.includes(f.introduced_by));
     const receipts = (raw.verification_receipts || []).map((r) => ({ ...r }));
     const bad = {
       recommendation: findings.filter((f) => !String(f.recommendation || '').trim() || VAGUE.test(f.recommendation)),
@@ -133,8 +149,10 @@ function validate(input) {
       category: findings.filter((f) => !CATEGORIES.has(f.category)),
       claim: receipts.filter((r) => !CLAIMS.has(r.claim)),
       moves: coverage,
+      lineage: findings.filter((f) => !lineageOk(f)),
     };
-    const pending = Object.keys(bad).filter((k) => bad[k].length && !(done[k] || []).includes(name));
+    // A settled partial reply (moves_checked) is never re-dispatched for lineage: it falls back at once.
+    const pending = Object.keys(bad).filter((k) => bad[k].length && !(done[k] || []).includes(name) && !(k === 'lineage' && settled));
     const out = { ...raw, expert: raw.pe, findings, verification_receipts: receipts };
     if (pending.length) {
       const noteFor = (k) => (k === 'moves' ? NOTES.moves(coverage.join('; ')) : NOTES[k](quoted(bad[k].map((x) => x.title))));
@@ -152,6 +170,12 @@ function validate(input) {
       f.severity = 'MEDIUM';
     }
     for (const r of bad.claim) r.claim = 'absence';
+    for (const f of findings) {
+      if (lineageOk(f)) continue;
+      if (!siblingsOk(f)) f.siblings = [];
+      if (priors && !priors.includes(f.introduced_by) && !LINEAGE.includes(f.introduced_by)) f.introduced_by = null;
+    }
+    if (bad.lineage.length) gaps.push(`${name}: lineage missing after one re-dispatch on ${quoted(bad.lineage.map((f) => f.title))}`);
     if (coverage.length) gaps.push(`${name}: moves_coverage incomplete after one re-dispatch — ${coverage.join('; ')}`);
     const rejected = new Set(bad.recommendation);
     for (const f of rejected) {
@@ -186,6 +210,9 @@ function dedup(input) {
     const top = group.reduce((best, f) => (rank(f) < rank(best) ? f : best), first);
     const floor = group.find((f) => FLOOR_CATEGORIES.includes(f.category));
     const { pe, ...base } = first;
+    const tops = group.filter((f) => rank(f) === rank(top));
+    const origin = (f) => (f.introduced_by == null ? 9 : LINEAGE.includes(f.introduced_by) ? 1 + LINEAGE.indexOf(f.introduced_by) : 0);
+    const lead = tops.reduce((best, f) => (origin(f) < origin(best) ? f : best), tops[0]);
     const category = floor ? floor.category : top.category;
     const floored = FLOOR_CATEGORIES.includes(category) && ['LOW', 'INFO'].includes(top.severity);
     consolidated.push({
@@ -197,6 +224,9 @@ function dedup(input) {
       locations: unique(group.flatMap((f) => f.locations || [])),
       description: unique(group.map((f) => String(f.description || '').trim()).filter(Boolean)).join('\n\n'),
       recommendation: top.recommendation,
+      move: lead.move,
+      introduced_by: lead.introduced_by,
+      siblings: unique(group.flatMap((f) => f.siblings || [])),
       category,
       domains: unique(group.map((f) => f.pe)),
     });

@@ -24,11 +24,12 @@ round = {
   summary: 2–3 sentences — what changed, what was found, overall assessment,
   ac_results: [{ac: "#{r.index} {one-line r.ac}", verdict: r.status, evidence: r.evidence}] if session.ac_conformance == "pending",
   ac_skip_reason: session.ac_conformance otherwise,
-  findings: consolidated,                        # severity, in_scope, title, location, locations, domains, category, move, description, recommendation
+  findings: consolidated,                        # severity, in_scope, title, location, locations, domains, category, move, siblings, introduced_by, description, recommendation
   dismissed: [{title, rationale, original_severity, outcome}],   # outcome: "dismissed" | "adjusted → {SEV}"
   receipts: [{claim, title, location, attestation, missing_source}],   # every PE receipt; a demoted finding → claim indeterminate (with missing_source) or below_bar, original description + missing proof in attestation
   category_fallbacks: session.category_fallbacks,
-  coverage_gaps: session.coverage_gaps            # PEs whose moves_coverage stayed incomplete after one re-dispatch
+  coverage_gaps: session.coverage_gaps,           # PEs whose moves_coverage or lineage stayed incomplete after one re-dispatch
+  ripple_receipts: {spot_checked: len(session.ripple.kept), dropped: len(session.ripple.dropped)} if session.prior_ids else omitted
 }
 out = `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/review-file.js" render --file "{output_path}" --root "{session.review_root}"` < round
     # creates the file or appends "## Review Round {n}"; advisory LOW/INFO are indexed under § Advisory Findings only: every finding keeps its full entry under § In Scope Findings

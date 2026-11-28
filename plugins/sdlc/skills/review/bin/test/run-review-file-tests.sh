@@ -111,6 +111,28 @@ fi
 if grep -q 'Review Moves Coverage Gaps' "$TMP/initial.md"; then fail "a round with no gaps renders the gaps heading"
 else pass "a round with no gaps renders no gaps heading"; fi
 
+# --- render: lineage (siblings, introduced_by, Fix Cascade, Ripple Receipts) ------------
+cp "$FIX/gate1-locked.md" "$TMP/lineage.md"
+node -e 'const r=require(process.argv[1]); r.findings=[
+  {severity:"HIGH",in_scope:true,category:"auth",title:"Caused",location:"a.go:1",description:"d",recommendation:"Fix.",siblings:["b.go:2","c.md:3"],introduced_by:"MEDIUM-004"},
+  {severity:"MEDIUM",in_scope:true,category:"docs",title:"Fresh",location:"d.go:4",description:"d",recommendation:"Fix.",introduced_by:"new"},
+  {severity:"LOW",in_scope:false,category:"docs",title:"Old",location:"e.go:5",description:"d",recommendation:"Fix.",introduced_by:"MEDIUM-001"}];
+  r.ripple_receipts={spot_checked:2,dropped:1}; console.log(JSON.stringify(r))' "$FIX/gate2-round.json" \
+  | node "$CLI" render --file "$TMP/lineage.md" >/dev/null
+# shellcheck disable=SC2016 # backticks are the rendered markdown under test
+for want in '**Siblings:** `b.go:2`, `c.md:3`' '**Introduced by:** round 3 MEDIUM-004' '**Introduced by:** new' '| **Fix Cascade** | 1 / 2 |' \
+            '| **Ripple Receipts** | 2 spot-checked, 1 dropped — no hex SHA of the reviewed commit |' '`a.go:1` + 2 siblings'; do
+  if grep -qF -- "$want" "$TMP/lineage.md"; then pass "lineage renders: $want"; else fail "lineage does not render: $want"; fi
+done
+check "a round with lineage still parses" "$(node "$CLI" parse --file "$TMP/lineage.md")" \
+  'o.latest.in_scope_findings.length === 2 && o.latest.in_scope_findings[0].recommendation === "Fix."'
+node -e 'const r=require(process.argv[1]); r.ripple_receipts={spot_checked:0,dropped:0}; console.log(JSON.stringify(r))' "$FIX/gate2-round.json" > "$TMP/r0.json"
+cp "$FIX/gate1-locked.md" "$TMP/ripple0.md"; node "$CLI" render --file "$TMP/ripple0.md" < "$TMP/r0.json" >/dev/null
+if grep -qF "| **Ripple Receipts** | none — M1 ran exhaustive over the fix diff's rules |" "$TMP/ripple0.md"; then
+  pass "no ripple receipts renders the exhaustive note"; else fail "no ripple receipts does not render the exhaustive note"; fi
+if grep -q 'Fix Cascade\|Ripple Receipts' "$TMP/gate2.md"; then fail "a round without ripple_receipts renders lineage rows"
+else pass "a round without ripple_receipts renders no lineage rows"; fi
+
 # The template's own table of contents never reaches a review file.
 if grep -q "Contents" "$TMP/initial.md" "$TMP/gate2.md"; then
   fail "a rendered review file carries the template's Contents"

@@ -244,6 +244,8 @@ findings:
     verification_receipt: |    # Pass 5 — the command you ran + its key output
       <command> → <key output line(s) confirming the defect>
     move: M4                  # the REVIEW MOVES move whose trigger it falls under, or none
+    siblings: []              # REVIEW MOVES § Finding Keys — every other path:line stating or repeating it
+    introduced_by: new        # only when FIX DIFF is set: <prior finding id> | still-present | new | missed | pre-existing
 moves_coverage:                 # REVIEW MOVES § Output — M1..M7, each exactly once
   - {move: M1, status: applied, checked: "<what you examined, with a count>", note: ""}
 verification_receipts:          # non-gating — items that fail the REPORTING BAR + positive attestations

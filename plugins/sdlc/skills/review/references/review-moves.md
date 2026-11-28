@@ -5,7 +5,10 @@ Loaded by SKILL.md at Phase 3 and inlined into every PE dispatch beside the PE P
 ## Contents
 
 - Procedures
+- Round 2+
+- Finding Keys
 - Output
+- Remediation Pre-flight
 
 | Move | Trigger — a unit that is or contains | Catches |
 | - | - | - |
@@ -89,14 +92,47 @@ M7 Fact check:
     if unverifiable: a verification_receipts[] entry with claim: indeterminate, never a finding
 ```
 
+## Round 2+
+
+```text
+if FIX DIFF is set:                     # every hunk outside docs/code-reviews/** is a fix
+  for each hunk: apply M1's sibling grep and M4
+  if RIPPLE RECEIPTS is not none:       # spot-check
+    for each receipt: grep its rule; a restatement that disagrees with it is a finding,
+      unless the receipt keeps it with a reason that holds   # a count mismatch alone is not
+    grep every rule the fix diff adds or changes that no receipt names, as below
+  else:                                 # exhaustive
+    list every rule the fix diff adds or changes and grep every restatement of each
+    prefix M1's checked with "exhaustive, no ripple receipts — "
+```
+
+## Finding Keys
+
+After all passes and moves, for every finding:
+
+```text
+if its fix would change a rule, contract, definition or repeated value, or the same defect recurs elsewhere:
+  siblings = every other path:line, from repo root, stating or repeating it, grepped by name and literal value
+else:
+  siblings = []
+if FIX DIFF is set:                     # ids name findings in PRIOR REVIEW's latest round
+  if in_scope is false:                                     introduced_by = pre-existing
+  elif it re-flags a prior finding:                         introduced_by = still-present
+  elif a prior finding's fix (its hunks, or a sibling it left) caused it: introduced_by = <that finding's id>
+  elif its lines are absent at the prior SHA:               introduced_by = new
+  else:                                                     introduced_by = missed    # present at the prior SHA, unreported
+```
+
 ## Output
 
-Each finding carries `move:`, and the YAML block carries `moves_coverage`:
+Each finding carries `move:`, `siblings:` and, when FIX DIFF is set, `introduced_by:`; the YAML block carries `moves_coverage`:
 
 ```yaml
 findings:
   - id: "HIGH-001"
     move: M4                 # M1..M7 whose trigger the finding falls under, or none
+    siblings: ["docs/limits.md:12", "src/config.ts:40"]   # § Finding Keys, or []
+    introduced_by: MEDIUM-004   # when FIX DIFF is set: <prior finding id> | still-present | new | missed | pre-existing
     # ...the finding keys in the PE PROTOCOL's Output Format
 moves_coverage:              # M1..M7, each exactly once
   - move: M1
@@ -108,4 +144,17 @@ moves_coverage:              # M1..M7, each exactly once
     checked: ""
     note: "no test added or changed"
   # ...M2–M5 and M7, one entry each
+```
+
+## Remediation Pre-flight
+
+Printed by SKILL.md Phase 6 for the remediator after a round with gating findings:
+
+```text
+for each in-scope CRITICAL, HIGH or MEDIUM finding: fix its location AND every sibling
+for each rule the fix diff adds or changes:
+  M1: grep every restatement, align it or record why it stays
+  M3: give each new branch a defined outcome
+commit, then record one RIPPLE RECEIPT per rule, passed with the next sdlc:review invocation:
+  "<rule> → N restatements checked[; kept <path:line> — <why>] @ <7–40 hex sha of that commit>"
 ```

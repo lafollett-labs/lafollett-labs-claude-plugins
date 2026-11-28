@@ -342,7 +342,7 @@ Run dispatch-and-collect.md § Tier escalation check first. Then read `${CLAUDE_
 ```text
 redispatched = {}                                  # kind → [teammate]; bound once per round
 loop:
-  v = stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/findings.js" validate` < {outputs: {name: {pe: session.by_name[name], ...collected YAML}}, redispatched}
+  v = stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/findings.js" validate` < {outputs: {name: {pe: session.by_name[name], ...collected YAML}}, redispatched, prior_ids: session.prior_ids}
   if v.redispatch is empty: break
   for r in v.redispatch:
     remove collected_outputs[r.name]               # a respawned or dropped teammate leaves no stale invalid entry
@@ -425,7 +425,7 @@ for f in v.advisory: render "  • [{f.severity}] {f.location} — {f.title} (ad
 Each invocation is one round; the engineer drives the loop by remediating and re-invoking. Gate 1 terminates by the convergence decision (round cap 8); Gate 2 runs until MERGEABLE (a CI hold means re-run Gate 2 once the checks on HEAD's code have finished and are readable).
 
 ```text
-d = session.convergence.decision if session.convergence else null
+d = session.convergence.decision if session.convergence else null; if v.gating: print review-moves.md § Remediation Pre-flight with each gating finding's location + siblings
 if session.gate == "Gate 2":
   render "{session.verdict} · {session.gate_status}"      # the PR review carries it; the author remediates
 elif d == "LOCKED":

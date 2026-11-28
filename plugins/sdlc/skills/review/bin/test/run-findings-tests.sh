@@ -205,6 +205,42 @@ check "distinct findings stay separate and each gets its PE as its domain" \
   "$(dd '{"outputs":{"a":{"pe":"pe-go","findings":['"$GOOD"']},"b":{"pe":"pe-vue","findings":[{"severity":"LOW","category":"docs","title":"other","location":"b:1","recommendation":"r"}]}}}')" \
   'o.consolidated.length === 2 && o.consolidated[0].domains.join() === "pe-go" && o.consolidated[1].domains.join() === "pe-vue"'
 
+# --- lineage (references/review-moves.md § Finding Keys) --------------------------
+# lin <finding-extra-json> [top-level-extra] — validate one pe-go finding carrying the extra keys
+lin() { val '{"outputs":{"t1":{"pe":"pe-go","findings":[{"severity":"HIGH","category":"auth","title":"x","location":"a:1","recommendation":"Do y.","verification_receipt":"r"'"$1"'}]}}'"${2:-}"'}'; }
+check "siblings as a list of path:line passes, and is kept" "$(lin ',"siblings":["b:2","c:3"]')" \
+  'o.redispatch.length === 0 && o.outputs.t1.findings[0].siblings.join() === "b:2,c:3"'
+check "siblings that is not a list of strings re-dispatches for lineage" "$(lin ',"siblings":"b:2"')" \
+  'o.redispatch.length === 1 && o.redispatch[0].kinds.join() === "lineage" && /Finding Keys/.test(o.redispatch[0].note)'
+check "round 1 (no prior_ids) never asks for introduced_by" "$(lin '')" 'o.redispatch.length === 0'
+check "round 2+: a missing introduced_by re-dispatches" "$(lin '' ',"prior_ids":["HIGH-001"]')" \
+  'o.redispatch.length === 1 && o.redispatch[0].kinds.join() === "lineage"'
+for by in HIGH-001 still-present new missed pre-existing; do
+  check "round 2+: introduced_by $by passes" "$(lin ',"introduced_by":"'"$by"'"' ',"prior_ids":["HIGH-001"]')" 'o.redispatch.length === 0'
+done
+check "round 2+: an id the prior round never had is not lineage" "$(lin ',"introduced_by":"HIGH-009"' ',"prior_ids":["HIGH-001"]')" \
+  'o.redispatch.length === 1'
+check "after its one re-dispatch, bad lineage is cleared, kept as a finding and recorded as a gap" \
+  "$(lin ',"siblings":7,"introduced_by":"bogus"' ',"prior_ids":["HIGH-001"],"redispatched":{"lineage":["t1"]}')" \
+  'o.redispatch.length === 0 && o.outputs.t1.findings.length === 1 && o.outputs.t1.findings[0].siblings.length === 0 && o.outputs.t1.findings[0].introduced_by === null && /^t1: lineage missing after one re-dispatch/.test(o.coverage_gaps[0])'
+check "a moves_checked teammate's bad lineage falls back at once, with a gap" "$(lin ',"siblings":"b:2"' ',"prior_ids":["HIGH-001"],"moves_checked":["t1"]')" \
+  'o.redispatch.length === 0 && o.outputs.t1.findings[0].siblings.length === 0 && o.outputs.t1.findings[0].introduced_by === null && /^t1: lineage missing/.test(o.coverage_gaps[0])'
+check "a moves_checked teammate with good lineage passes untouched" "$(lin ',"siblings":["b:2"],"introduced_by":"new"' ',"prior_ids":["HIGH-001"],"moves_checked":["t1"]')" \
+  'o.redispatch.length === 0 && o.coverage_gaps.length === 0 && o.outputs.t1.findings[0].introduced_by === "new"'
+check "round 1 drops an introduced_by the PE copied from the template" "$(lin ',"introduced_by":"MEDIUM-004"')" \
+  'o.redispatch.length === 0 && !("introduced_by" in o.outputs.t1.findings[0])'
+check "a sibling that is not a path:line re-dispatches" "$(lin ',"siblings":["the docs"]')" \
+  'o.redispatch.length === 1 && o.redispatch[0].kinds.join() === "lineage"'
+check "siblings: null reads as missing" "$(lin ',"siblings":null')" 'o.redispatch.length === 0'
+check "a path:start-end range is a sibling" "$(lin ',"siblings":["docs/a.md:3-9"]')" 'o.redispatch.length === 0'
+L='"category":"auth","title":"x","location":"a:1","recommendation":"r"'
+check "dedup unions siblings and keeps the top-severity copy's lineage" \
+  "$(dd '{"outputs":{"a":{"pe":"pe-go","findings":[{"severity":"MEDIUM",'"$L"',"siblings":["b:2"],"introduced_by":"new","move":"M1"}]},"b":{"pe":"pe-vue","findings":[{"severity":"HIGH",'"$L"',"siblings":["c:3","b:2"],"introduced_by":"missed","move":"M4"}]}}}')" \
+  'o.consolidated.length === 1 && o.consolidated[0].siblings.join() === "b:2,c:3" && o.consolidated[0].introduced_by === "missed" && o.consolidated[0].move === "M4"'
+check "dedup on a severity tie prefers a prior finding id" \
+  "$(dd '{"outputs":{"a":{"pe":"pe-go","findings":[{"severity":"HIGH",'"$L"',"introduced_by":"new"}]},"b":{"pe":"pe-vue","findings":[{"severity":"HIGH",'"$L"',"introduced_by":"MEDIUM-004"}]}}}')" \
+  'o.consolidated[0].introduced_by === "MEDIUM-004"'
+
 # --- fail closed ---------------------------------------------------------------
 node "$CLI" validate <<<'nope' >/dev/null 2>&1; code=$?
 if [ "$code" -eq 2 ]; then pass "invalid JSON exits 2"; else fail "invalid JSON exit $code"; fi

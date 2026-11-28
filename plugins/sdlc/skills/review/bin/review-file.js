@@ -58,7 +58,9 @@
  *     findings: [{ severity, in_scope, title, location, locations?, domains, category,
  *                  description, recommendation }],
  *     dismissed?: [{ title, rationale, original_severity, outcome }],
- *     receipts?: [{ claim, title, location, attestation, missing_source? }], category_fallbacks?: [], coverage_gaps?: [] }
+ *     receipts?: [{ claim, title, location, attestation, missing_source? }], category_fallbacks?: [], coverage_gaps?: [],
+ *     ripple_receipts?: { spot_checked, dropped } }   # round 2+ PE rounds: adds Fix Cascade + Ripple Receipts rows
+ *   A finding may carry siblings: [path:line] and introduced_by; both render under its Location.
  *
  * Exit codes: 0 success; 2 any error — stdout carries { error }.
  */
@@ -241,7 +243,7 @@ function overview(counts) {
   return ['| Severity | In Scope | Out of Scope |', '| - | - | - |', ...rows].join('\n');
 }
 
-function findingEntry(f, level) {
+function findingEntry(f, level, priorRound) {
   const lines = [
     `${'#'.repeat(level)} ${EMOJI[f.severity]} ${f.id}: ${f.title}`,
     '',
@@ -249,12 +251,29 @@ function findingEntry(f, level) {
     `**Location:** ${code(f.location)}`,
   ];
   if (f.locations?.length) lines.push(`**Also at:** ${f.locations.map(code).join(', ')}`);
+  if (f.siblings?.length) lines.push(`**Siblings:** ${f.siblings.map(code).join(', ')}`);
+  if (f.introduced_by) {
+    const by = String(f.introduced_by).replace(/\s+/g, ' ');
+    lines.push(`**Introduced by:** ${PRIOR_ID.test(by) && priorRound ? `round ${priorRound} ${by}` : by}`);
+  }
   lines.push('', balanced(f.description), '', labelled('**Recommendation:**', f.recommendation));
   return lines.join('\n');
 }
 
 const indexLine = (f) => `- [${f.severity}] ${f.id}: ${f.title} — ${code(f.location)}`;
-const actionLine = (f) => `- [ ] ${f.id}: ${f.title} — ${code(f.location)}`;
+const actionLine = (f) => `- [ ] ${f.id}: ${f.title} — ${code(f.location)}${f.siblings?.length ? ` + ${f.siblings.length} siblings` : ''}`;
+const PRIOR_ID = /^(CRITICAL|HIGH|MEDIUM|LOW|INFO)-\d+$/;
+// Round 2+: in-scope findings a prior finding's fix caused, over all in-scope findings.
+function cascade(r) {
+  const inScope = r.findings.filter((f) => f.in_scope !== false);
+  return `${inScope.filter((f) => PRIOR_ID.test(f.introduced_by || '')).length} / ${inScope.length}`;
+}
+function rippleRow(r) {
+  const x = r.ripple_receipts;
+  if (!x) return null;
+  const head = x.spot_checked ? `${x.spot_checked} spot-checked` : "none — M1 ran exhaustive over the fix diff's rules";
+  return ['Ripple Receipts', head + (x.dropped ? `, ${x.dropped} dropped — no hex SHA of the reviewed commit` : '')];
+}
 
 // Body sections shared by the initial block (H2 sections, H3 findings) and a round block (H3, H4).
 function bodySections(r, ids, level, initial) {
@@ -267,7 +286,7 @@ function bodySections(r, ids, level, initial) {
   sections.push(`${h} Acceptance-Criteria Conformance\n\n${acSection(r)}`);
   sections.push(`${h} Findings Overview\n\n${overview(verdict(r.findings).counts)}`);
   const sep = initial ? '\n\n---\n\n' : '\n\n';
-  const entries = ids.map((f) => findingEntry(f, level + 1)).join(sep);
+  const entries = ids.map((f) => findingEntry(f, level + 1, r.prior_round)).join(sep);
   sections.push(`${h} In Scope Findings\n\n${entries || 'None.'}`);
   if (advisory.length) sections.push(`${h} Advisory Findings\n\n${advisory.map(indexLine).join('\n')}`);
   if (initial || out.length) {
@@ -341,10 +360,12 @@ function renderRound(r, v, n, note) {
     ['Tier', tierRow(r)],
     ['Routing', r.routing_rationale?.length ? r.routing_rationale.join('; ') : NO_REROUTE],
     r.convergence_reasons?.length ? ['Convergence Notes', r.convergence_reasons.join('; ')] : null,
+    r.ripple_receipts ? ['Fix Cascade', cascade(r)] : null,
+    rippleRow(r),
     ['Verdict', v],
     ['Date', r.date],
   ]);
-  const { sections } = bodySections(r, ids, 3, false);
+  const { sections } = bodySections({ ...r, prior_round: n - 1 }, ids, 3, false);
   const title = `## Review Round ${n}` + (note ? `  ${note}` : '');
   return `---\n\n${title}\n\n${meta}\n\n${sections.join('\n\n')}\n`;
 }

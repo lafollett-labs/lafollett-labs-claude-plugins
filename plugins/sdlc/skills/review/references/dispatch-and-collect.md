@@ -9,6 +9,7 @@ Loaded by SKILL.md at Phase 3, after it has read the dispatch playbook, the PE p
 - Search roots + per-PE tier
 - Model-by-review-tier resolution + DEEP guard
 - Build root
+- Lineage inputs
 - Dispatch input contract
 - Dispatch invocation
 - Collect
@@ -181,6 +182,22 @@ else:
 build_plans(pe) = [p for p in session.build_plans if p.pe == pe]
 ```
 
+## Lineage inputs
+
+```text
+session.prior_ids = null
+P = session.prior.latest.reviewed_sha if session.prior else null
+if session.round_n > 1 and scope.ledger and P                                   # a committed range: Branch Diff or PR Review
+   and `git -C "{session.review_root}" merge-base --is-ancestor {P} {session.head_sha}` succeeds:   # rebased or missing → no lineage
+  session.prior_ids = ids in session.prior.latest.in_scope_findings ∪ session.prior.latest.advisory   # the latest prior round's ids
+  lines = "<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>" lines in the invocation text,
+          the PR body, or a hand-off message
+  fixes = `git -C "{session.review_root}" rev-list {P}..{session.head_sha}`
+  session.ripple.kept    = lines whose sha, lowercased, is 7–40 hex and a prefix of a commit in fixes
+  session.ripple.dropped = lines whose sha is not hex or names no commit          # HEAD or a branch name is not a sha
+                                                                                 # a receipt from an earlier round is neither
+```
+
 ## Dispatch input contract
 
 PEs have Bash access — they pull their own diffs. The skill provides METADATA ONLY (never pre-fetched diff content).
@@ -222,6 +239,8 @@ and your agent's stack lenses (they augment, never replace them):
 
 {optional} PROJECT SUBDIR: {e.g., "frontend/" for Angular monorepo subdir}
 {optional} PRIOR REVIEW:   {review_file if round > 1}   # Phase 2 binds it
+{optional} FIX DIFF:       git diff {session.prior.latest.reviewed_sha}..{session.head_sha}   # when session.prior_ids is set (§ Lineage inputs)
+{optional} RIPPLE RECEIPTS: {session.ripple.kept, one per line, else "none"}   # when session.prior_ids is set
 {optional} PASTED CODE (Ad-hoc only — review this in full; there is no file or diff):
   {session.adhoc_code}
 {optional} PRIOR LEDGER:   {session.ledger_path if session.ledger_path and it exists}   # Gate 1 only; prior findings' raw title + category per round
