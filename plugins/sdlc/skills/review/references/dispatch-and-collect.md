@@ -203,14 +203,23 @@ if session.round_n > 1 and scope.ledger and P                                   
 
 ```text
 SUITE_FREE = {pe-governance} ∪ keys(session.domain_pes)          # no suites of their own
-session.receipts = "<command> → pass|fail @ <sha>" lines in the invocation text, the PR body, or a hand-off
-                   message, whose sha, lowercased, is 7–40 hex and a prefix of session.head_sha
+# Receipts are the caller's claims: never read from the PR body, never on a Gate 2 peer round.
+session.receipts = [] if session.gate == "Gate 2" else
+                   "<command> → pass|fail @ <sha>" lines in the invocation text or a hand-off message,
+                   whose sha, lowercased, is 7–40 hex and a prefix of session.head_sha
+receipts_for(pe) = session.receipts whose command's leading tool (cargo, go, npm, dotnet, …) appears in
+                   ${CLAUDE_PLUGIN_ROOT}/agents/{pe}.md § Commands
 test_budget(pe):
-  if pe in SUITE_FREE:                             return "none"
-  if any r in session.receipts has result fail:    return "full"
-  if session.receipts or session.prior_ids:        return "targeted"    # receipts to reuse, or a fix round
+  if pe in SUITE_FREE:                               return "none"
+  if any r in receipts_for(pe) has result fail:      return "full"
+  if receipts_for(pe) or session.prior_ids:          return "targeted"    # its own receipts to reuse, or a fix round
   return "full"
-cap = session.settings.review."maxParallelPes" if a positive integer else 2   # suite-running PEs at once
+v = session.settings.review."maxParallelPes"
+cap = v if v is a positive integer else 2             # suite-running PEs at once
+if v is set and not a positive integer: ⚠️ "review.maxParallelPes must be a positive integer; using 2"
+# slot(pe) — before a tier-escalation re-dispatch or re-spawn of a suite-running teammate, re-enter
+# § Collect until fewer than `cap` suite-running teammates are pending. Schema and proof-check
+# re-dispatches only re-emit YAML and take no slot.
 ```
 
 ## Dispatch input contract
@@ -260,7 +269,7 @@ and your agent's stack lenses (they augment, never replace them):
   {session.adhoc_code}
 {optional} PRIOR LEDGER:   {session.ledger_path if session.ledger_path and it exists}   # Gate 1 only; prior findings' raw title + category per round
 TEST BUDGET:     {test_budget(pe)}   # § Test budget + dispatch cap; PE PROTOCOL Inputs say what each value runs
-{optional} AUTHOR RECEIPTS: {session.receipts, one per line}   # when test_budget(pe) == "targeted" and session.receipts
+{optional} AUTHOR RECEIPTS: {receipts_for(pe), one per line}   # when test_budget(pe) == "targeted" and receipts_for(pe)
 {optional} BUILD PLAN:     one line per p in build_plans(pe): "- {p.dir} ({p.kind}): {p.status}{" · checks: skip" if p.checks == "skip" else ""} — {p.command or p.reason} · receipt: {p.receipt}"
                            # only when build_plans(pe) is non-empty
 
@@ -461,6 +470,7 @@ for name, pe_output in collected_outputs.items():
       # SendMessage would run the higher tier on the lower tier's model (e.g. DEEP depth on sonnet),
       # violating and skipping the DEEP guard. Re-SPAWN fresh at the new tier's model instead (mirrors
       # the crash-path re-spawn), and re-evaluate the DEEP guard for it.
+      slot(pe)                                              # the escalated run re-runs suites under the dispatch cap
       if session.model_by_tier and model_for_tier(new_tier) != model_for_tier(old_tier):
         if new_tier == "DEEP": deep_guard([name])          # re-evaluate the guard for the escalated teammate
         SendMessage(to: name, {type: shutdown_request, reason: "re-spawning at {new_tier} model"})
@@ -488,7 +498,7 @@ for name, pe_output in collected_outputs.items():
 Run on EVERY exit once teammates are spawned — the normal path and every abort branch — so no live team or build scratch directory leaks:
 
 ```text
-for name in session.by_name:        # every teammate spawned this round, including -retry and -esc respawns
+for name in session.by_name if name not in queue:   # every teammate spawned this round, including -retry and -esc respawns; never a still-queued one
   SendMessage(to: name, summary: "round {session.round_n} complete",
               message: {type: "shutdown_request", reason: "review round {session.round_n} complete"})
 if session.build_scratch:

@@ -110,6 +110,12 @@ check_tree() {
   grep -qF 'prior_ids: session.prior_ids}' "$skill" || echo "review: validate does not get the prior round's ids"
   # test budget + dispatch cap
   docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF 'TEST BUDGET:     {test_budget(pe)}' || echo "review: dispatch prompt does not carry each PE's TEST BUDGET"
+  for want in 'if pe in SUITE_FREE:                               return "none"' \
+              'if any r in receipts_for(pe) has result fail:      return "full"' \
+              '# Receipts are the caller'"'"'s claims: never read from the PR body, never on a Gate 2 peer round.' \
+              '      slot(pe) '; do
+    grep -qF -- "$want" "$root/skills/review/references/dispatch-and-collect.md" || echo "review: test budget rule missing: $want"
+  done
   grep -qF 'while queue and count(n in pending where session.by_name[n] not in SUITE_FREE) < cap:' "$root/skills/review/references/dispatch-and-collect.md" \
     || echo "review: Collect does not refill the dispatch cap"
   # shellcheck disable=SC2016 # backticks are the markdown under test
@@ -606,6 +612,20 @@ mutant preflight-dropped \
 mutant budget-not-dispatched \
   'sedall "s/TEST BUDGET:     {test_budget(pe)}/TEST BUDGET: none/"' \
   'review: dispatch prompt does not carry each PE'"'"'s TEST BUDGET'
+mutant fail-receipt-ignored \
+  'grepvall "has result fail:"' \
+  'review: test budget rule missing: if any r in receipts_for(pe) has result fail'
+mutant escalation-uncapped \
+  'grepvall "      slot(pe) "' \
+  'review: test budget rule missing:       slot(pe)'
+# shellcheck disable=SC2016 # backticks are the markdown under test
+mutant max-parallel-undocumented \
+  'grep -vF "| \`review.maxParallelPes\` |" references/settings.md > t && mv t references/settings.md' \
+  'settings: review.maxParallelPes undocumented'
+# shellcheck disable=SC2016 # backticks are the markdown under test
+mutant targeted-undefined \
+  'sed "s/\`targeted\`:/\`narrow\`:/" skills/review/references/pe-protocol.md > t && mv t skills/review/references/pe-protocol.md' \
+  'protocol: Inputs do not define a targeted TEST BUDGET'
 mutant cap-never-refilled \
   'sedall "s/  while queue and count(n in pending/  if queue and count(n in pending/"' \
   'review: Collect does not refill the dispatch cap'
