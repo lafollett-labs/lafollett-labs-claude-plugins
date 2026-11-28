@@ -10,6 +10,7 @@ Loaded by SKILL.md at Phase 3, after it has read the dispatch playbook, the PE p
 - Model-by-review-tier resolution + DEEP guard
 - Build root
 - Lineage inputs
+- Test budget + dispatch cap
 - Dispatch input contract
 - Dispatch invocation
 - Collect
@@ -198,6 +199,20 @@ if session.round_n > 1 and scope.ledger and P                                   
                                                                                  # a receipt from an earlier round is neither
 ```
 
+## Test budget + dispatch cap
+
+```text
+SUITE_FREE = {pe-governance} ∪ keys(session.domain_pes)          # no suites of their own
+session.receipts = "<command> → pass|fail @ <sha>" lines in the invocation text, the PR body, or a hand-off
+                   message, whose sha, lowercased, is 7–40 hex and a prefix of session.head_sha
+test_budget(pe):
+  if pe in SUITE_FREE:                             return "none"
+  if any r in session.receipts has result fail:    return "full"
+  if session.receipts or session.prior_ids:        return "targeted"    # receipts to reuse, or a fix round
+  return "full"
+cap = session.settings.review."maxParallelPes" if a positive integer else 2   # suite-running PEs at once
+```
+
 ## Dispatch input contract
 
 PEs have Bash access — they pull their own diffs. The skill provides METADATA ONLY (never pre-fetched diff content).
@@ -244,8 +259,8 @@ and your agent's stack lenses (they augment, never replace them):
 {optional} PASTED CODE (Ad-hoc only — review this in full; there is no file or diff):
   {session.adhoc_code}
 {optional} PRIOR LEDGER:   {session.ledger_path if session.ledger_path and it exists}   # Gate 1 only; prior findings' raw title + category per round
-{optional} TEST BUDGET:    none — run no build, test, or lint suite; the stack PE reviewing these files runs them
-                           # only when pe in session.domain_pes (kind: domain)
+TEST BUDGET:     {test_budget(pe)}   # § Test budget + dispatch cap; PE PROTOCOL Inputs say what each value runs
+{optional} AUTHOR RECEIPTS: {session.receipts, one per line}   # when test_budget(pe) == "targeted" and session.receipts
 {optional} BUILD PLAN:     one line per p in build_plans(pe): "- {p.dir} ({p.kind}): {p.status}{" · checks: skip" if p.checks == "skip" else ""} — {p.command or p.reason} · receipt: {p.receipt}"
                            # only when build_plans(pe) is non-empty
 
@@ -290,7 +305,7 @@ OUTPUT CONTRACT:
 PEs declare `background: true` — each runs async and delivers via `SendMessage(to: "main")`, NOT via
 tool result. Each round spawns FRESH teammates under collision-proof names (`{pe}-r{round}-shard{n}`);
 keep every teammate ALIVE for the whole round — even after it goes idle — so you can re-dispatch it by
-name in Phase 4/5. Tear the team down at round end (§ Round teardown). Spawn ALL in a SINGLE message so they run in parallel:
+name in Phase 4/5. Tear the team down at round end (§ Round teardown). Spawn the first wave in a SINGLE message so it runs in parallel:
 
 ```text
 session.pe_reply_to = "main"        # the orchestrator running this skill IS main; injected into DISPATCH_PROMPT
@@ -305,7 +320,9 @@ for pe in session.matched_pes:
 session.by_name = { a.name: a.pe for a in session.teammates }   # teammate name -> pe (idle/terminated events carry the NAME)
 session.pe_dispatch = { a.name: {model: pe_logged_model(a.pe), tier: pe_tier(a.pe)} for a in session.teammates }   # per-shard freeze for the Phase 7 header
 
-for a in session.teammates:
+suite_running = [a for a in session.teammates if a.pe not in SUITE_FREE]
+queue = suite_running[cap:]                          # Collect spawns from it as slots free
+spawn(a):
   model_arg = pe_model_arg(a.pe)                     # OMIT (feature off, or DEEP) → do NOT pass model=; PE inherits session.session_model
   Agent(
     subagent_type     = "sdlc:{a.pe}",               # carries the stack knowledge + background:true; the protocol rides in the prompt
@@ -315,8 +332,9 @@ for a in session.teammates:
     description       = "{a.pe} review — round {session.round_n}, {pe_tier(a.pe)} tier, model {pe_logged_model(a.pe)}",
     prompt            = DISPATCH_PROMPT(a.pe)
   )
+for a in session.teammates not in queue: spawn(a)    # one message: every suite-free teammate + the first `cap` suite-running
 
-assert count(spawned teammates) == len(session.teammates)   # ≥ len(matched_pes); banner shows the one-per-PE baseline
+assert count(spawned teammates) + len(queue) == len(session.teammates)   # ≥ len(matched_pes); banner shows the one-per-PE baseline
 ```
 
 ## Collect (async — teammates SendMessage their YAML to main; kept alive for the round)
@@ -327,7 +345,7 @@ WITHOUT delivering is nudged, then escalated — never an unbounded wait.
 
 ```text
 collected_outputs = {}                        # name → payload (keyed by teammate name; a re-dispatch to the same name overwrites)
-pending = set(a.name for a in session.teammates)
+pending = set(a.name for a in session.teammates not in queue)
 nudges  = {}                                  # name → idle-nudge count
 retries = {}                                  # name → terminated-without-delivery re-dispatch count
 spawns  = {}                                  # root → fresh-name counter (monotonic; never reuses a dead name)
@@ -347,7 +365,9 @@ respawn(name):
   Agent(name = new, model = model_for_tier(t) unless OMIT, …, prompt = DISPATCH_PROMPT(session.by_name[name], tier = t))
   pending.add(new); pending.remove(name)
 
-while pending is not empty:
+while pending or queue:
+  while queue and count(n in pending where session.by_name[n] not in SUITE_FREE) < cap:   # a delivered or dropped teammate frees a slot
+    a = queue.pop(0); spawn(a); pending.add(a.name)
   await next event              # a teammate YAML message, an idle notification, OR a teammate-terminated notification
   if event is a message m whose first line is "build_direction" from `name` in pending:   # "build_direction\nproject: …\nquestion: …"
     if session.auto: answer = "skip"; 🤖 Auto-resolved — {name}: no non-production build for {m.project}; build skipped (--auto)

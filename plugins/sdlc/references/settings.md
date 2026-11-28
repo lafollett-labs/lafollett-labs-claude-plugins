@@ -14,7 +14,7 @@ Every sdlc skill reads one merged settings object, bound once per session by `lo
 {
   "pullRequest": { "reviewers": [], "draft": false },
   "slack": { "enabled": false, "channel": "" },
-  "review": { "searchRoots": [], "modelByTier": true }
+  "review": { "searchRoots": [], "modelByTier": true, "maxParallelPes": 2 }
 }
 ```
 
@@ -26,6 +26,7 @@ Every sdlc skill reads one merged settings object, bound once per session by `lo
 | `slack.channel` | string | the channel name (`#eng`) every Slack post goes to |
 | `review.searchRoots` | string[] | sibling repo paths, relative to `repo_root`, that PEs may read below DEEP |
 | `review.modelByTier` | bool | run each PE on the model its review tier warrants |
+| `review.maxParallelPes` | positive integer | suite-running PEs dispatched at once (default 2); pe-governance and domain PEs are never capped |
 
 ## load_settings
 

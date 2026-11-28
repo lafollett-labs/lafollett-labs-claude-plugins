@@ -60,7 +60,7 @@ Optional. `.claude/sdlc.json` in the repo (committed) wins over `~/.claude/sdlc.
 {
   "pullRequest": { "reviewers": ["octocat"], "draft": false },
   "slack": { "enabled": false, "channel": "#eng" },
-  "review": { "searchRoots": [], "modelByTier": true }
+  "review": { "searchRoots": [], "modelByTier": true, "maxParallelPes": 2 }
 }
 ```
 
