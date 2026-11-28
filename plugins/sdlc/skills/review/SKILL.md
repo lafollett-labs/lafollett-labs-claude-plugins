@@ -232,12 +232,12 @@ The scope.js tier and routing are the deterministic baseline and safety floor. B
 Read `{diff_cmd}` (the full patch; when `signals.size_large`, read headers for every file plus hunks of the pe-general-purpose residual and any file matching `CONTENT_RISK_SIGNALS`). Decide (a) which specialist each file truly needs — does its content reveal a stack the glob missed? — and (b) whether the change is riskier or more novel than its size implies (gate type, blast radius, and secrets/IAM/auth/money/data-integrity/migration semantics carried in values, not paths). Then merge:
 
 ```text
-routing_baseline = copy(session.routing); tier_baseline = session.tier
+routing_baseline = copy(session.routing); domain_baseline = copy(session.domain_pes); tier_baseline = session.tier
 
 # ROUTING — additive only
 for file whose content reveals a specialist the glob missed: session.routing[file] = that specialist; a domain: add it to session.domain_pes[pe].files (kind: domain), routing unchanged
-session.matched_pes = unique(session.routing.values()) + keys(session.domain_pes) if session.routing else session.matched_pes   # Ad-hoc: keep scope.js's pe-general-purpose
-assert every changed_file maps to exactly one stack PE; every glob-matched specialist and domain PE is still matched; matched_pes non-empty
+session.matched_pes = unique((session.routing.values() if session.routing else session.matched_pes) + keys(session.domain_pes))   # Ad-hoc: keep scope.js's pe-general-purpose
+assert every changed_file maps to exactly one stack PE; every glob-matched specialist is still matched; every domain_baseline key and file is still in session.domain_pes; matched_pes non-empty
 
 # TIER — raise freely; lower only to the floor
 session.content_risk_files = changed files whose hunks match CONTENT_RISK_SIGNALS

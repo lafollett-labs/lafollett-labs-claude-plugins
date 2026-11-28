@@ -19,18 +19,19 @@ The stack PE beside it owns builds, test runs, and language idioms for the same 
 | Files | Owner |
 | - | - |
 | `*.vue` audio components and composables under a Vue/Nuxt project | pe-vue |
+| `*.ts`, `*.html` audio components and services under an Angular project | pe-angular |
 | standalone `*.ts` / `*.js` / `*.mjs` worklets and audio-graph modules | pe-general-purpose |
 | Rust DSP crates, `*.rs` on the audio path | pe-rust |
 
 ## Commands
 
-Run no build, test, or lint suite; the stack PE beside you (pe-rust, pe-vue) runs them and owns their receipts. Use read-only searches from `<worktree>`, inside SEARCH_ROOTS, to place each changed function on a thread and find what feeds it:
+Run no build, test, or lint suite; the stack PE routed for the file runs them and owns their receipts. Use read-only searches from `<worktree>`, inside SEARCH_ROOTS, to place each changed function on a thread and find what feeds it:
 
 ```bash
-grep -rnE "registerProcessor|addModule|AudioWorkletNode|build_input_stream|build_output_stream" <worktree> --include="*.ts" --include="*.js" --include="*.mjs" --include="*.rs"
-grep -rnE "getUserMedia|echoCancellation|noiseSuppression|autoGainControl" <worktree> --include="*.ts" --include="*.vue"
+grep -rnE "registerProcessor|addModule|AudioWorkletNode|build_input_stream|build_output_stream" <worktree> --include="*.ts" --include="*.js" --include="*.mjs" --include="*.rs" --exclude-dir=node_modules --exclude-dir=target --exclude-dir=dist --exclude-dir=.git
+grep -rnE "getUserMedia|echoCancellation|noiseSuppression|autoGainControl" <worktree> --include="*.ts" --include="*.js" --include="*.mjs" --include="*.vue" --exclude-dir=node_modules --exclude-dir=target --exclude-dir=dist --exclude-dir=.git
 grep -nE "44100|48000|22050|16000|96000|\b128\b" <changed file>
-find <worktree> -name "*.wav" -path "*fixture*" | head
+find <worktree> -name "*.wav" -path "*fixture*" -not -path "*/node_modules/*" -not -path "*/target/*" | head
 ```
 
 ## Stack Heuristics

@@ -166,8 +166,9 @@ check "the repo-root README and unmatched files fall back to pe-general-purpose"
   'o.routing["README.md"] === "pe-general-purpose" && o.routing["scripts/run.sh"] === "pe-general-purpose"'
 check "*.ts under an Angular project routes to pe-angular; elsewhere it does not" "$out" \
   'o.routing["ng/src/app/a.component.ts"] === "pe-angular" && o.routing["ng/src/app/a.component.html"] === "pe-angular" && o.routing["tools/plain.ts"] === "pe-general-purpose"'
-check "every changed file has exactly one PE and matched_pes is their union" "$out" \
-  'o.changed_files.every(f => typeof o.routing[f] === "string") && new Set(Object.values(o.routing)).size === o.matched_pes.length'
+# matched_pes == unique(routing values) ∪ keys(domain_pes), each once
+UNION='o.changed_files.every(f => typeof o.routing[f] === "string") && [...new Set(o.matched_pes)].sort().join() === [...new Set([...Object.values(o.routing), ...Object.keys(o.domain_pes)])].sort().join() && new Set(o.matched_pes).size === o.matched_pes.length'
+check "every changed file has exactly one stack PE and matched_pes is the stack and domain union" "$out" "$UNION"
 
 check "every matched PE is one sdlc ships" "$out" \
   'o.routing["db/sprocs/usp_Find.sql"] === "pe-sql-server" && !o.matched_pes.some(p => !/^pe-(csharp|angular|sql-server|github-actions|go|rust|vue|aws-infra|devtools|governance|general-purpose|audio)$/.test(p))'
@@ -228,6 +229,9 @@ check "branch mode reads the header from HEAD" "$(classify "$R")" 'o.routing["sc
 R="$TMP/audio"; new_repo "$R"
 put "$R" web/src/audio/Tuner.vue 1; put "$R" engine/crates/pitch/src/yin.rs 1; put "$R" web/src/lib/PitchWorklet.ts 1
 put "$R" web/src/lib/drone-worklet.mjs 1; put "$R" web/src/components/Settings.vue 1; put "$R" web/src/lib/audioUtils.ts 1
+put "$R" web/src/audio/Tuner.tsx 1; put "$R" src/lib/pitch-worklet.cjs 1
+put "$R" crates/audio-engine/src/lib.rs 1; put "$R" engine/crates/audio-dsp/src/yin.rs 1; put "$R" src/Audio/Graph.ts 1
+put "$R" src/audiobook-store/cart.ts 1; put "$R" src/dispatch/queue.ts 1
 commit "$R"
 out="$(classify "$R")"
 check "an audio-path file gets pe-audio and keeps its stack PE" "$out" \
@@ -238,6 +242,13 @@ check "a non-audio file gets only its stack PE" "$out" \
   'o.routing["web/src/components/Settings.vue"] === "pe-vue" && !o.domain_pes["pe-audio"].files.includes("web/src/components/Settings.vue") && !o.domain_pes["pe-audio"].files.includes("web/src/lib/audioUtils.ts")'
 check "a domain PE never takes a file out of routing" "$out" \
   'o.changed_files.every(f => typeof o.routing[f] === "string" && o.routing[f] !== "pe-audio")'
+check "tsx and cjs sources match pe-audio" "$out" \
+  '["web/src/audio/Tuner.tsx","src/lib/pitch-worklet.cjs"].every(f => o.domain_pes["pe-audio"].files.includes(f))'
+check "an audio directory matches as a whole word in any case" "$out" \
+  '["crates/audio-engine/src/lib.rs","engine/crates/audio-dsp/src/yin.rs","src/Audio/Graph.ts"].every(f => o.domain_pes["pe-audio"].files.includes(f)) && o.routing["crates/audio-engine/src/lib.rs"] === "pe-rust"'
+check "a directory word that only contains audio or dsp does not match" "$out" \
+  '!["src/audiobook-store/cart.ts","src/dispatch/queue.ts"].some(f => o.domain_pes["pe-audio"].files.includes(f))'
+check "matched_pes is the stack and domain union on an audio change" "$out" "$UNION"
 
 # --- files-mode targets --------------------------------------------------------
 R="$TMP/targets"; new_repo "$R"

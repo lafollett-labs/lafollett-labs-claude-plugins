@@ -131,11 +131,18 @@ function routingTable(root, mode) {
 }
 
 // Domain PEs review one concern across stacks, beside each file's stack PE, never instead of it.
+// An audio directory is a segment with a whole word audio, dsp, or pitch ("audio-engine", "Audio", "pitchDetector";
+// not "audiobook-store" or "dispatch").
+const AUDIO_SOURCE = /\.(rs|vue|[cm]?[jt]s|[jt]sx)$/;
+const WORKLET_SOURCE = /\.([cm]?[jt]s|[jt]sx)$/;
+const AUDIO_WORDS = new Set(['audio', 'dsp', 'pitch']);
+const isAudioPath = (f) => {
+  const dirs = path.posix.dirname(f).split('/');
+  return (AUDIO_SOURCE.test(f) && dirs.some((d) => words(d).some((w) => AUDIO_WORDS.has(w))))
+    || (WORKLET_SOURCE.test(f) && /worklet/i.test(path.posix.basename(f)));
+};
 const DOMAIN_PES = [
-  ['pe-audio', anyOf([
-    ...['audio', 'dsp', 'pitch'].flatMap((d) => ['rs', 'ts', 'js', 'mjs', 'vue'].map((e) => `**/${d}/**/*.${e}`)),
-    ...['Worklet', 'worklet'].flatMap((w) => ['ts', 'js', 'mjs'].map((e) => `*${w}*.${e}`)),
-  ])],
+  ['pe-audio', isAudioPath],
 ];
 
 class CliError extends Error {}
