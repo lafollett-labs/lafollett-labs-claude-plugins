@@ -54,7 +54,7 @@ const anyOf = (patterns) => {
   return (f) => ms.some((m) => m(f));
 };
 
-const isManifest = anyOf(['package.json', '*.csproj', 'Directory.Packages.props', 'go.mod', 'go.sum', 'requirements*.txt', '*.lock', '*-lock.json']);
+const isManifest = anyOf(['package.json', '*.csproj', 'Directory.Packages.props', 'go.mod', 'go.sum', 'Cargo.toml', 'requirements*.txt', '*.lock', '*-lock.json']);
 const isMigration = anyOf(['migrations/*', 'migrations/**', 'sprocs/*']);
 const GITHUB_ACTIONS = ['.github/workflows/**', '.github/actions/**', 'action.yml', 'action.yaml'];
 const isCi = anyOf(GITHUB_ACTIONS);
@@ -76,6 +76,17 @@ function isSecurityPath(file) {
 const isDepsOrSchema = (f) => isManifest(f) || isMigration(f) || /schema/i.test(path.posix.basename(f));
 
 // First match wins, so every file has exactly one PE.
+// A shell script under any scripts/ dir opts into pe-devtools with a "# pe: devtools" line among its first 10.
+const isScriptsShell = matcher('scripts/**/*.sh');
+const DEVTOOLS_HEADER = /^#[ \t]*pe:[ \t]*devtools[ \t]*\r?$/;
+function devtoolsHeader(root) {
+  return (f) => {
+    if (!isScriptsShell(f)) return false;
+    let text;
+    try { text = fs.readFileSync(path.join(root, f), 'utf8'); } catch { return false; }   // deleted or unreadable: no header
+    return text.split('\n', 10).some((l) => DEVTOOLS_HEADER.test(l));
+  };
+}
 function angularProject(root) {
   return (f) => /\.(ts|html)$/.test(f) && (() => {
     for (let dir = path.posix.dirname(f); ; dir = path.posix.dirname(dir)) {
@@ -91,8 +102,11 @@ function routingTable(root) {
     [anyOf(['*.sql', 'migrations/*', 'sprocs/*']), 'pe-sql-server'],
     [isCi, 'pe-github-actions'],
     [anyOf(['*.go', 'go.mod', 'go.sum']), 'pe-go'],
+    [anyOf(['*.rs', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain*', '.cargo/config.toml']), 'pe-rust'],
     [anyOf(['*.vue', 'nuxt.config.*', 'tailwind.config.*']), 'pe-vue'],
     [anyOf(['cdk.json', '*.tf', 'Dockerfile*', 'template.yml', '*.template.yaml']), 'pe-aws-infra'],
+    [anyOf(['scripts/dev/**', '.githooks/**', 'lefthook.yml']), 'pe-devtools'],
+    [devtoolsHeader(root), 'pe-devtools'],
     [anyOf([
       '**/SKILL.md', '**/agents/*.md', '**/commands/*.md',
       '**/CLAUDE.md', '**/CLAUDE.*.md', '**/*.code.md', '**/*.ceo.md',

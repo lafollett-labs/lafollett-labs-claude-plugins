@@ -268,9 +268,13 @@ for file in plan.key_files:          # a preview; skills/review/bin/scope.js hol
     case ".github/workflows/*.yml" | ".github/workflows/*.yaml"
        | "action.yml" | "action.yaml"                   → matched_pes += ["sdlc:pe-github-actions"]
     case "*.go" | "go.mod" | "go.sum"                   → matched_pes += ["sdlc:pe-go"]
+    case "*.rs" | "Cargo.toml" | "Cargo.lock"
+       | "rust-toolchain*" | ".cargo/config.toml"       → matched_pes += ["sdlc:pe-rust"]
     case "*.vue" | "nuxt.config.*" | "tailwind.config.*" → matched_pes += ["sdlc:pe-vue"]
     case "cdk.json" | "*.tf" | "Dockerfile*"
        | "template.yml" | "*.template.yaml"             → matched_pes += ["sdlc:pe-aws-infra"]
+    case "scripts/dev/**" | ".githooks/**" | "lefthook.yml"
+       | "scripts/**/*.sh" with a "# pe: devtools" header → matched_pes += ["sdlc:pe-devtools"]
     case "**/SKILL.md" | "**/agents/*.md" | "**/commands/*.md"
        | "**/CLAUDE.md" | "**/CLAUDE.*.md" | "**/*.code.md" | "**/*.ceo.md"
        | ".claude/rules/**"

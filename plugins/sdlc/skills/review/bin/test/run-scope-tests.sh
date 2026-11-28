@@ -170,7 +170,45 @@ check "every changed file has exactly one PE and matched_pes is their union" "$o
   'o.changed_files.every(f => typeof o.routing[f] === "string") && new Set(Object.values(o.routing)).size === o.matched_pes.length'
 
 check "every matched PE is one sdlc ships" "$out" \
-  'o.routing["db/sprocs/usp_Find.sql"] === "pe-sql-server" && !o.matched_pes.some(p => !/^pe-(csharp|angular|sql-server|github-actions|go|vue|aws-infra|governance|general-purpose)$/.test(p))'
+  'o.routing["db/sprocs/usp_Find.sql"] === "pe-sql-server" && !o.matched_pes.some(p => !/^pe-(csharp|angular|sql-server|github-actions|go|rust|vue|aws-infra|devtools|governance|general-purpose)$/.test(p))'
+
+# --- Rust and dev tooling ------------------------------------------------------
+R="$TMP/rust"; new_repo "$R"
+for f in engine/src/lib.rs engine/build.rs Cargo.toml engine/Cargo.toml Cargo.lock rust-toolchain rust-toolchain.toml .cargo/config.toml engine/.cargo/config.toml; do put "$R" "$f" 1; done
+put "$R" .cargo/credentials.toml 1; put "$R" docs/Cargo.toml.md 1
+commit "$R"
+out="$(classify "$R")"
+check "Rust sources, manifests, toolchain files, and .cargo/config.toml route to pe-rust" "$out" \
+  '["engine/src/lib.rs","engine/build.rs","Cargo.toml","engine/Cargo.toml","Cargo.lock","rust-toolchain","rust-toolchain.toml",".cargo/config.toml","engine/.cargo/config.toml"].every(f => o.routing[f] === "pe-rust")'
+check "other .cargo files and Cargo-named docs are not pe-rust's" "$out" \
+  'o.routing[".cargo/credentials.toml"] === "pe-general-purpose" && o.routing["docs/Cargo.toml.md"] === "pe-general-purpose"'
+R="$TMP/cargo-manifest"; new_repo "$R"; put "$R" Cargo.toml 3; commit "$R"
+check "a Cargo.toml change floors at STANDARD as a dependency manifest" "$(classify "$R")" \
+  'o.tier === "STANDARD" && o.signals.deps_or_schema && o.signals.security_path'
+
+R="$TMP/devtools"; new_repo "$R"
+for f in scripts/dev/fmt.sh scripts/dev/lib/util.py .githooks/pre-commit tools/.githooks/pre-push lefthook.yml; do put "$R" "$f" 1; done
+mkdir -p "$R/scripts/ci" "$R/scripts/release" "$R/scripts/local"
+printf '#!/usr/bin/env bash\n# Format staged files.\n#pe:devtools\n' > "$R/scripts/local/fmt.sh"
+printf '#!/usr/bin/env bash\r\n# pe: devtools\r\n' > "$R/scripts/local/crlf.sh"
+printf '#!/usr/bin/env bash\n# pe: devtools-ish\n' > "$R/scripts/ci/near-miss.sh"
+{ printf '#!/usr/bin/env bash\n'; seq 1 10 | sed 's/^/# line /'; printf '# pe: devtools\n'; } > "$R/scripts/release/late.sh"
+printf '# pe: devtools\n' > "$R/scripts/release/notes.txt"
+printf '#!/usr/bin/env bash\n# pe: devtools\n' > "$R/tools/dev.sh"
+put "$R" scripts/dev/main.go 1
+commit "$R"
+out="$(classify "$R")"
+check "scripts/dev, .githooks, and lefthook.yml route to pe-devtools" "$out" \
+  '["scripts/dev/fmt.sh","scripts/dev/lib/util.py",".githooks/pre-commit","tools/.githooks/pre-push","lefthook.yml"].every(f => o.routing[f] === "pe-devtools")'
+check "a scripts/**/*.sh with a # pe: devtools header line routes to pe-devtools (CRLF too)" "$out" \
+  'o.routing["scripts/local/fmt.sh"] === "pe-devtools" && o.routing["scripts/local/crlf.sh"] === "pe-devtools"'
+check "a near-miss header, a header past line 10, a non-.sh file, or a script outside scripts/ stays with pe-general-purpose" "$out" \
+  '["scripts/ci/near-miss.sh","scripts/release/late.sh","scripts/release/notes.txt","tools/dev.sh"].every(f => o.routing[f] === "pe-general-purpose")'
+check "a language specialist outranks pe-devtools inside scripts/dev" "$out" 'o.routing["scripts/dev/main.go"] === "pe-go"'
+R="$TMP/devtools-deleted"; new_repo "$R"; mkdir -p "$R/scripts"; printf '# pe: devtools\n' > "$R/scripts/gone.sh"; commit "$R"
+git -C "$R" branch -f main HEAD; git -C "$R" rm -q scripts/gone.sh; put "$R" src/a.py 1; commit "$R"
+check "a deleted headed script has no header to read and falls back to pe-general-purpose" "$(classify "$R")" \
+  'o.routing["scripts/gone.sh"] === "pe-general-purpose"'
 
 # --- files-mode targets --------------------------------------------------------
 R="$TMP/targets"; new_repo "$R"

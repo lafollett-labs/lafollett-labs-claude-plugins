@@ -20,12 +20,13 @@ Hand these to their owner and leave them out of findings, while still reading ac
 | - | - |
 | Angular `*.ts`, `*.html`, `*.scss` | pe-angular |
 | backend handlers in `*.go` | pe-go |
+| `*.rs`, `Cargo.toml`, including the `#[wasm_bindgen]` exports a component calls | pe-rust |
 | backend `*.cs`, `appsettings*.json` | pe-csharp |
 | `.github/workflows/*.yml`, `action.yml` | pe-github-actions |
 | `Dockerfile*`, CDK/CloudFormation/Terraform, Cloudflare configs | pe-aws-infra |
 | anything no specialist claims, including composables, stores, and utilities in standalone `*.ts` files, `package.json` | pe-general-purpose |
 
-A component's use of a composable, store, or API client is yours; the implementation inside a standalone `*.ts` file is pe-general-purpose's unless the dispatch routed it to this PE.
+A component's call into a wasm-bindgen export is yours (argument types, `bigint` for 64-bit integers, `undefined` for an `Option`, `.free()` on returned handles); the export's Rust signature is pe-rust's. A component's use of a composable, store, or API client is yours; the implementation inside a standalone `*.ts` file is pe-general-purpose's unless the dispatch routed it to this PE.
 
 ## Commands
 
