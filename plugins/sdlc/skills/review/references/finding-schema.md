@@ -27,6 +27,8 @@ findings:
     verification_receipt: |                 # Pass 5 receipt — grep result, test output, code reference
       Confirmed by `grep -rn "..." src/` returning N matches; tests at tests/foo.spec.ts:42 cover this path.
     move: M1|M2|M3|M4|M5|M6|M7|none          # the review move whose trigger it falls under; missing or unknown → none
+    siblings: ["docs/a.md:12"]               # review-moves.md § Finding Keys — a list of path:line; missing → []
+    introduced_by: MEDIUM-004|still-present|new|missed|pre-existing   # REQUIRED on round 2+ (prior_ids set)
 moves_coverage:                              # REQUIRED — review-moves.md § Output; M1..M7 once each
   - move: M1
     status: applied|n/a
@@ -56,6 +58,8 @@ finding category outside the enum:                             → re-dispatch o
 receipt without a valid claim:                                 → re-dispatch once, then treat as claim: absence (findings.js)
 moves_coverage missing, short of a move, or an entry without its counted checked / note:
                                             → re-dispatch once, then keep the findings and record the gap in coverage_gaps (findings.js)
+siblings not a list of path:line, or round 2+ introduced_by outside prior_ids ∪ the four labels:
+                                            → re-dispatch once, then siblings: [] / introduced_by: null + a coverage_gaps entry (findings.js)
 verification_receipts[] missing/empty:                         → ACCEPT (default to [])
 finding without a verification_receipt proving the problem:     → DEMOTE to a receipt with the original claim + missing proof, never dropped; disproven → dismissed (Phase 5)
 absence receipt without whole-claim evidence:                  → re-dispatch PE once, then retain as a receipt unless a finding proves an actual problem (Phase 5)

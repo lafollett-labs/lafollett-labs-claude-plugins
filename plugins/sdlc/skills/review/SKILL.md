@@ -342,7 +342,7 @@ Run dispatch-and-collect.md § Tier escalation check first. Then read `${CLAUDE_
 ```text
 redispatched = {}                                  # kind → [teammate]; bound once per round
 loop:
-  v = stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/findings.js" validate` < {outputs: {name: {pe: session.by_name[name], ...collected YAML}}, redispatched}
+  v = stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/findings.js" validate` < {outputs: {name: {pe: session.by_name[name], ...collected YAML}}, redispatched, prior_ids: session.prior_ids}
   if v.redispatch is empty: break
   for r in v.redispatch:
     remove collected_outputs[r.name]               # a respawned or dropped teammate leaves no stale invalid entry
@@ -443,7 +443,7 @@ elif d == "HUMAN_GATE" or session.verdict != "✅ APPROVED":
     if session.ledger: (b) "engineer override — proceed with findings open"   # a Staged / Files / Folder / Ad-hoc round is never part of Gate 1
     (c) "abort — the round is persisted; the gate stays OPEN"
   match user_response:
-    case (a): pass                                         # the engineer remediates and re-invokes
+    case (a): print review-moves.md § Remediation Pre-flight with each gating finding's location + siblings   # the engineer remediates and re-invokes
     case (b): run round-state.md § Engineer override       # it returns here at (a) when not confirmed
     case (c): run § Round teardown, then restore_stash(); exit
   NEVER mark a finding resolved without a real fix or a recorded override
