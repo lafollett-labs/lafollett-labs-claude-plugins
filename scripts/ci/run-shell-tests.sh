@@ -37,15 +37,20 @@ jobs="${SHELL_TEST_JOBS:-}"
 [ -n "$jobs" ] || jobs="$( { nproc || sysctl -n hw.ncpu; } 2>/dev/null )"
 case "$jobs" in ''|*[!0-9]*|0) jobs=2 ;; esac
 OUT="$(mktemp -d)"
-trap 'rm -rf "$OUT"' EXIT
+trap 'kill $(jobs -p) 2>/dev/null; wait; rm -rf "$OUT"' EXIT
 
-# run_one <index> <suite> — run one suite, recording its output, exit code and seconds under $OUT
+# run_one <index> <suite> — run one suite, recording its output, exit code and seconds under $OUT, and print a
+# start and a finish line as it goes, so a suite that hangs until the job times out is the one never finished.
+# A suite that parallelizes inside (PE_TEST_JOBS) gets 2 workers, so the runner does not oversubscribe the CPUs.
 run_one() {
-  local t0
+  local t0 rc
   t0=$(date +%s)
-  bash "$2" > "$OUT/$1.log" 2>&1 < /dev/null
-  echo $? > "$OUT/$1.rc"
+  echo "... start: $2"
+  PE_TEST_JOBS="${PE_TEST_JOBS:-2}" bash "$2" > "$OUT/$1.log" 2>&1 < /dev/null
+  rc=$?
+  echo "$rc" > "$OUT/$1.rc"
   echo $(( $(date +%s) - t0 )) > "$OUT/$1.t"
+  echo "... done:  $2 (exit $rc, $(cat "$OUT/$1.t")s)"
 }
 
 # Split on newlines only, so suite paths containing spaces survive.
@@ -58,6 +63,7 @@ done <<EOF
 $suites
 EOF
 wait
+echo "================================================"
 
 total=0
 failed=0

@@ -474,7 +474,7 @@ if [ -z "$miss" ]; then pass "review frontmatter keeps every trigger phrase"; el
 
 # --- mutation cases: each injected regression must be caught ---
 WORK="$(mktemp -d)" || { echo "FAIL: mktemp -d failed"; exit 1; }
-trap 'rm -rf "$WORK"' EXIT
+trap 'kill $(jobs -p) 2>/dev/null; wait; rm -rf "$WORK"' EXIT
 
 # sedall <sed-expr> / grepvall <literal> — edit SKILL.md and every review reference, wherever the text now lives.
 sedall() { local f; for f in skills/review/SKILL.md skills/review/references/*.md; do sed "$1" "$f" > "$f.t" && mv "$f.t" "$f"; done; }
@@ -511,20 +511,21 @@ spawn() {
     copy_tree "$dir"
     ( cd "$dir" && eval "$snippet" )
     if grep -qF -- "$needle" <<<"$(check_tree "$dir")"; then hit=present; else hit=absent; fi
-    if [ "$hit" = "$want" ]; then echo "PASS: $ok"; else echo "FAIL: $bad"; fi
-  ) > "$out" 2>&1 &
+    if [ "$hit" = "$want" ]; then echo "PASS: $ok" > "$out"; else echo "FAIL: $bad" > "$out"; fi
+  ) > "$out.log" 2>&1 &
 }
-# collect_cases — wait for every background case, then count each in declaration order
+# collect_cases — wait for every background case, then count each in declaration order. A case's verdict is in
+# $RES/NNNN, its other output in $RES/NNNN.log, printed under a failure so the cause is in the log.
 collect_cases() {
-  local f line
+  local n f line
   wait
-  for f in "$RES"/*; do
-    [ -e "$f" ] || continue
-    line="$(grep -m1 -E '^(PASS|FAIL): ' "$f")"
+  for n in $(seq 1 "$case_n"); do
+    f="$RES/$(printf '%04d' "$n")"
+    line="$(cat "$f" 2>/dev/null)"
     case "$line" in
       "PASS: "*) pass "${line#PASS: }" ;;
-      "FAIL: "*) fail "${line#FAIL: }" ;;
-      *) fail "case $(basename "$f") reported nothing: $(head -c 200 "$f")" ;;
+      "FAIL: "*) fail "${line#FAIL: }"; sed 's/^/    | /' "$f.log" ;;
+      *) fail "case $n wrote no verdict"; sed 's/^/    | /' "$f.log" 2>/dev/null ;;
     esac
   done
 }
