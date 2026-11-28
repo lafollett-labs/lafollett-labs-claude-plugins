@@ -9,6 +9,50 @@ from the `changelog.d/` fragments: the heading is the marketplace version, and
 **Plugins** lists the plugin versions it bumped. Unreleased work lives in
 `changelog.d/`; never edit this file by hand.
 
+## [1.35.1] — 2026-11-28
+
+**Plugins:** code-reviewer 2.14.2, sdlc 1.1.0
+
+### Added
+- **sdlc** reviews real-time audio and DSP paths with the `pe-audio` domain PE, dispatched beside each file's stack PE and running no suites (`sdlc`).
+- **sdlc**: two review agents. `pe-rust` reviews Cargo workspaces, idiomatic Rust,
+  `unsafe` and FFI, and WebAssembly via wasm-bindgen, checks each exported signature
+  against its TypeScript call sites, and runs `cargo fmt --check`, clippy with
+  `-D warnings`, `cargo test` and the wasm32 build. `pe-devtools` reviews local dev
+  scripts, git hooks and hook config under a single-operator threat model, and hands
+  workflows and infrastructure to `pe-github-actions` and `pe-aws-infra`. `review`
+  routes `*.rs`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*` and `.cargo/config(.toml)`
+  to `pe-rust`, and shell scripts under `scripts/dev/`, `.githooks/**`, `.husky/**`, lefthook config and any
+  `scripts/**/*.sh` with a `# pe: devtools` header to `pe-devtools`.
+- **sdlc**: `review` tracks finding lineage. Each finding lists its `siblings`, the other
+  places that state or repeat what its fix changes, and from round 2 names what
+  `introduced_by` it (a prior finding's fix, still present, new, missed or pre-existing).
+  Round 2+ dispatches carry the fix diff and the remediator's ripple receipts, and the
+  review shows each round's fix cascade. After a round with gating findings, `review`
+  prints a remediation pre-flight.
+- **sdlc**: `review` PEs apply seven review moves after their five passes: ripple, lifecycle,
+  inputs, attack the guard, failure path, falsify the test and fact check. Each finding names
+  its move, and each PE accounts for every move in `moves_coverage`. A PE that leaves it
+  incomplete is re-dispatched once; a gap that remains is recorded in the review.
+- **sdlc**: `sdlc:review` reads a repo's `## Stack Map` table before its built-in globs (rows route or `(skip)` paths, add `pe-audio` domain files, and give each PE its test commands, which its test budget applies to), and the new `sdlc:init-project` skill scans the repo and writes that table after you approve it (`sdlc`).
+- **sdlc**: `review` gives each PE a test budget. Author test receipts at HEAD's SHA
+  (`<command> → pass @ <sha>`) stand in for rerunning those suites, a fix round runs tests
+  only for what the fix touched, and a failing receipt forces a full run. At most
+  `review.maxParallelPes` (default 2) suite-running PEs run at once; the rest start as
+  slots free.
+
+### Changed
+- **sdlc**: the Go, Vue, general-purpose, AWS infrastructure, GitHub Actions, and governance PE
+  agents gain the stack checks only code-reviewer's agents carried (service-worker and WASM
+  pitfalls for Vue, IndexedDB writes for standalone modules, IAM, encryption, alarm and cost
+  checks for AWS, masked step failures in workflows). `review` routes `vite.config.*` and
+  `*.webmanifest` to `pe-vue` inside a project whose `package.json` depends on `vue`.
+
+### Deprecated
+- **code-reviewer**: use `sdlc:review` and `sdlc:init-project`, which now carry its PEs,
+  review moves, finding lineage, test budget and Stack Map. It stays installable for one
+  more minor release.
+
 ## [1.35.0] — 2026-11-28
 
 **Plugins:** issue-manager 1.1.0, live-stock 0.1.0 (new), sdlc 1.0.0 (new)
