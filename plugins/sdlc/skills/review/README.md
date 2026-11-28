@@ -1,6 +1,6 @@
 # sdlc:review
 
-Stack-specialized code review with a two-gate model and a severity-gated verdict. Instead of one generalist pass, `review` dispatches the Principal Engineer (PE) agents whose file patterns match your diff — each runs a mandatory five-pass protocol — then consolidates their findings into a single verdict and an append-only review document.
+Stack-specialized code review with a two-gate model and a severity-gated verdict. Instead of one generalist pass, `review` dispatches the Principal Engineer (PE) agents whose file patterns match your diff — each runs a mandatory five-pass protocol, then seven review moves (ripple, lifecycle, inputs, attack the guard, failure path, falsify the test, fact check) whose coverage it must account for — then consolidates their findings into a single verdict and an append-only review document.
 
 > This README is the human usage guide. The model-facing contract lives in [`SKILL.md`](./SKILL.md).
 

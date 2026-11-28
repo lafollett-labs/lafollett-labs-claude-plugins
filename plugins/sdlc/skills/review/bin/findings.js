@@ -4,15 +4,17 @@
  *
  * Usage:
  *   node findings.js validate < { outputs: { <teammate>: { pe, expert?, findings, verification_receipts?,
- *                                   tier_escalation? } }, redispatched?: { <kind>: [teammate, ...] } }
+ *                                   moves_coverage?, tier_escalation? } }, redispatched?: { <kind>: [teammate, ...] },
+ *                                   moves_checked?: [teammate, ...] }
  *   node findings.js dedup    < { outputs: { <teammate>: { pe, findings } } }
  *
- * validate prints { outputs, redispatch: [{ name, kinds, note }], category_fallbacks, demoted }.
+ * validate prints { outputs, redispatch: [{ name, kinds, note }], category_fallbacks, demoted, coverage_gaps }.
  *   Severity is normalized first ("🔴 CRITICAL" → CRITICAL). Each teammate is re-dispatched at most
- *   once per kind (findings | recommendation | severity | category | claim). When a kind was already
+ *   once per kind (findings | recommendation | severity | category | claim | moves). When a kind was already
  *   re-dispatched, the still-invalid item falls back instead: a finding without a concrete
  *   recommendation becomes a below_bar receipt, an invalid severity becomes MEDIUM (still gating),
- *   an invalid category becomes "general", an invalid receipt claim becomes "absence". Fallbacks apply only to teammates with nothing left to
+ *   an invalid category becomes "general", an invalid receipt claim becomes "absence", and an incomplete
+ *   moves_coverage is kept and named in coverage_gaps. Fallbacks apply only to teammates with nothing left to
  *   re-dispatch, so a pending replacement is never half-applied. `expert` is set from the dispatched pe.
  *   An output whose findings is not a list (an error body, a missing key) is never a clean review: it is
  *   re-dispatched once, then validate exits 2.
@@ -22,6 +24,11 @@
  *   rating kept in severity_reported.
  * A vague recommendation is one matching VAGUE (case-insensitive): consider | review whether | think about |
  *   maybe | perhaps, as the first word(s).
+ * moves_coverage (references/review-moves.md) holds M1..M7 exactly once each (an entry's move is read from its
+ *   leading M1..M7, so "M2 Lifecycle" is M2), status applied | n/a; an applied entry's checked names what was
+ *   examined with a count (a digit), and is not wholly a <...> placeholder or the reference's own example; an n/a
+ *   entry has a note. A finding's move is its leading M1..M7, else none. Teammates in moves_checked (a partial
+ *   reply whose coverage Phase 4 already settled) skip the coverage check.
  *
  * Exit codes: 0 success; 2 any error ({ error } on stdout).
  */
@@ -36,6 +43,32 @@ const CATEGORIES = new Set([
 const FLOOR_CATEGORIES = ['data-integrity', 'migration', 'auth', 'secrets'];
 const CLAIMS = new Set(['absence', 'positive', 'below_bar', 'indeterminate']);
 const VAGUE = /^\s*(consider|review whether|think about|maybe|perhaps)\b/i;
+const MOVES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'];
+const MOVES_EXAMPLE = '2 changed contracts → 9 consumers, 3 doc restatements; 1 fix → 4 sibling sites grepped';
+const moveOf = (v) => { const m = String(v || '').trim().toUpperCase().match(/^M[1-7](?![0-9])/); return m ? m[0] : null; };
+const oneLine = (v) => JSON.stringify(String(v ?? '')).slice(0, 80);   // PE text quoted on one line, never markdown
+
+// What is wrong with a PE's moves_coverage, as short phrases; [] when it is complete.
+function coverageProblems(cov) {
+  if (!Array.isArray(cov) || !cov.length) return ['moves_coverage missing'];
+  const problems = [];
+  for (const m of MOVES) {
+    const entries = cov.filter((e) => e && moveOf(e.move) === m);
+    if (!entries.length) { problems.push(`${m} missing`); continue; }
+    if (entries.length > 1) problems.push(`${m} listed ${entries.length} times`);
+    const e = entries[0];
+    const status = String(e.status || '').trim().toLowerCase();
+    const checked = String(e.checked || '').trim();
+    if (status === 'applied') {
+      if (!/\d/.test(checked) || /^<[^>]*>$/.test(checked) || checked === MOVES_EXAMPLE) problems.push(`${m} applied without a counted checked`);
+    } else if (status === 'n/a') {
+      if (!String(e.note || '').trim()) problems.push(`${m} n/a without a note`);
+    } else {
+      problems.push(`${m} status ${oneLine(e.status)} is not applied | n/a`);
+    }
+  }
+  return problems;
+}
 
 const NOTES = {
   recommendation: (titles) => `Finding(s) ${titles} violated the schema — recommendation: must be a concrete fix, not a vague suggestion. Re-emit with actionable guidance or move them to verification_receipts[].`,
@@ -43,6 +76,7 @@ const NOTES = {
   category: (titles) => `Finding(s) ${titles} have a category outside the enum. Every finding needs an enum category. Re-emit with one.`,
   claim: (titles) => `Receipt(s) ${titles} have a claim outside absence|positive|below_bar|indeterminate. Re-emit with one.`,
   findings: () => 'Your output has no findings list. Re-emit your full YAML block; a clean review returns findings: [].',
+  moves: (problems) => `Your moves_coverage is incomplete (${problems}). Apply every move in REVIEW MOVES and re-emit your full YAML block with moves_coverage: M1..M7 once each, status applied (checked names what you examined, with a count) or n/a (note says why no unit triggered it).`,
 };
 
 class CliError extends Error {}
@@ -71,6 +105,7 @@ function validate(input) {
   const redispatch = [];
   const fallbacks = [];
   const demoted = [];
+  const gaps = [];
   const result = {};
 
   for (const [name, raw] of Object.entries(outputs)) {
@@ -82,22 +117,28 @@ function validate(input) {
       result[name] = { ...raw, expert: raw.pe, findings: [], verification_receipts: [] };
       continue;
     }
-    const findings = raw.findings.map((f) => ({
-      ...f,
-      severity: String(f.severity || '').toUpperCase().replace(/[^A-Z]/g, ''),
-      category: String(f.category || '').trim().toLowerCase(),
-    }));
+    const findings = raw.findings.map((f) => {
+      return {
+        ...f,
+        severity: String(f.severity || '').toUpperCase().replace(/[^A-Z]/g, ''),
+        category: String(f.category || '').trim().toLowerCase(),
+        move: moveOf(f.move) || 'none',
+      };
+    });
+    const coverage = (input.moves_checked || []).includes(name) ? [] : coverageProblems(raw.moves_coverage);
     const receipts = (raw.verification_receipts || []).map((r) => ({ ...r }));
     const bad = {
       recommendation: findings.filter((f) => !String(f.recommendation || '').trim() || VAGUE.test(f.recommendation)),
       severity: findings.filter((f) => !SEVERITIES.includes(f.severity)),
       category: findings.filter((f) => !CATEGORIES.has(f.category)),
       claim: receipts.filter((r) => !CLAIMS.has(r.claim)),
+      moves: coverage,
     };
     const pending = Object.keys(bad).filter((k) => bad[k].length && !(done[k] || []).includes(name));
     const out = { ...raw, expert: raw.pe, findings, verification_receipts: receipts };
     if (pending.length) {
-      redispatch.push({ name, kinds: pending, note: pending.map((k) => NOTES[k](quoted(bad[k].map((x) => x.title)))).join(' ') });
+      const noteFor = (k) => (k === 'moves' ? NOTES.moves(coverage.join('; ')) : NOTES[k](quoted(bad[k].map((x) => x.title))));
+      redispatch.push({ name, kinds: pending, note: pending.map(noteFor).join(' ') });
       result[name] = out;
       continue;
     }
@@ -111,6 +152,7 @@ function validate(input) {
       f.severity = 'MEDIUM';
     }
     for (const r of bad.claim) r.claim = 'absence';
+    if (coverage.length) gaps.push(`${name}: moves_coverage incomplete after one re-dispatch — ${coverage.join('; ')}`);
     const rejected = new Set(bad.recommendation);
     for (const f of rejected) {
       receipts.push({ claim: 'below_bar', title: f.title, location: f.location,
@@ -120,7 +162,7 @@ function validate(input) {
     out.findings = findings.filter((f) => !rejected.has(f));
     result[name] = out;
   }
-  return { outputs: result, redispatch, category_fallbacks: fallbacks, demoted };
+  return { outputs: result, redispatch, category_fallbacks: fallbacks, demoted, coverage_gaps: gaps };
 }
 
 const normalizeTitle = (t) => String(t || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();

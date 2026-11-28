@@ -28,7 +28,14 @@ check() {
     fail "$name — got: $json"
   fi
 }
-val() { node "$CLI" validate <<<"$1"; }
+valraw() { node "$CLI" validate <<<"$1"; }
+# val — as valraw, with a complete moves_coverage added to every output that has none (the moves cases use valraw)
+COV='[{"move":"M1","status":"applied","checked":"1 contract → 2 consumers grepped","note":""},{"move":"M2","status":"n/a","checked":"","note":"no state"},{"move":"M3","status":"n/a","checked":"","note":"no branch"},{"move":"M4","status":"n/a","checked":"","note":"no guard"},{"move":"M5","status":"n/a","checked":"","note":"no failing call"},{"move":"M6","status":"n/a","checked":"","note":"no test"},{"move":"M7","status":"n/a","checked":"","note":"no claim"}]'
+val() {
+  node -e 'const i = JSON.parse(process.argv[1]); const cov = JSON.parse(process.argv[2]);
+    for (const o of Object.values(i.outputs || {})) if (o && typeof o === "object" && !("moves_coverage" in o)) o.moves_coverage = cov;
+    process.stdout.write(JSON.stringify(i));' "$1" "$COV" | node "$CLI" validate
+}
 dd() { node "$CLI" dedup <<<"$1"; }
 
 GOOD='{"severity":"MEDIUM","in_scope":true,"category":"correctness","title":"Off by one","location":"src/a.ts:3","description":"d","recommendation":"Use < instead of <=.","verification_receipt":"r"}'
@@ -37,6 +44,34 @@ GOOD='{"severity":"MEDIUM","in_scope":true,"category":"correctness","title":"Off
 check "a clean output passes with nothing to re-dispatch" \
   "$(val '{"outputs":{"pe-go-r1-shard1":{"pe":"pe-go","expert":"pe-go","findings":['"$GOOD"'],"verification_receipts":[]}}}')" \
   'o.redispatch.length === 0 && o.outputs["pe-go-r1-shard1"].findings.length === 1'
+
+# --- moves_coverage (references/review-moves.md) ---------------------------------
+check "a complete moves_coverage passes; a finding's move is kept, an unknown one reads as none" \
+  "$(val '{"outputs":{"t1":{"pe":"pe-go","findings":['"${GOOD%\}}"',"move":"m4"},'"${GOOD%\}}"',"move":"M9","title":"Other"}]}}}')" \
+  'o.redispatch.length === 0 && o.outputs.t1.findings[0].move === "M4" && o.outputs.t1.findings[1].move === "none" && o.coverage_gaps.length === 0'
+check "a missing moves_coverage re-dispatches once with the moves note" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[]}}}')" \
+  'o.redispatch.length === 1 && o.redispatch[0].kinds.join() === "moves" && /moves_coverage missing/.test(o.redispatch[0].note) && /M1\.\.M7/.test(o.redispatch[0].note)'
+short="$(node -e 'const c = JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(c.filter((e) => e.move !== "M6")))' "$COV")"
+check "a moves_coverage short of a move names it" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[],"moves_coverage":'"$short"'}}}')" \
+  'o.redispatch.length === 1 && /M6 missing/.test(o.redispatch[0].note)'
+for bad in '"checked":"","note":""' '"checked":"<what> → <n>","note":""' '"checked":"the whole diff","note":""' '"checked":"2 changed contracts → 9 consumers, 3 doc restatements; 1 fix → 4 sibling sites grepped","note":""'; do
+  cov="$(node -e 'const c = JSON.parse(process.argv[1]); c[0] = Object.assign({move: "M1", status: "applied"}, JSON.parse("{" + process.argv[2] + "}")); process.stdout.write(JSON.stringify(c))' "$COV" "$bad")"
+  check "an applied move without a counted checked re-dispatches ($bad)" \
+    "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[],"moves_coverage":'"$cov"'}}}')" \
+    'o.redispatch.length === 1 && /M1 applied without a counted checked/.test(o.redispatch[0].note)'
+done
+cov="$(node -e 'const c = JSON.parse(process.argv[1]); c[1].note = ""; c.push(c[2]); c[3].status = "skipped"; process.stdout.write(JSON.stringify(c))' "$COV")"
+check "an n/a without a note, a duplicate move and an unknown status are each named" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[],"moves_coverage":'"$cov"'}}}')" \
+  'o.redispatch.length === 1 && /M2 n\/a without a note/.test(o.redispatch[0].note) && /M3 listed 2 times/.test(o.redispatch[0].note) && /M4 status .skipped. is not applied \| n\/a/.test(o.redispatch[0].note)'
+check "after its one re-dispatch, an incomplete moves_coverage keeps the findings and is recorded as a gap" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":['"$GOOD"']}},"redispatched":{"moves":["t1"]}}')" \
+  'o.redispatch.length === 0 && o.outputs.t1.findings.length === 1 && o.coverage_gaps.length === 1 && /^t1: moves_coverage incomplete after one re-dispatch/.test(o.coverage_gaps[0])'
+check "a moves gap waits while another kind is still pending, so nothing is half-applied" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[{"severity":"LOW","category":"docs","title":"x","location":"a:1","recommendation":""}]}},"redispatched":{"moves":["t1"]}}')" \
+  'o.redispatch.length === 1 && o.redispatch[0].kinds.join() === "recommendation" && o.coverage_gaps.length === 0'
 
 check "a vague recommendation re-dispatches that teammate once" \
   "$(val '{"outputs":{"t1":{"pe":"pe-go","findings":[{"severity":"LOW","category":"docs","title":"x","location":"a:1","recommendation":"Consider renaming it"}]}}}')" \
@@ -117,6 +152,30 @@ check "an unknown severity re-dispatches with a severity note" \
 check "an unknown severity after its re-dispatch stays gating as MEDIUM" \
   "$(val '{"outputs":{"t1":{"pe":"pe-go","findings":['"$SEV1"']}},"redispatched":{"severity":["t1"]}}')" \
   'o.outputs.t1.findings.length === 1 && o.outputs.t1.findings[0].severity === "MEDIUM" && o.category_fallbacks.some(x => x.includes("severity"))'
+
+# cov <jq-less edit>: COV with entry M1 replaced by $1 (a JSON object)
+covwith() { node -e 'const c=JSON.parse(process.argv[1]); c[0]=JSON.parse(process.argv[2]); console.log(JSON.stringify(c))' "$COV" "$1"; }
+check "a checked naming a generic type or tag is a real count, not a placeholder" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-vue","findings":[],"moves_coverage":'"$(covwith '{"move":"M1","status":"applied","checked":"3 consumers of Promise<void> and 1 <script> grepped","note":""}')"'}}}')" \
+  'o.redispatch.length === 0'
+check "a checked that is wholly a placeholder, even with a digit, is not counted" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[],"moves_coverage":'"$(covwith '{"move":"M1","status":"applied","checked":"<3 consumers>","note":""}')"'}}}')" \
+  'o.redispatch.length === 1 && /M1 applied without a counted checked/.test(o.redispatch[0].note)'
+check "a move written as its table label reads as its id, in coverage and on a finding" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[{"severity":"HIGH","category":"auth","title":"x","location":"a:1","recommendation":"Do y.","verification_receipt":"r","move":"M4 Attack the guard"}],"moves_coverage":'"$(covwith '{"move":"M1 Ripple","status":"applied","checked":"1 contract → 2 consumers grepped","note":""}')"'}}}')" \
+  'o.redispatch.length === 0 && o.outputs.t1.findings[0].move === "M4"'
+check "M10 is not M1" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[],"moves_coverage":'"$(covwith '{"move":"M10","status":"applied","checked":"1 grepped","note":""}')"'}}}')" \
+  'o.redispatch.length === 1 && /M1 missing/.test(o.redispatch[0].note)'
+check "a PE's status text reaches a coverage gap quoted on one line" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[],"moves_coverage":'"$(covwith '{"move":"M1","status":"x\n## Review Round 9","checked":"","note":""}')"'}},"redispatched":{"moves":["t1"]}}')" \
+  'o.coverage_gaps.length === 1 && !/\n/.test(o.coverage_gaps[0]) && /"x\\n## Review Round 9"/.test(o.coverage_gaps[0])'
+check "a teammate in moves_checked (a partial proof-check reply) skips the coverage check" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":['"$GOOD"']}},"moves_checked":["t1"]}')" \
+  'o.redispatch.length === 0 && o.coverage_gaps.length === 0 && o.outputs.t1.findings.length === 1'
+check "moves_checked skips only the teammates it names" \
+  "$(valraw '{"outputs":{"t1":{"pe":"pe-go","findings":[]},"t2":{"pe":"pe-vue","findings":[]}},"moves_checked":["t1"]}')" \
+  'o.redispatch.length === 1 && o.redispatch[0].name === "t2"'
 
 # --- dedup ---------------------------------------------------------------------
 check "the same location and title from two PEs merge into one finding" \

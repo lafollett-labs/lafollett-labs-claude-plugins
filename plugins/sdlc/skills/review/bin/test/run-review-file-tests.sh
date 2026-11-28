@@ -92,6 +92,25 @@ check "an appended round records the running version without stamping old rounds
   "$(node "$CLI" parse --file "$TMP/gate2.md")" \
   "o.rounds.slice(0, -1).every(r => r.sdlc_version === null) && o.latest.sdlc_version === '$SDLC_VERSION'"
 
+# --- render: moves coverage gaps ----------------------------------------------
+node -e 'const r=require(process.argv[1]); r.coverage_gaps=["pe-go-r1: moves_coverage incomplete after one re-dispatch — M6 missing"]; console.log(JSON.stringify(r))' \
+  "$FIX/gate1-initial.json" | node "$CLI" render --file "$TMP/gaps.md" >/dev/null
+if grep -qx -- '- pe-go-r1: moves_coverage incomplete after one re-dispatch — M6 missing' "$TMP/gaps.md" \
+   && grep -q 'Review Moves Coverage Gaps' "$TMP/gaps.md"; then
+  pass "a moves coverage gap is rendered under its own heading"
+else
+  fail "a moves coverage gap is not rendered"
+fi
+node -e 'const r=require(process.argv[1]); r.findings[0].move="M4"; console.log(JSON.stringify(r))' \
+  "$FIX/gate1-initial.json" | node "$CLI" render --file "$TMP/move.md" >/dev/null
+if grep -q '· \*\*Move:\*\* M4' "$TMP/move.md" && ! grep -q '\*\*Move:\*\*' "$TMP/initial.md"; then
+  pass "a finding's move is rendered beside its category, and none renders nothing"
+else
+  fail "a finding's move is not rendered"
+fi
+if grep -q 'Review Moves Coverage Gaps' "$TMP/initial.md"; then fail "a round with no gaps renders the gaps heading"
+else pass "a round with no gaps renders no gaps heading"; fi
+
 # The template's own table of contents never reaches a review file.
 if grep -q "Contents" "$TMP/initial.md" "$TMP/gate2.md"; then
   fail "a rendered review file carries the template's Contents"

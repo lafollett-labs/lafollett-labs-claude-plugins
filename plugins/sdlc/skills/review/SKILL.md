@@ -324,6 +324,8 @@ PE_PROTOCOL        = read ${CLAUDE_PLUGIN_ROOT}/skills/review/references/pe-prot
 if PE_PROTOCOL is empty or lacks "## Output Format":
   🛑 stop — "pe-protocol.md is missing or unreadable under ${CLAUDE_PLUGIN_ROOT}; update or reinstall the sdlc plugin" — dispatch nothing
   restore_stash(); exit
+REVIEW_MOVES       = read ${CLAUDE_PLUGIN_ROOT}/skills/review/references/review-moves.md   # whole file — the seven moves every PE applies
+if REVIEW_MOVES is empty or lacks "moves_coverage":  🛑 stop as above, naming review-moves.md; restore_stash(); exit
 TIER_CONTRACTS[t]  = TIER_CONTRACTS[t] + "\n" + SEARCH_BOUNDARY  for t in [TRIVIAL, STANDARD]   # DEEP: no boundary
 
 read ${CLAUDE_PLUGIN_ROOT}/skills/review/references/dispatch-and-collect.md; run § Model-by-review-tier setting through § Collect, then § Round-to-round continuity
@@ -347,7 +349,7 @@ loop:
     SendMessage(to: r.name, summary: "schema violation", message: r.note); pending.add(r.name)
     redispatched[k] += [r.name] for k in r.kinds
   re-enter the Collect loop until every re-dispatched reply arrives, then re-transcribe and continue
-collected_outputs = v.outputs; session.category_fallbacks = v.category_fallbacks; session.demoted = v.demoted
+collected_outputs = v.outputs; session.category_fallbacks = v.category_fallbacks; session.demoted = v.demoted; session.coverage_gaps = v.coverage_gaps
 consolidated = (stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/findings.js" dedup` < {outputs: collected_outputs}).consolidated
 ```
 

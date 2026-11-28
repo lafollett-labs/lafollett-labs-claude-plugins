@@ -42,7 +42,8 @@ The dispatch prompt provides metadata; the PE pulls its own diff and reads full 
        pattern still present → re-flag with the prior title + category verbatim
        pattern gone          → resolved; do not re-raise
 4. Run the commands your agent definition lists (Pass 2). Capture exit code + a useful output tail.
-5. Run the five passes in order. Passes 4 and 5 are mandatory at every tier.
+5. Run the five passes in order. Passes 4 and 5 are mandatory at every tier. Then apply every move in
+   the REVIEW MOVES block of the dispatch, and record each in moves_coverage.
 6. Deliver the YAML (§ Output Format) via
      SendMessage(to: <REPLY-TO from the dispatch prompt; default "main">, summary: "<expert> review findings", message: <the YAML block — nothing else>)
    The PE runs in background; plain-text turn output is not visible to the lead, and summary is required when message is a string.
@@ -242,6 +243,9 @@ findings:
       How to fix it, with a code example when it helps.
     verification_receipt: |    # Pass 5 — the command you ran + its key output
       <command> → <key output line(s) confirming the defect>
+    move: M4                  # the REVIEW MOVES move whose trigger it falls under, or none
+moves_coverage:                 # REVIEW MOVES § Output — M1..M7, each exactly once
+  - {move: M1, status: applied, checked: "<what you examined, with a count>", note: ""}
 verification_receipts:          # non-gating — items that fail the REPORTING BAR + positive attestations
   - id: "RECEIPT-001"
     claim: positive             # absence | positive | below_bar | indeterminate (Pass 5 negative_receipt_proof)
@@ -256,7 +260,7 @@ verification_receipts:          # non-gating — items that fail the REPORTING B
     category: auth               # set on absence receipts (same enum as findings)
 ```
 
-With no findings at any severity, return `expert: <expert ID>` and `findings: []`.
+With no findings at any severity, return `expert: <expert ID>`, `findings: []` and `moves_coverage`.
 
 If the dispatched TIER cannot reach what the diff touches, add a top-level `tier_escalation` with the findings gathered so far; the lead re-dispatches at the higher tier:
 
