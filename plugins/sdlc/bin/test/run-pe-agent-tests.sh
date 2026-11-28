@@ -143,9 +143,13 @@ check_tree() {
   p5="$(section "$proto" '^## Pass 5')"
   for want in "$BAR" 'provenance_check:' 'negative_receipt_proof:' \
               'construct the input MOST likely to break the claim and run it' \
-              'never a claim about the whole input class'; do
+              'never a claim about the whole input class' \
+              'run the code under review on it' 'model output (agent YAML'; do
     printf '%s' "$p5" | grep -qF -- "$want" || echo "protocol: Pass 5 missing: $want"
   done
+  section "$proto" '^## Passes 1–3' | grep -qF "a green suite is never the review's conclusion" || echo "protocol: Pass 2 lets a green suite end the review"
+  grep -qF 'a history rewrite (rebase, force-push' "$root/skills/review/references/review-moves.md" 2>/dev/null \
+    || echo "moves: M2 skips history rewrites"
   printf '%s' "$p5" | grep -qi -- 'downgrade' && echo "protocol: Pass 5 severity_honesty says downgrade"
   printf '%s' "$p5" | grep -qF -- 'rate it from Severity Definitions' || echo "protocol: Pass 5 severity_honesty missing: rate it from Severity Definitions"
   printf '%s' "$p5" | grep -qF -- 'one level lower' && echo "protocol: Pass 5 severity_honesty says one level lower"
@@ -601,6 +605,18 @@ mutant moves-coverage-not-asked \
 mutant move-dropped \
   'grep -vF "| M6 Falsify the test |" skills/review/references/review-moves.md > t && mv t skills/review/references/review-moves.md' \
   'moves: M6 Falsify the test missing from the move table'
+mutant unproven-demoted-without-a-run \
+  'grepvall "run the code under review on it"' \
+  'protocol: Pass 5 missing: run the code under review on it'
+mutant model-output-trusted \
+  'sedall "s/model output (agent YAML, a prose-driven skill step), //"' \
+  'protocol: Pass 5 missing: model output (agent YAML'
+mutant green-suite-ends-review \
+  'sedall "s/; a green suite is never the review.s conclusion//"' \
+  'protocol: Pass 2 lets a green suite end the review'
+mutant m2-no-history-rewrite \
+  'grepvall "a history rewrite (rebase, force-push"' \
+  'moves: M2 skips history rewrites'
 mutant fix-diff-not-dispatched \
   'sedall "s/FIX DIFF:/FIX:/"' \
   'review: dispatch prompt does not carry FIX DIFF'
