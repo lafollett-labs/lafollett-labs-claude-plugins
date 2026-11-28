@@ -376,5 +376,5 @@ Run Phase 9 of `references/announce-and-transition.md`.
 next steps:
   - Wait for reviewer activity
   - Nudge with `/sdlc:pull-request #{session.pr_number}` if idle > 2-3 days
-  - Reviewers run `/sdlc:review` against this PR (Gate 2)
+  - After pushing fixes, re-run `sdlc:copilot-review` for Copilot's review of the new head
 ```

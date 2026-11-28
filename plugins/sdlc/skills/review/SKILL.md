@@ -1,6 +1,6 @@
 ---
 name: review
-description: Code review with stack-specialized PE dispatch and a two-gate model (Gate 1 local lock decided by a deterministic findings-ledger controller; Gate 2 independent peer review). This skill should be used when the engineer says "review my branch", "review PR #N", "code review", "/sdlc:review", or invokes review via the deliver orchestrator. PEs run a five-pass protocol with mandatory Pass 4 (Adversarial Re-read) and Pass 5 (Self-Adversarial). Skill enforces severity-gated verdict (every in-scope MEDIUM+ finding requires remediation; LOW/INFO are advisory and listed, never gating), per-finding legitimacy validation, one-agent-per-matched-PE dispatch (all 5 lens augmentations folded into each prompt; classifier-chosen TRIVIAL/STANDARD/DEEP depth tier), bug-shape grep on PATTERN findings, acceptance-criteria conformance against the linked GitHub issue or local story, and append-only multi-round reviews (Gate 1 committed under ./docs/code-reviews/; Gate 2 posted on the PR).
+description: Code review with stack-specialized PE dispatch and a two-gate model (Gate 1 local lock decided by a deterministic findings-ledger controller; Gate 2 independent peer review, deprecated: use sdlc:copilot-review for an outside review). This skill should be used when the engineer says "review my branch", "review PR #N", "code review", "/sdlc:review", or invokes review via the deliver orchestrator. PEs run a five-pass protocol with mandatory Pass 4 (Adversarial Re-read) and Pass 5 (Self-Adversarial). Skill enforces severity-gated verdict (every in-scope MEDIUM+ finding requires remediation; LOW/INFO are advisory and listed, never gating), per-finding legitimacy validation, one-agent-per-matched-PE dispatch (all 5 lens augmentations folded into each prompt; classifier-chosen TRIVIAL/STANDARD/DEEP depth tier), bug-shape grep on PATTERN findings, acceptance-criteria conformance against the linked GitHub issue or local story, and append-only multi-round reviews (Gate 1 committed under ./docs/code-reviews/; Gate 2 posted on the PR).
 argument-hint: "[cleanup] [--auto] [--model-by-review-tier | --no-model-by-review-tier] [--builds worktree|checkout|off]"
 ---
 
@@ -222,7 +222,7 @@ The gate is derived, never chosen: Gate 1 is the author reviewing their own bran
 
 ```text
 session.gate = "Gate 2" if review_type == "PR Review" and lower(session.pr.author.login) != lower(session.reviewer_username) else "Gate 1"
-if session.gate == "Gate 2": session.ledger = false     # a peer round never writes the author's findings ledger
+if session.gate == "Gate 2": session.ledger = false; ⚠️ Gate 2 is deprecated — for an outside review, run sdlc:copilot-review on the PR   # a peer round never writes the author's findings ledger
 ```
 
 ### Pre-dispatch judgment
