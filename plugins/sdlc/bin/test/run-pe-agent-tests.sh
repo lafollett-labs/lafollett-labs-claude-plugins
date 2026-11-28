@@ -494,25 +494,46 @@ copy_tree() {
   cp -R "$PLUGIN/references" "$dir/references"
 }
 
-# mutant <name> <shell snippet run inside a copy of the tree> <expected substring in check output>
-mutant() {
-  local name="$1" snippet="$2" expect="$3" dir="$WORK/$1" res
-  copy_tree "$dir"
-  ( cd "$dir" && eval "$snippet" )
-  res="$(check_tree "$dir")"
-  if grep -qF -- "$expect" <<<"$res"; then pass "mutation caught: $name"
-  else fail "mutation NOT caught: $name (expected '$expect')"; fi
+# Mutation cases are independent (each edits its own copy of the tree), so they run in the background,
+# PE_TEST_JOBS at a time (default: the CPU count); each writes one PASS:/FAIL: line, and collect_cases
+# folds them into the totals in the order they were declared.
+CASE_JOBS="${PE_TEST_JOBS:-}"
+[ -n "$CASE_JOBS" ] || CASE_JOBS="$( { nproc || sysctl -n hw.ncpu; } 2>/dev/null )"
+case "$CASE_JOBS" in ''|*[!0-9]*|0) CASE_JOBS=2 ;; esac
+RES="$WORK/results"; mkdir -p "$RES"
+case_n=0
+# spawn <PASS-line> <FAIL-line> <want: present|absent> <needle> <snippet> — run one case in the background
+spawn() {
+  local ok="$1" bad="$2" want="$3" needle="$4" snippet="$5" dir out
+  case_n=$((case_n + 1)); dir="$WORK/case$case_n"; out="$RES/$(printf '%04d' "$case_n")"
+  while [ "$(jobs -rp | wc -l)" -ge "$CASE_JOBS" ]; do sleep 0.05; done
+  (
+    copy_tree "$dir"
+    ( cd "$dir" && eval "$snippet" )
+    if grep -qF -- "$needle" <<<"$(check_tree "$dir")"; then hit=present; else hit=absent; fi
+    if [ "$hit" = "$want" ]; then echo "PASS: $ok"; else echo "FAIL: $bad"; fi
+  ) > "$out" 2>&1 &
+}
+# collect_cases — wait for every background case, then count each in declaration order
+collect_cases() {
+  local f line
+  wait
+  for f in "$RES"/*; do
+    [ -e "$f" ] || continue
+    line="$(grep -m1 -E '^(PASS|FAIL): ' "$f")"
+    case "$line" in
+      "PASS: "*) pass "${line#PASS: }" ;;
+      "FAIL: "*) fail "${line#FAIL: }" ;;
+      *) fail "case $(basename "$f") reported nothing: $(head -c 200 "$f")" ;;
+    esac
+  done
 }
 
+# mutant <name> <shell snippet run inside a copy of the tree> <expected substring in check output>
+mutant() { spawn "mutation caught: $1" "mutation NOT caught: $1 (expected '$3')" present "$3" "$2"; }
+
 # allowed <name> <shell snippet run inside a copy of the tree> <substring check output must NOT contain>
-allowed() {
-  local name="$1" snippet="$2" unexpected="$3" dir="$WORK/$1" res
-  copy_tree "$dir"
-  ( cd "$dir" && eval "$snippet" )
-  res="$(check_tree "$dir")"
-  if grep -qF -- "$unexpected" <<<"$res"; then fail "false positive: $name ('$unexpected')"
-  else pass "allowed: $name"; fi
-}
+allowed() { spawn "allowed: $1" "false positive: $1 ('$3')" absent "$3" "$2"; }
 
 mutant capitalized-valve \
   'printf "\nDowngrade to INFO when unsure.\n" >> agents/pe-go.md' 'pe-go: severity-downgrade valve'
@@ -895,6 +916,7 @@ mutant protocol-receipt-dropped \
   'protocol: build receipt rule missing'
 mutant readme-prod-build \
   'printf "| pe-angular | ng build --configuration=production |\n" >> README.md' 'readme: lists a production build'
+collect_cases
 
 # model_for_tier keeps its forced tier aliases (TRIVIAL→haiku, STANDARD→sonnet).
 check_tier_model_map() {  # <dispatch-and-collect.md>
