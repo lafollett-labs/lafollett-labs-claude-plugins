@@ -9,6 +9,22 @@ from the `changelog.d/` fragments: the heading is the marketplace version, and
 **Plugins** lists the plugin versions it bumped. Unreleased work lives in
 `changelog.d/`; never edit this file by hand.
 
+## [1.35.2] — 2026-11-28
+
+**Plugins:** sdlc 1.1.1
+
+### Deprecated
+- **sdlc**: `review`'s Gate 2 (peer review of someone else's PR). For an outside
+  review, use `copilot-review`. Gate 2 still runs, with a warning, and will be
+  removed in a later release. `pull-request` no longer tells reviewers to run it.
+
+### Fixed
+- **sdlc**: `review` PEs stop talking real bugs out of the report. A suspected bug
+  is demoted to a non-gating receipt only after the PE runs the code on the input
+  that should trigger it. Agent output and other model-written data count as
+  untrusted input. The lifecycle move covers every invocation mode and history
+  rewrites, and passing suites no longer end the review.
+
 ## [1.35.1] — 2026-11-28
 
 **Plugins:** code-reviewer 2.14.2, sdlc 1.1.0
