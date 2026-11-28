@@ -314,7 +314,7 @@ if not session.gate1_closed:
   🟡 Waiting on you — no Gate 1 lock in {session.review_file}
   restate: {"no recorded review" if session.gate1.state == "none"
             else "the latest Gate 1 round (round {session.gate1.round}) is not LOCKED (verdict {session.review_verdict})"}
-           — Gate 2 presupposes a Gate 1 lock (2 consecutive clean self-review rounds)
+           — a PR presupposes a Gate 1 lock (2 consecutive clean self-review rounds)
 
   if session.auto:                     # unattended: never open a PR without a lock
     🤖 Auto-resolved — no Gate 1 lock; not opening a PR unattended (auto) — exit
@@ -376,5 +376,5 @@ Run Phase 9 of `references/announce-and-transition.md`.
 next steps:
   - Wait for reviewer activity
   - Nudge with `/sdlc:pull-request #{session.pr_number}` if idle > 2-3 days
-  - After pushing fixes, re-run `sdlc:copilot-review` for Copilot's review of the new head
+  - Reviewers review on GitHub; after pushing fixes, re-run `sdlc:copilot-review` for Copilot's review of the new head
 ```

@@ -108,7 +108,7 @@ check_tree() {
   docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF 'FIX DIFF:' || echo "review: dispatch prompt does not carry FIX DIFF"
   docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF 'RIPPLE RECEIPTS:' || echo "review: dispatch prompt does not carry RIPPLE RECEIPTS"
   grep -qF 'prior_ids: session.prior_ids}' "$skill" || echo "review: validate does not get the prior round's ids"
-  grep -qF '⚠️ Gate 2 is deprecated' "$skill" || echo "review: Gate 2 runs without its deprecation warning"
+  grep -qxF -- '  if lower(session.pr.author.login) != lower(session.reviewer_username): ⚠️ Gate 2 is deprecated — for an outside review, run sdlc:copilot-review on the PR' "$skill" || echo "review: Gate 2 runs without its deprecation warning"
   # test budget + dispatch cap
   docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF 'TEST BUDGET:     {test_budget(pe)}' || echo "review: dispatch prompt does not carry each PE's TEST BUDGET"
   for want in 'if pe in SUITE_FREE:                               return "none"' \
@@ -654,7 +654,7 @@ mutant finding-keys-dropped \
   'sedall "s/^## Finding Keys$/## Keys/"' \
   'moves: ## Finding Keys missing'
 mutant gate2-silent \
-  'sedall "s/; ⚠️ Gate 2 is deprecated — for an outside review, run sdlc:copilot-review on the PR//"' \
+  'sedall "s/^  if lower(session.pr.author.login) != lower(session.reviewer_username): .*//"' \
   'review: Gate 2 runs without its deprecation warning'
 mutant protocol-not-dispatched \
   'sedall "s/{PE_PROTOCOL}//"' \

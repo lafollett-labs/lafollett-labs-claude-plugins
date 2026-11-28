@@ -65,8 +65,6 @@ restore_stash():                     # every exit after checkout.md § In-place 
   session.stash_ref = null
 ```
 
----
-
 ## Phase 1 — Scope Analysis
 
 ### Review type
@@ -125,6 +123,7 @@ if wt exited 0 and wt.worktrees is non-empty:
 if review_type == "PR Review":
   read ${CLAUDE_PLUGIN_ROOT}/skills/review/references/checkout.md and run § Fetch + PR metadata   # binds session.pr, session.source_branch, session.remote_ref; stops on an unsafe branch name
   target_branch = session.pr.baseRefName
+  if lower(session.pr.author.login) != lower(session.reviewer_username): ⚠️ Gate 2 is deprecated — for an outside review, run sdlc:copilot-review on the PR
   if session.auto: 🤖 Auto-resolved — checkout → worktree path (a PR branch already checked out here is reviewed in place; HEAD never moves); user_response = (b)
   else:
     AskUserQuestion → "Review PR #{session.pr.number} ({session.pr.headRefName}) in which checkout?"; options:
@@ -222,7 +221,7 @@ The gate is derived, never chosen: Gate 1 is the author reviewing their own bran
 
 ```text
 session.gate = "Gate 2" if review_type == "PR Review" and lower(session.pr.author.login) != lower(session.reviewer_username) else "Gate 1"
-if session.gate == "Gate 2": session.ledger = false; ⚠️ Gate 2 is deprecated — for an outside review, run sdlc:copilot-review on the PR   # a peer round never writes the author's findings ledger
+if session.gate == "Gate 2": session.ledger = false     # a peer round never writes the author's findings ledger
 ```
 
 ### Pre-dispatch judgment
