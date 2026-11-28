@@ -463,6 +463,10 @@ d="$(printf '{"root":"%s","routing":{"composables/useX.ts":"pe-general-purpose"}
 check "detect: a Nuxt composable routed to pe-general-purpose is front-end" "$d" "o.front_end === true"
 d="$(printf '{"root":"%s","routing":{"src/Api/Foo.cs":"pe-csharp"}}' "$TMP/webapp" | node "$CLI" detect)"
 check "detect: a C# file is not front-end" "$d" "o.front_end === false"
+d="$(printf '{"root":"%s","routing":{"engine/src/lib.rs":"pe-rust","engine/Cargo.toml":"pe-rust"}}' "$TMP/nuxtgp" | node "$CLI" detect)"
+check "detect: a wasm crate inside a Nuxt project is not front-end (pe-rust runs its own cargo build)" "$d" "o.front_end === false"
+d="$(printf '{"root":"%s","routing":{"scripts/dev/fmt.sh":"pe-devtools",".githooks/pre-commit":"pe-devtools"}}' "$TMP/nuxtgp" | node "$CLI" detect)"
+check "detect: dev tooling in a Nuxt project is not front-end" "$d" "o.front_end === false"
 o="$(plan "$TMP/nuxtgp" in-place '{"composables/useX.ts":"pe-general-purpose"}')"
 check "a front-end file routed to another PE gets a BUILD PLAN entry in the build root" "$o" \
   "o.placement === 'disposable-worktree' && o.plans.length === 1 && o.plans[0].pe === 'pe-general-purpose' && o.plans[0].dir === o.build_root"

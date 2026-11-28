@@ -342,8 +342,8 @@ check_lean_agent() {
 # pe-github-actions owns the workflows (pe-aws-infra hands them off) and keeps its five baseline checks.
 check_agent_set() {
   local root="$1" f name want
-  for want in pe-go pe-vue pe-aws-infra pe-governance pe-csharp pe-angular pe-sql-server pe-github-actions \
-              pe-general-purpose plan-reviewer; do
+  for want in pe-go pe-rust pe-vue pe-aws-infra pe-governance pe-csharp pe-angular pe-sql-server pe-github-actions \
+              pe-devtools pe-general-purpose plan-reviewer; do
     [ -f "$root/agents/$want.md" ] || echo "agents: missing $want"
   done
   for f in "$root"/agents/*.md; do
@@ -360,6 +360,8 @@ check_agent_set() {
     && echo "pe-aws-infra: owns .github/workflows"
   sed -n '1,/^## /p' "$root/agents/pe-aws-infra.md" | grep -qF 'Does NOT review .github/workflows' \
     || echo "pe-aws-infra: description does not hand .github/workflows to pe-github-actions"
+  section "$root/agents/pe-devtools.md" '^## Owned Files and Hand-offs' | grep -F '.github/workflows' | grep -vqF 'pe-github-actions' \
+    && echo "pe-devtools: owns .github/workflows"
   for want in 'tests run on pull requests' 'full commit SHAs' 'least-privilege' 'OIDC' 'protected environment'; do
     block "$f" '^### Workflow baseline$' | grep -qF -- "$want" || echo "pe-github-actions: baseline missing: $want"
   done
@@ -624,6 +626,9 @@ mutant handoff-to-dropped-pe \
 mutant aws-infra-owns-workflows \
   'sed "s|^This PE owns |This PE owns .github/workflows/*.yml, |" agents/pe-aws-infra.md > t && mv t agents/pe-aws-infra.md' \
   'pe-aws-infra: owns .github/workflows'
+mutant devtools-owns-workflows \
+  'sed "s|^This PE owns |This PE owns .github/workflows/**, |" agents/pe-devtools.md > t && mv t agents/pe-devtools.md' \
+  'pe-devtools: owns .github/workflows'
 mutant aws-infra-description-claims-workflows \
   'sed "s/Does NOT review .github\/workflows/Also reviews .github\/workflows/" agents/pe-aws-infra.md > t && mv t agents/pe-aws-infra.md' \
   'pe-aws-infra: description does not hand .github/workflows'

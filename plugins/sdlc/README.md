@@ -33,8 +33,9 @@ Slack is optional and off by default.
 
 ## Review agents
 
-`review` dispatches one agent per stack the diff touches: `pe-go`, `pe-vue`, `pe-angular`,
-`pe-csharp`, `pe-sql-server`, `pe-aws-infra`, `pe-github-actions`, `pe-governance`, and
+`review` dispatches one agent per stack the diff touches: `pe-go`, `pe-rust`, `pe-vue`, `pe-angular`,
+`pe-csharp`, `pe-sql-server`, `pe-aws-infra`, `pe-github-actions`, `pe-governance`, `pe-devtools`
+(local dev scripts and hooks, under a single-operator threat model), and
 `pe-general-purpose` for anything no specialist owns. `plan-reviewer` answers
 `implement`'s plan gate under `--incident`.
 

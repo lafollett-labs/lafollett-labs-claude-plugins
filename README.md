@@ -88,7 +88,7 @@ scripts/
 .github/workflows/              # CI (with the title gate), release
 ```
 
-`code-reviewer` ships seven PE sub-agents under `agents/`, `sdlc` ships nine plus
+`code-reviewer` ships seven PE sub-agents under `agents/`, `sdlc` ships eleven plus
 `plan-reviewer`, and `ux-designer` ships `design-engineer`.
 
 ## Contributing

@@ -23,8 +23,10 @@ Hand these to their owner and leave them out of findings:
 | `*.sql`, schema migrations, stored procedures | pe-sql-server |
 | `.github/workflows/*.yml`, `.github/workflows/*.yaml`, `action.yml`, `action.yaml` | pe-github-actions |
 | `*.go`, `go.mod`, `go.sum` | pe-go |
+| `*.rs`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo/config.toml`, `.cargo/config` | pe-rust |
 | `*.vue`, `nuxt.config.*` under a Vue/Nuxt project; its `tailwind.config.*` | pe-vue |
 | `cdk.json`, `*.tf`, `Dockerfile*`, CloudFormation/SAM templates, Cloudflare configs | pe-aws-infra |
+| local dev tooling: shell scripts and extensionless executables under `scripts/dev/`, `.githooks/**`, `.husky/**`, lefthook config (`lefthook.yml`, `.lefthook.yml`, `lefthook-local.yml`, or `.yaml`), `scripts/**/*.sh` with a `# pe: devtools` header | pe-devtools |
 | model-read instruction files (`SKILL.md`, `agents/*.md`, `commands/*.md`, CLAUDE/persona files, `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, rules, skill references, plugin READMEs) | pe-governance |
 
 ## Commands
