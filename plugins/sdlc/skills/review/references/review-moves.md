@@ -1,6 +1,6 @@
 # Review Moves
 
-Loaded by SKILL.md at Phase 3 and inlined into every PE dispatch beside the PE PROTOCOL. Seven moves, applied by every PE after its five passes. A **unit** is anything the diff adds or changes in the PE's files: a function, branch, rule, config key, schema field, doc claim, test or guard. Apply each move whose trigger matches a unit, starting from the agent's stack heuristics. Moves decide where to look; the PE PROTOCOL's Calibration Anchor, REPORTING BAR and Severity Definitions still decide whether and how hard to flag.
+Loaded by SKILL.md at Phase 3 and inlined into every PE dispatch beside the PE PROTOCOL. Seven moves, applied by every PE after its five passes. A **unit** is anything the diff adds or changes in the PE's files: a function, branch, rule, config key, schema field, doc claim, test or guard. Apply each move whose trigger matches a unit, starting from the agent's stack heuristics. Moves decide where to look; the PE PROTOCOL's Calibration Anchor, REPORTING BAR and Severity Definitions still decide whether and how hard to flag. The dispatched TIER contract's scope, SEARCH_ROOTS and search budget bound every move: a triggered move the budget cuts short is `applied`, with `checked` counting what was examined and `note` saying it was cut short by the tier budget; when the diff needs more, emit `tier_escalation`.
 
 ## Contents
 
@@ -101,13 +101,11 @@ findings:
 moves_coverage:              # M1..M7, each exactly once
   - move: M1
     status: applied          # applied | n/a
-    checked: "2 changed contracts → 9 consumers, 3 doc restatements; 1 fix → 4 sibling sites grepped"
-    note: ""
+    checked: "2 changed contracts → 9 consumers, 3 doc restatements; 1 fix → 4 sibling sites grepped"   # what you examined, with a count; never a copied example or a <...> placeholder
+    note: ""                 # applied: empty, or "cut short by the tier budget"; n/a: why no unit triggered the move
   - move: M6
     status: n/a
     checked: ""
     note: "no test added or changed"
   # ...M2–M5 and M7, one entry each
 ```
-
-`checked` names what was examined, with a count; it is required when `status: applied`, and a copied example or a `<...>` placeholder does not count. `note` says why no unit triggered the move; it is required when `status: n/a`. `findings.js validate` re-dispatches a PE once whose `moves_coverage` is missing, short of a move, or has an entry without its `checked` or `note`; a gap left after that is recorded in the review.

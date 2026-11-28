@@ -245,7 +245,7 @@ function findingEntry(f, level) {
   const lines = [
     `${'#'.repeat(level)} ${EMOJI[f.severity]} ${f.id}: ${f.title}`,
     '',
-    `**Domains:** [${(f.domains || []).join(', ')}] · **Category:** ${f.category || 'general'}`,
+    `**Domains:** [${(f.domains || []).join(', ')}] · **Category:** ${f.category || 'general'}${f.move && f.move !== 'none' ? ` · **Move:** ${f.move}` : ''}`,
     `**Location:** ${code(f.location)}`,
   ];
   if (f.locations?.length) lines.push(`**Also at:** ${f.locations.map(code).join(', ')}`);

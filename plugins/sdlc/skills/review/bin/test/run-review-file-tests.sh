@@ -101,6 +101,13 @@ if grep -qx -- '- pe-go-r1: moves_coverage incomplete after one re-dispatch — 
 else
   fail "a moves coverage gap is not rendered"
 fi
+node -e 'const r=require(process.argv[1]); r.findings[0].move="M4"; console.log(JSON.stringify(r))' \
+  "$FIX/gate1-initial.json" | node "$CLI" render --file "$TMP/move.md" >/dev/null
+if grep -q '· \*\*Move:\*\* M4' "$TMP/move.md" && ! grep -q '\*\*Move:\*\*' "$TMP/initial.md"; then
+  pass "a finding's move is rendered beside its category, and none renders nothing"
+else
+  fail "a finding's move is not rendered"
+fi
 if grep -q 'Review Moves Coverage Gaps' "$TMP/initial.md"; then fail "a round with no gaps renders the gaps heading"
 else pass "a round with no gaps renders no gaps heading"; fi
 

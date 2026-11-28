@@ -24,7 +24,7 @@ round = {
   summary: 2–3 sentences — what changed, what was found, overall assessment,
   ac_results: [{ac: "#{r.index} {one-line r.ac}", verdict: r.status, evidence: r.evidence}] if session.ac_conformance == "pending",
   ac_skip_reason: session.ac_conformance otherwise,
-  findings: consolidated,                        # severity, in_scope, title, location, locations, domains, category, description, recommendation
+  findings: consolidated,                        # severity, in_scope, title, location, locations, domains, category, move, description, recommendation
   dismissed: [{title, rationale, original_severity, outcome}],   # outcome: "dismissed" | "adjusted → {SEV}"
   receipts: [{claim, title, location, attestation, missing_source}],   # every PE receipt; a demoted finding → claim indeterminate (with missing_source) or below_bar, original description + missing proof in attestation
   category_fallbacks: session.category_fallbacks,

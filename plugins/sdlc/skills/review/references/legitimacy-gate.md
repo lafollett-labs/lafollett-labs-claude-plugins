@@ -58,7 +58,7 @@ for name, receipts in unproven:              # ONE re-dispatch per teammate list
     reply = the entry in reply_entries whose id == receipt.id, else None
     if reply is a finding:
       remove receipt from snapshot.verification_receipts
-      run it through `findings.js validate` + `dedup` (SKILL.md Phase 4); append the survivor to consolidated
+      run it through `findings.js validate` (input `moves_checked: [name]`; Phase 4 settled its coverage) + `dedup` (SKILL.md Phase 4); append the survivor to consolidated
     elif (reply is None                                                       # no reply == unproven
           or (reply.claim == "absence" and not proven(reply))
           or (reply.claim != "absence" and reply.attestation == receipt.attestation
@@ -70,7 +70,7 @@ for name, receipts in unproven:              # ONE re-dispatch per teammate list
       replace receipt with reply in snapshot.verification_receipts   # proven, or narrowed to exactly what was run
   for reply in reply_entries whose id matches no receipt:           # a re-id'd finding (e.g. HIGH-001) is still a finding
     if reply is a finding:
-      run it through `findings.js validate` + `dedup` (SKILL.md Phase 4); append the survivor to consolidated
+      run it through `findings.js validate` (input `moves_checked: [name]`; Phase 4 settled its coverage) + `dedup` (SKILL.md Phase 4); append the survivor to consolidated
 ```
 
 ## Per-finding receipt check
