@@ -11,7 +11,7 @@
  *   node copilot-review.js threads --pr <N>
  *   node copilot-review.js reply   --thread <id> --body-file <path>
  *   node copilot-review.js resolve --thread <id>
- *   node copilot-review.js pushed  --pr <N> [--head <sha>]
+ *   node copilot-review.js pushed  --pr <N> [--head <sha>] [--wait <s>] [--interval <s>]
  *
  * request  { status: requested | pending | already_reviewed | quota_exhausted, pr, head_sha, review_id?, after_review_id?,
  *            message? }
@@ -23,7 +23,8 @@
  *          HTTP 429 (rate limited) and 503 (unavailable) are errors that say to retry later
  * wait     { status: complete | quota_exhausted | refused | timeout, pr, head_sha, review | null, latest_reviewed_sha,
  *            waited_s, message? }
- *          complete when a Copilot review's commit_id is the head (--head, default the PR head at start)
+ *          complete when a Copilot review newer than --after (id > --after, default 0) has commit_id at the head
+ *          (--head, default the PR head at start); an older review at the head never completes a re-requested wait
  *          quota_exhausted | refused: Copilot posted "unable to review" at the head (id > --after, default 0)
  *          instead of a review; message is its sentence. Such posts never count as reviews in any command.
  * threads  { pr, head_sha, head_branch, base_branch, review, reviewed_head, coverage, local, threads }
@@ -38,6 +39,8 @@
  *                       body, suggestion, replies: [{ author, body }], answered_by_me }
  * reply    { ok, thread_id, comment_id, url }     resolve { ok, thread_id, resolved }
  * pushed   { pushed, moved, head, pr_head, reviewed_sha }
+ *          GitHub moves the PR head a moment after a push: re-reads it every --interval (default 2) s until it is
+ *          the local head or --wait (default 20) s pass
  *          moved  = the PR head differs from the commit of Copilot's latest review (true when there is none)
  *          pushed = moved and the PR head is the local HEAD (--head overrides it)
  *
@@ -78,7 +81,7 @@ const COMMAND_OPTS = {
   threads: { values: ['pr'], flags: [], pr: true },
   reply: { values: ['thread', 'body-file'], flags: [], pr: false },
   resolve: { values: ['thread'], flags: [], pr: false },
-  pushed: { values: ['pr', 'head'], flags: [], pr: true },
+  pushed: { values: ['pr', 'head', 'wait', 'interval'], flags: [], pr: true },
 };
 
 const THREADS_QUERY = `query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
@@ -286,7 +289,7 @@ function waitCmd(pr, opts) {
     const mine = copilotReviews(reviews(pr));
     const real = mine.filter((r) => !refused(r));
     const waited = Math.round((Date.now() - start) / 1000);
-    const at = real.filter((r) => r.commit_id === head);
+    const at = real.filter((r) => r.commit_id === head && Number(r.id) > after);
     const last = latest(real);
     const base = { pr: Number(pr), head_sha: head, latest_reviewed_sha: last ? last.commit_id || null : null, waited_s: waited };
     if (at.length) return { code: 0, body: { status: 'complete', ...base, review: reviewSummary(latest(at)) } };
@@ -379,7 +382,14 @@ function resolveCmd(opts) {
 function pushedCmd(pr, opts) {
   const head = opts.head || gitOut(['rev-parse', '--verify', '-q', 'HEAD']);
   if (!head) throw new CopilotError('pushed: no local HEAD commit (pass --head)');
-  const prHead = prView(pr, 'headRefOid').headRefOid;
+  const wait = seconds(opts, 'wait', 20);
+  const interval = seconds(opts, 'interval', 2);
+  const start = Date.now();
+  let prHead = prView(pr, 'headRefOid').headRefOid;
+  while (prHead !== head && (Date.now() - start) / 1000 < wait) {
+    sleep(Math.min(interval, wait - (Date.now() - start) / 1000));
+    prHead = prView(pr, 'headRefOid').headRefOid;
+  }
   const last = latest(realReviews(reviews(pr)));
   const reviewed = last ? last.commit_id || null : null;
   const moved = reviewed !== prHead;

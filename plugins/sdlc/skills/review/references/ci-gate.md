@@ -31,7 +31,7 @@ render "  🔎 CI: {session.ci.state} — {session.ci.reason}"
 
 | `session.ci.state` | Gate 2 effect |
 | - | - |
-| `passed`, `none` | no CI finding; MERGEABLE follows the reviewers' GitHub reviews. `none` is final only after `--settle 30`: when a workflow under `.github/workflows/` mentions `pull_request`, the script polls up to 30s for checks to register, then reads the head's workflow runs (a run that failed to start reports no check: `failed`; one queued or awaiting approval: `pending`) |
+| `passed`, `none` | no CI finding; MERGEABLE follows the reviewers' GitHub reviews. `none` is final only after `--settle 30`: when `.github/workflows/` holds any workflow, the script polls up to 30s for checks to register, then reads the head's workflow runs, the newest per workflow and event (a run that failed to start reports no check: `failed`; one queued or awaiting approval: `pending`; one cancelled: `incomplete`). A `passed` read is checked against the runs the same way, so a run that failed to start beside green checks is `failed` |
 | `failed` | CRITICAL finding → 🚫 BLOCKED; `gate2` returns `OPEN — Gate 2 CI failed: …` |
 | `pending`, `incomplete` | no finding; `gate2` returns `OPEN — Gate 2 waiting on CI: …`; no PR approval |
 | `unreadable` | no finding; `gate2` returns `OPEN — Gate 2 CI status unreadable: …`; no PR approval |

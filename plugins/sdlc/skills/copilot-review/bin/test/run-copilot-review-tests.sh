@@ -159,6 +159,12 @@ stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-refused-other.json'
 check "wait: a refusal not about quota → exit 1" "$(run wait --pr 7 --interval 0 --timeout 0)" 1
 check "  status refused" "$(j .status)" refused
 
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-a.json'
+check "wait --after the review at the head: a re-request waits for a newer one" "$(run wait --pr 7 --head "$A" --after 103 --interval 0 --timeout 0)" 1
+check "  status timeout" "$(j .status)" timeout
+check "wait --after an older id: the review at the head completes it" "$(run wait --pr 7 --head "$A" --after 102 --interval 0 --timeout 0)" 0
+check "  review 103" "$(j .review.id)" 103
+
 stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-old.json'
 check "wait --after not an id → exit 2" "$(run wait --pr 7 --after 12a --interval 0 --timeout 0)" 2
 check "  no gh call" "$(calls '/reviews')" 0
@@ -259,29 +265,38 @@ check "resolve: GraphQL error → exit 2" "$(run resolve --thread PRRT_gone)" 2
 
 # --- pushed ---
 stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-refused.json'
-check "pushed: a refusal at the head is not a review of it" "$(run pushed --pr 7 --head "$A")" 0
+check "pushed: a refusal at the head is not a review of it" "$(run pushed --pr 7 --head "$A" --wait 0)" 0
 check "  reviewed_sha is the last real review's" "$(j '[.reviewed_sha, .moved] | map(tostring) | join(",")')" "$C,true"
 
 stub "$PRB" '^api --paginate .*/pulls/7/reviews|0|reviews-a.json'
-check "pushed: PR head is local HEAD, past Copilot's review → exit 0" "$(run pushed --pr 7 --head "$B")" 0
+check "pushed: PR head is local HEAD, past Copilot's review → exit 0" "$(run pushed --pr 7 --head "$B" --wait 0)" 0
 check "  pushed true, moved true" "$(j '[.pushed, .moved] | map(tostring) | join(",")')" "true,true"
 check "  reviewed_sha" "$(j .reviewed_sha)" "$A"
 
 stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-a.json'
-check "pushed: the push did not land" "$(run pushed --pr 7 --head "$B")" 0
+check "pushed: the push did not land" "$(run pushed --pr 7 --head "$B" --wait 0)" 0
 check "  pushed false, moved false" "$(j '[.pushed, .moved] | map(tostring) | join(",")')" "false,false"
 
 stub "$PRB" '^api --paginate .*/pulls/7/reviews|0|reviews-a.json'
-check "pushed: local HEAD is ahead of the PR head" "$(run pushed --pr 7 --head "$C")" 0
+check "pushed: local HEAD is ahead of the PR head" "$(run pushed --pr 7 --head "$C" --wait 0)" 0
 check "  pushed false, moved true" "$(j '[.pushed, .moved] | map(tostring) | join(",")')" "false,true"
 
 stub "$PRB" '^api --paginate .*/pulls/7/reviews|0|reviews-b.json'
-check "pushed: Copilot already reviewed the new head" "$(run pushed --pr 7 --head "$B")" 0
+check "pushed: Copilot already reviewed the new head" "$(run pushed --pr 7 --head "$B" --wait 0)" 0
 check "  pushed false, moved false" "$(j '[.pushed, .moved] | map(tostring) | join(",")')" "false,false"
 
 stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-human.json'
-check "pushed: no Copilot review yet" "$(run pushed --pr 7 --head "$A")" 0
+check "pushed: no Copilot review yet" "$(run pushed --pr 7 --head "$A" --wait 0)" 0
 check "  pushed true, moved true, reviewed_sha null" "$(j '[.pushed, .moved, .reviewed_sha] | map(tostring) | join(",")')" "true,true,null"
+
+stub '^pr view 7 |0|pr-view-a.json,pr-view-a.json,pr-view-b.json' '^api --paginate .*/pulls/7/reviews|0|reviews-a.json'
+check "pushed: GitHub moves the PR head a moment after the push → exit 0" "$(run pushed --pr 7 --head "$B" --wait 5 --interval 0.05)" 0
+check "  pushed true once the head catches up" "$(j '[.pushed, .pr_head] | map(tostring) | join(",")')" "true,$B"
+check "  re-read the head until it moved" "$(calls '^pr view')" 3
+
+stub "$PRA" '^api --paginate .*/pulls/7/reviews|0|reviews-a.json'
+check "pushed: the head never moves → stops at --wait" "$(run pushed --pr 7 --head "$B" --wait 0.3 --interval 0.05)" 0
+check "  pushed false" "$(j .pushed)" false
 
 stub '^pr view 7 |0|pr-view-live.json' '^api --paginate .*/pulls/7/reviews|0|reviews-a.json'
 printf '{"number":7,"headRefOid":"%s","headRefName":"feat/42-add-login","baseRefName":"main","state":"OPEN"}\n' "$H" > "$S/pr-view-live.json"

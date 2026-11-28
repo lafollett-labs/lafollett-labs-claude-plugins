@@ -343,6 +343,7 @@ loop:
   v = stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/findings.js" validate` < {outputs: {name: {pe: session.by_name[name], ...collected YAML}}, redispatched}
   if v.redispatch is empty: break
   for r in v.redispatch:
+    remove collected_outputs[r.name]               # a respawned or dropped teammate leaves no stale invalid entry
     SendMessage(to: r.name, summary: "schema violation", message: r.note); pending.add(r.name)
     redispatched[k] += [r.name] for k in r.kinds
   re-enter the Collect loop until every re-dispatched reply arrives, then re-transcribe and continue

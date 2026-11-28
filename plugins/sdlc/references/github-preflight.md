@@ -3,11 +3,12 @@
 Binds the GitHub state every sdlc skill reads. Run it once per session, before the first `gh` call; later steps read these bindings instead of probing again.
 
 ```text
-session.gh_ok            = (`gh api user --jq .login` exits 0 and prints a login)   # the account gh uses can call GitHub
+session.gh_ok            = (`gh api user --jq .login` exits 0 and prints a login)
+                           or `gh api rate_limit --jq .resources.core.limit` exits 0   # an app or Actions token has no user, but can call GitHub
 session.repo             = null                                 # "octo-org/octo-repo"
 session.status_labels_ok = false
 if not session.gh_ok:
-  ⚠️ Warning — gh cannot call GitHub as a signed-in user (check `gh auth status`); GitHub steps are skipped this session
+  ⚠️ Warning — gh cannot call GitHub (check `gh auth status`); GitHub steps are skipped this session
   return
 
 r = `gh repo view --json nameWithOwner --jq .nameWithOwner`

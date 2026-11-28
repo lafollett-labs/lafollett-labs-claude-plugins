@@ -562,6 +562,10 @@ function cmdUpdate(a) {
         }
         synced.push(t);
         out(`✓ Updated #${t.num}: ${title}`);
+        if (key && !state.issues[t.fname] && fs.existsSync(path.join(stateDir, STATE_FILE))) {
+            state.issues[t.fname] = key; // --key on an untracked file in a state folder links it, so create never duplicates it
+            writeState(stateDir, state);
+        }
         findings += report(verifyIssue(t.num, t.path));
     }
     if (state.epic && synced.length) writeReadme(stateDir, state);
@@ -681,9 +685,11 @@ function cmdStatus(a) {
             continue;
         }
         const stage = stageOf(issue);
-        if (stage === 'dropped') dropped++;
-        else total++;
-        if (stage === 'done') done++;
+        if (num !== state.epic) { // the epic is the container, not one of its items
+            if (stage === 'dropped') dropped++;
+            else total++;
+            if (stage === 'done') done++;
+        }
         let note = '';
         if (linked && fname && num !== state.epic && CHILD_TYPES.includes(typeOf(fname)) && !linked.has(num)) {
             note = `  ⚠️ not a sub-issue of #${state.epic}`;

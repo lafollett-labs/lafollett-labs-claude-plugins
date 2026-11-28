@@ -124,12 +124,12 @@ const checks = {
     },
 
     hasDefinitionOfDone: (content) => {
-        const hasSection = /## Definition of Done/i.test(content);
-        if (!hasSection) {
+        const section = content.match(/^## Definition of Done[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/im);
+        if (!section) {
             return { pass: false, message: '✗ Missing "## Definition of Done" section' };
         }
 
-        const checkboxCount = (content.match(/- \[ \]/g) || []).length;
+        const checkboxCount = (section[1].match(/- \[ \]/g) || []).length; // this section's items only
         if (checkboxCount < 3) {
             return { pass: false, message: `✗ Definition of Done has only ${checkboxCount} items (recommend at least 3)` };
         }

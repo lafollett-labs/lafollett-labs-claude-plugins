@@ -464,6 +464,16 @@ test('update --file --key re-syncs one untracked file to the named issue', (t) =
     assert.equal(r.code, 0, r.out + r.err);
     assert.equal(r.last, '✅ Done — 1 issue(s) re-synced from notes');
     assert.equal(box.stdin(), `${bodyOf(story('Reworked'))}\n`);
+    assert.equal(box.exists('notes/.github-state.json'), false, 'a file outside a state folder is not tracked');
+});
+
+test('update --file --key on an untracked file in a state folder records the link', (t) => {
+    const box = sandbox(t, { ...epicFiles(), [`${EPIC_DIR}/.github-state.json`]: JSON.stringify({ epic: 41, issues: { '00-Epic-Book-Search.md': 41 } }) })
+        .route('^issue edit 43', [null])
+        .route('^issue view 43 --json body', [{ body: bodyOf(HOLD) }]);
+    const r = box.run('update', '--docs-path', EPIC_DIR, '--file', '02-Story-Place-A-Hold.md', '--key', '43');
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.deepEqual(box.json(`${EPIC_DIR}/.github-state.json`).issues, { '00-Epic-Book-Search.md': 41, '02-Story-Place-A-Hold.md': 43 });
 });
 
 test('update --file resolves a name relative to --docs-path', (t) => {
@@ -621,7 +631,8 @@ test('status rolls up live state, flags unlinked children and local-only files',
     assert.match(r.out, /#42 {2}✅ done — Search by title\n/);
     assert.match(r.out, /#43 {2}🟡 in-progress — Place a hold {2}⚠️ not a sub-issue of #41/);
     assert.match(r.out, /local only — 03-Story-Draft\.md \(run create\)/);
-    assert.equal(r.last, '✅ Done — 1/3 done (33%) for #41; 1 not linked to #41 — run create to link');
+    assert.match(r.out, /── 1\/2 done \(50%\)\n/, 'the epic is not one of its own items');
+    assert.equal(r.last, '✅ Done — 1/2 done (50%) for #41; 1 not linked to #41 — run create to link');
     assert.ok(!box.calls().some((c) => /issue (create|edit)|-X/.test(c)), 'status is read-only');
 });
 
@@ -642,8 +653,8 @@ test('status: a same-numbered sub-issue in another repository does not link a ch
     assert.match(r.out, /#42 {2}✅ done — Search by title\n/);
     assert.match(r.out, /#43 {2}⛔ dropped — Place a hold {2}⚠️ not a sub-issue of #41\n/);
     assert.match(r.out, /#44 {2}⛔ dropped — Dup\n/);
-    assert.match(r.out, /── 1\/2 done \(50%\) {2}· {2}2 dropped\n/);
-    assert.equal(r.last, '✅ Done — 1/2 done (50%) for #41; 1 not linked to #41 — run create to link');
+    assert.match(r.out, /── 1\/1 done \(100%\) {2}· {2}2 dropped\n/);
+    assert.equal(r.last, '✅ Done — 1/1 done (100%) for #41; 1 not linked to #41 — run create to link');
 });
 
 test('status reports an issue it cannot read and exits non-zero', (t) => {

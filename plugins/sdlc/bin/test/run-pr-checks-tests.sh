@@ -191,10 +191,30 @@ checkout() {
 reads() { grep -c "^pr checks" "$CASE/calls"; }
 
 checkout pr-yml ci.yml=pull_request
-newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-empty.json,checks-passed.json
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-empty.json,checks-passed.json; route "$RUNS" 0 runs-green.json
 run --settle 5
 check "--settle re-reads a none until the checks register" 0 'o.state === "passed" && o.checks.length === 3'
-calls_are "each re-read confirms the head first" "$(printf 'pr view 7 --json headRefOid\npr checks 7 --json name,workflow,state,bucket,link\n%.0s' 1 2 3)"
+calls_are "each re-read confirms the head first, then the runs are read" "$(printf 'pr view 7 --json headRefOid\npr checks 7 --json name,workflow,state,bucket,link\n%.0s' 1 2 3; printf 'run list --commit %s --json databaseId,workflowDatabaseId,workflowName,event,status,conclusion,url --limit 100' "$HEAD")"
+
+# runs beside passed checks (no settle needed)
+newcase; head_is pr-view.json; checks_are 0 checks-passed.json; route "$RUNS" 0 runs-startup-beside-green.json
+RUN_DIR="$W/pr-yml" run
+check "a run that failed to start beside green checks is failed, not passed" 0 'o.state === "failed" && o.failed_checks.length === 1 && o.failed_checks[0].run_id === 9021 && o.failed_checks[0].name === "Deploy preview"'
+newcase; head_is pr-view.json; checks_are 0 checks-passed.json; route "$RUNS" 0 runs-failure-beside-green.json
+RUN_DIR="$W/pr-yml" run
+check "beside passed checks, only a run that failed to start overrides them" 0 'o.state === "passed"'
+newcase; head_is pr-view.json; checks_are 0 checks-passed.json; route "$RUNS" 0 runs-queued.json
+RUN_DIR="$W/pr-yml" run
+check "a run not yet finished beside green checks is pending" 0 'o.state === "pending"'
+newcase; head_is pr-view.json; checks_are 0 checks-passed.json; route "$RUNS" 0 runs-push-startup-beside-pr.json
+RUN_DIR="$W/pr-yml" run
+check "runs are kept per event: a push run that failed to start is not hidden by the pull_request run" 0 'o.state === "failed" && o.failed_checks[0].run_id === 9071'
+newcase; head_is pr-view.json; checks_are 0 checks-passed.json; route "$RUNS" 1 gh-error.stderr
+RUN_DIR="$W/pr-yml" run
+check "an unreadable run list beside passed checks is an error, never passed" 2 '/^gh run list.* failed: /.test(o.error)'
+newcase; head_is pr-view.json; checks_are 0 checks-passed.json
+RUN_DIR="$CASE" run
+check "with no workflow file, passed checks need no run read" 0 'o.state === "passed"'
 
 checkout pr-yaml ci.yaml='[push, pull_request]'
 newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 0 runs-empty.json
@@ -202,7 +222,7 @@ start=$(date +%s); run --settle 1; elapsed=$(( $(date +%s) - start ))
 check "--settle returns none once the window passes and no run failed" 0 'o.state === "none" && /^no checks reported/.test(o.reason) && /no run on the head failed/.test(o.reason)'
 if [ "$(reads)" -ge 3 ] && [ "$elapsed" -lt 5 ]; then pass "--settle polls within the window ($(reads) reads, ${elapsed}s)"
 else fail "--settle read $(reads) times in ${elapsed}s"; fi
-if grep -qx "run list --commit $HEAD --json databaseId,workflowName,status,conclusion,url --limit 100" "$CASE/calls"; then pass "the head's runs are read once the window passes"
+if grep -qx "run list --commit $HEAD --json databaseId,workflowDatabaseId,workflowName,event,status,conclusion,url --limit 100" "$CASE/calls"; then pass "the head's runs are read once the window passes"
 else fail "the head's runs were not read by full SHA"; fi
 
 newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 0 runs-startup-failure.json
@@ -211,26 +231,42 @@ check "a run that failed to start (no check) is failed, not none" 0 'o.state ===
 
 newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 0 runs-queued.json
 run --settle 1
-check "a queued run with no check yet is pending, not none" 0 'o.state === "pending" && /have not reported a check/.test(o.reason)'
+check "a queued run with no check yet is pending, not none" 0 'o.state === "pending" && /have not finished/.test(o.reason)'
+
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 0 runs-rerun-queued.json
+run --settle 1
+check "only the newest run per workflow counts: a queued re-run outranks the older failed start" 0 'o.state === "pending"'
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 0 runs-rerun-fixed.json
+run --settle 1
+check "a newer successful run supersedes an older failed start" 0 'o.state === "none"'
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 0 runs-cancelled.json
+run --settle 1
+check "a cancelled run with no check is incomplete, not none" 0 'o.state === "incomplete" && /cancelled/.test(o.reason)'
 
 newcase; head_is pr-view.json; checks_are 0 checks-empty.json; route "$RUNS" 1 gh-error.stderr
 run --settle 1
 check "an unreadable run list is an error, never none" 2 '/^gh run list.* failed: /.test(o.error)'
 
-checkout push-only ci.yml=push notes.md=pull_request
+checkout push-only ci.yml=push
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json; route "$RUNS" 0 runs-green.json
+run --settle 30
+check "--settle waits for push-only CI too: its checks land on the PR head" 0 'o.state === "passed"'
+if [ "$(reads)" -eq 2 ]; then pass "push-only CI is re-read until its checks register"; else fail "push-only CI read $(reads) times"; fi
+
+checkout no-ci notes.md=pull_request
 newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json
 run --settle 30
-check "--settle returns none at once with no pull_request workflow" 0 'o.state === "none"'
-if [ "$(reads)" -eq 1 ]; then pass "no pull_request workflow means one read"; else fail "no pull_request workflow read $(reads) times"; fi
+check "--settle returns none at once with no workflow file" 0 'o.state === "none"'
+if [ "$(reads)" -eq 1 ]; then pass "no workflow file means one read"; else fail "no workflow file read $(reads) times"; fi
 
 newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json
 run --settle 600
 check "--settle 600, the maximum, is accepted" 0 'o.state === "none"'
-if [ "$(reads)" -eq 1 ]; then pass "--settle 600 with no pull_request workflow means one read"; else fail "--settle 600 read $(reads) times"; fi
+if [ "$(reads)" -eq 1 ]; then pass "--settle 600 with no workflow file means one read"; else fail "--settle 600 read $(reads) times"; fi
 
-newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json
+newcase; head_is pr-view.json; checks_are 0 checks-empty.json,checks-passed.json; route "$RUNS" 0 runs-empty.json
 RUN_DIR="$W/pr-yml" run --settle 0
-check "--settle 0 reads once" 0 'o.state === "none"'
+check "--settle 0 reads the checks once, then the runs" 0 'o.state === "none" && /no run on the head failed/.test(o.reason)'
 newcase; head_is pr-view.json; checks_are 0 checks-pending.json,checks-passed.json
 RUN_DIR="$W/pr-yml" run --settle 30
 check "--settle leaves a state other than none alone" 0 'o.state === "pending"'

@@ -49,6 +49,8 @@ assert_case "warn-only.md"             0 '⚠ Warning: Missing "## Effort Estima
 assert_case "fail-missing-sections.md" 1 'Missing "## User Story" section'
 # Two scenarios, one missing "Then": pin the Given-When-Then check message.
 assert_case "fail-no-gwt.md"           1 "Incomplete Gherkin scenarios"
+# An empty Definition of Done fails even when a Test Plan below it has three checkboxes.
+assert_case "fail-dod-empty.md"        1 "Definition of Done has only 0 items"
 # The section is there but the three lines are run together: pin the format check itself.
 assert_case "fail-story-format.md"     1 'User story not in "As a... I want... So that..." format'
 # A CRLF story (an issue body edited on GitHub) validates like its LF twin.
