@@ -16,9 +16,9 @@ total=0
 pass() { total=$((total + 1)); echo "PASS: $1"; }
 fail() { total=$((total + 1)); echo "FAIL: $1"; fails=$((fails + 1)); }
 
-SKILLS="review pull-request deliver implement plan copilot-review"
+SKILLS="review pull-request deliver implement plan copilot-review init-project"
 # Skills checked for ticket history (review is out: its finding ids, e.g. CRITICAL-001, look like keys).
-HISTORY_SKILLS="pull-request deliver implement plan copilot-review"
+HISTORY_SKILLS="pull-request deliver implement plan copilot-review init-project"
 # Example keys and standard terms the docs may use; anything else matching <PROJECT>-<n> is ticket history.
 EXAMPLE_KEYS='^(LT-[0-9]+|ABC-123|ABC-1234|TICKET-123|UTF-8|SHA-[0-9]+|ISO-[0-9]+)$'
 # Example issue numbers; any other #NN (2+ digits) is ticket history.
@@ -105,7 +105,7 @@ check_terms() {  # one term each: ticket_key (not issue_key / TICKET-ID), "Gate 
 
 check_triggers() {
   local root="$1" s want desc miss="" wants
-  for s in pull-request deliver implement plan copilot-review; do
+  for s in pull-request deliver implement plan copilot-review init-project; do
     desc="$(awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {exit} fm' "$root/skills/$s/SKILL.md")"
     grep -qxF "name: $s" <<<"$desc" || miss="$miss $s:name"
     case "$s" in
@@ -114,6 +114,7 @@ check_triggers() {
       implement)      wants=('"Implement #42"' '"Start work on #42"' '"/sdlc:implement"' 'invoked by sdlc:deliver') ;;
       plan)           wants=('"create epic"' '"create story"' '"import epic"' '"update issue from markdown"' '"/sdlc:plan"') ;;
       copilot-review) wants=('"run a Copilot review"' '"/sdlc:copilot-review"') ;;
+      init-project)   wants=('"write a Stack Map"' '"/sdlc:init-project"') ;;
     esac
     for want in "${wants[@]}"; do grep -qF -- "$want" <<<"$desc" || miss="$miss $s:$want"; done
   done
@@ -129,9 +130,9 @@ run_check() {  # run_check <name> <fn> <root>
 run_check "SKILL.md bodies are under 500 lines" check_body_size "$PLUGIN"
 run_check "references over 100 lines open with ## Contents" check_reference_tocs "$PLUGIN"
 run_check "references are one level deep" check_reference_depth "$PLUGIN"
-run_check "pull-request, deliver, implement, plan and copilot-review carry no ticket history" check_ticket_history "$PLUGIN"
+run_check "pull-request, deliver, implement, plan, copilot-review and init-project carry no ticket history" check_ticket_history "$PLUGIN"
 run_check "sdlc instructions use one term per concept" check_terms "$PLUGIN"
-run_check "pull-request, deliver, implement, plan and copilot-review keep their trigger phrases" check_triggers "$PLUGIN"
+run_check "pull-request, deliver, implement, plan, copilot-review and init-project keep their trigger phrases" check_triggers "$PLUGIN"
 
 # --- mutation cases: each guard fires on a seeded violation (default plugin root only) ----------------
 if [ $# -eq 0 ]; then
@@ -162,6 +163,7 @@ if [ $# -eq 0 ]; then
   seed; echo 'after the code review ends' >> "$P/assets/slack-templates.md";    fires "spaced code review" check_terms
   seed; sed -i.bak 's/"Ship this branch"//' "$P/skills/pull-request/SKILL.md"; fires "lost trigger" check_triggers
   seed; sed -i.bak 's#"/sdlc:copilot-review"#"/copilot"#' "$P/skills/copilot-review/SKILL.md"; fires "lost copilot-review trigger" check_triggers
+  seed; sed -i.bak 's#"write a Stack Map"#"map it"#' "$P/skills/init-project/SKILL.md"; fires "lost init-project trigger" check_triggers
   seed; echo '# IMPLEMENTED in story 03' >> "$P/skills/plan/SKILL.md";       fires "story narration" check_ticket_history
   seed; echo 'The file must be valid UTF-8.' >> "$P/skills/plan/SKILL.md";    silent "standard term UTF-8" check_ticket_history
   seed; yes 'filler' | head -520 >> "$P/skills/implement/SKILL.md";          fires "oversized implement body" check_body_size

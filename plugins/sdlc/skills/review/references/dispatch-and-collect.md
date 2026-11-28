@@ -207,8 +207,8 @@ SUITE_FREE = {pe-governance} ∪ keys(session.domain_pes)          # no suites o
 session.receipts = [] if session.gate == "Gate 2" else
                    "<command> → pass|fail @ <sha>" lines in the invocation text or a hand-off message,
                    whose sha, lowercased, is 7–40 hex and a prefix of session.head_sha
-receipts_for(pe) = session.receipts whose command's leading tool (cargo, go, npm, dotnet, …) appears in
-                   ${CLAUDE_PLUGIN_ROOT}/agents/{pe}.md § Commands
+receipts_for(pe) = session.receipts whose command is in stack_commands[pe], or whose leading tool (cargo, go,
+                   npm, dotnet, …) appears in ${CLAUDE_PLUGIN_ROOT}/agents/{pe}.md § Commands
 test_budget(pe):
   if pe in SUITE_FREE:                               return "none"
   if any r in receipts_for(pe) has result fail:      return "full"
@@ -268,6 +268,7 @@ and your agent's stack lenses (they augment, never replace them):
 {optional} PASTED CODE (Ad-hoc only — review this in full; there is no file or diff):
   {session.adhoc_code}
 {optional} PRIOR LEDGER:   {session.ledger_path if session.ledger_path and it exists}   # Gate 1 only; prior findings' raw title + category per round
+{optional} STACK COMMANDS: {stack_commands[pe], one per line}   # when stack_commands[pe] and every file session.routing sends to pe is in stack_map_routed with routing_baseline[file] == pe; else omitted, so the PE runs its own Commands
 TEST BUDGET:     {test_budget(pe)}   # § Test budget + dispatch cap; PE PROTOCOL Inputs say what each value runs
 {optional} AUTHOR RECEIPTS: {receipts_for(pe), one per line}   # when test_budget(pe) == "targeted" and receipts_for(pe)
 {optional} BUILD PLAN:     one line per p in build_plans(pe): "- {p.dir} ({p.kind}): {p.status}{" · checks: skip" if p.checks == "skip" else ""} — {p.command or p.reason} · receipt: {p.receipt}"

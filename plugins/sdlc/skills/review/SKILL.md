@@ -198,7 +198,7 @@ else:
 
 ### Scope classification
 
-`scope.js` owns the changed-file set, the `docs/code-reviews/**` exclusion, the tier signals and classifier tier, the first-match glob routing of each file to one stack PE, and `domain_pes`: each domain PE (`kind: domain`, e.g. `pe-audio`) with the files its globs match, reviewed beside their stack PE, never instead of it.
+`scope.js` owns the changed-file set, the `docs/code-reviews/**` exclusion, the tier signals and classifier tier, the first-match glob routing of each file to one stack PE, and `domain_pes`: each domain PE (`kind: domain`, e.g. `pe-audio`) with the files its globs match, reviewed beside their stack PE, never instead of it. A repo `## Stack Map` table (CLAUDE.md, else AGENTS.md; written by `sdlc:init-project`; read from the target branch for Branch Diff and PR Review, the index for Staged Diff) routes before the globs, first row wins: a `(skip)` row adds to `excluded`, a domain row adds to `domain_pes`, `stack_map_routed` lists the files a row routed, and `stack_commands[pe]` holds the map's test commands for a PE whose files all came from rows that name commands.
 
 ```text
 mode, extra = match review_type:
@@ -210,7 +210,7 @@ mode, extra = match review_type:
 scope = stdout of `node "${CLAUDE_PLUGIN_ROOT}/skills/review/bin/scope.js" classify --root "{session.review_root}" --mode {mode} {extra}`
 if exit == 3:
   🛑 stop — {scope.stop} ({scope.excluded}); restore_stash(); exit
-bind changed_files, files_changed, lines_added, lines_removed, diff_cmd, signals, security_files from scope
+bind changed_files, files_changed, lines_added, lines_removed, diff_cmd, signals, security_files, stack_commands, stack_map_routed from scope; print each scope.stack_map_notes line
 session.tier = scope.tier; session.tier_source = scope.tier_source; session.tier_signals = scope.tier_signals; session.routing = scope.routing; session.domain_pes = scope.domain_pes; session.matched_pes = scope.matched_pes; session.ledger = scope.ledger
 ```
 
@@ -235,9 +235,9 @@ Read `{diff_cmd}` (the full patch; when `signals.size_large`, read headers for e
 routing_baseline = copy(session.routing); domain_baseline = copy(session.domain_pes); tier_baseline = session.tier
 
 # ROUTING — additive only
-for file whose content reveals a specialist the glob missed: session.routing[file] = that specialist; a domain: add it to session.domain_pes[pe].files (kind: domain), routing unchanged
+for file whose content reveals a specialist the glob missed (a file in stack_map_routed only per the CONTENT_STACK_SIGNALS server-code row): session.routing[file] = that specialist; a domain: add it to session.domain_pes[pe].files (kind: domain), routing unchanged
 session.matched_pes = unique((session.routing.values() if session.routing else session.matched_pes) + keys(session.domain_pes))   # Ad-hoc: keep scope.js's pe-general-purpose
-assert every changed_file maps to exactly one stack PE; every glob-matched specialist is still matched; every domain_baseline key and file is still in session.domain_pes; matched_pes non-empty
+assert every changed_file maps to exactly one stack PE; every glob-matched specialist is still matched; every file in stack_map_routed keeps routing_baseline[file] unless the server-code row moved it; every domain_baseline key and file is still in session.domain_pes; matched_pes non-empty
 
 # TIER — raise freely; lower only to the floor
 session.content_risk_files = changed files whose hunks match CONTENT_RISK_SIGNALS

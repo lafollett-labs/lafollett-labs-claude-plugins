@@ -18,6 +18,7 @@ Slack is optional and off by default.
 | `/sdlc:plan` | Write epics and stories as Markdown in `docs/epics/`, publish them as GitHub issues with stories as sub-issues, and keep both in sync. Replaces `issue-manager` |
 | `/sdlc:implement` | Take `#42` (or a local story code such as `LT-02`), plan behind an approval gate, then build it test-first on a conventional branch |
 | `/sdlc:review` | Review the branch or a PR with the principal-engineer agent for each stack, five passes each, and keep the review doc in the repo |
+| `/sdlc:init-project` | Scan the repo and write a Stack Map to `AGENTS.md` or `CLAUDE.md`: which agent reviews each path, which paths review skips, and each stack's test command |
 | `/sdlc:pull-request` | Push, open the PR from the issue's acceptance criteria, request reviewers, gate on its checks, hand off to Copilot |
 | `/sdlc:copilot-review` | Request a Copilot review, wait for it, then fix, defer or answer each thread and resolve it |
 | `/sdlc:deliver` | Chain implement → review (until it locks) → a human verification gate → pull-request |
@@ -38,7 +39,8 @@ Slack is optional and off by default.
 (local dev scripts and hooks, under a single-operator threat model), and
 `pe-general-purpose` for anything no specialist owns. `pe-audio` is a domain PE: it reviews
 audio and DSP paths (`audio/`, `dsp/`, `pitch/`, worklets) beside their stack PE and runs no
-suites. `plan-reviewer` answers
+suites. A `## Stack Map` table (written by `init-project`) routes or skips paths before these
+built-in patterns. `plan-reviewer` answers
 `implement`'s plan gate under `--incident`.
 
 ## Tickets, branches and status

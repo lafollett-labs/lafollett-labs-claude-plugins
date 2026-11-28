@@ -212,6 +212,7 @@ Consumed by SKILL.md § Pre-dispatch judgment. The mechanical glob/path classifi
 | GitHub Actions (outside `.github/workflows/`) | top-level `on:` + `jobs:`, jobs with `runs-on:`/`steps:`/`uses:` | `pe-github-actions` |
 | SQL embedded (non-`.sql`) | `CREATE TABLE`/`ALTER`/`CREATE PROC` or other DDL | `pe-sql-server` |
 | Audio / DSP (outside `audio/`, `dsp/`, `pitch/`, `*worklet*`) | `AudioWorkletProcessor`, `registerProcessor`, `getUserMedia({ audio`, `build_input_stream`/`build_output_stream` | `pe-audio` — a domain PE: add the file to `domain_pes`, keep its stack PE |
+| Server code routed to `pe-vue` by a Stack Map row (not `*.config.*`, `*.spec.*`, `*.test.*`, or Nitro `server/` beside `nuxt.config.*`) | imports `http`, `https`, `net`, `child_process` or `fs` (bare or `node:`), `express`, `fastify`, `koa`, `hono`, `@nestjs/*`, `pg`, `mysql2`, `prisma`, `mongoose`, `knex`, `drizzle-orm`, `typeorm`, `sequelize`, `ioredis`, `ws`, or another HTTP server, database or cache driver, or ORM | `pe-general-purpose` — the only move out of a Stack Map row |
 
 `CONTENT_RISK_SIGNALS` — risk carried in VALUES, not the path; floor the tier to STANDARD (mirrors the security-path floor in `bin/scope.js`, but content-detected):
 

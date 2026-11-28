@@ -120,6 +120,7 @@ check_tree() {
     || echo "review: Collect does not refill the dispatch cap"
   # shellcheck disable=SC2016 # backticks are the markdown under test
   grep -qF '| `review.maxParallelPes` |' "$root/references/settings.md" || echo "settings: review.maxParallelPes undocumented"
+  docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF 'STACK COMMANDS: {stack_commands[pe]' || echo "review: dispatch prompt does not carry the Stack Map's commands"
   # shellcheck disable=SC2016 # backticks are the markdown under test
   section "$proto" '^## Inputs' | grep -qF '`targeted`:' || echo "protocol: Inputs do not define a targeted TEST BUDGET"
   grep -qF 'if v.gating: print review-moves.md § Remediation Pre-flight' "$skill" || echo "review: a round with gating findings does not print the remediation pre-flight"
@@ -626,6 +627,9 @@ mutant max-parallel-undocumented \
 mutant targeted-undefined \
   'sed "s/\`targeted\`:/\`narrow\`:/" skills/review/references/pe-protocol.md > t && mv t skills/review/references/pe-protocol.md' \
   'protocol: Inputs do not define a targeted TEST BUDGET'
+mutant stack-commands-dropped \
+  'sedall "s/STACK COMMANDS: {stack_commands\[pe\]/STACK COMMANDS: {none/"' \
+  'review: dispatch prompt does not carry the Stack Map'"'"'s commands'
 mutant cap-never-refilled \
   'sedall "s/  while queue and count(n in pending/  if queue and count(n in pending/"' \
   'review: Collect does not refill the dispatch cap'
