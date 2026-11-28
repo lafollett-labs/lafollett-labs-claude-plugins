@@ -120,7 +120,7 @@ node -e 'const r=require(process.argv[1]); r.findings=[
   r.ripple_receipts={spot_checked:2,dropped:1}; console.log(JSON.stringify(r))' "$FIX/gate2-round.json" \
   | node "$CLI" render --file "$TMP/lineage.md" >/dev/null
 # shellcheck disable=SC2016 # backticks are the rendered markdown under test
-for want in '**Siblings:** `b.go:2`, `c.md:3`' '**Introduced by:** MEDIUM-004' '| **Fix Cascade** | 1 / 2 |' \
+for want in '**Siblings:** `b.go:2`, `c.md:3`' '**Introduced by:** round 3 MEDIUM-004' '**Introduced by:** new' '| **Fix Cascade** | 1 / 2 |' \
             '| **Ripple Receipts** | 2 spot-checked, 1 dropped — no hex SHA of the reviewed commit |' '`a.go:1` + 2 siblings'; do
   if grep -qF -- "$want" "$TMP/lineage.md"; then pass "lineage renders: $want"; else fail "lineage does not render: $want"; fi
 done

@@ -223,8 +223,16 @@ check "round 2+: an id the prior round never had is not lineage" "$(lin ',"intro
 check "after its one re-dispatch, bad lineage is cleared, kept as a finding and recorded as a gap" \
   "$(lin ',"siblings":7,"introduced_by":"bogus"' ',"prior_ids":["HIGH-001"],"redispatched":{"lineage":["t1"]}')" \
   'o.redispatch.length === 0 && o.outputs.t1.findings.length === 1 && o.outputs.t1.findings[0].siblings.length === 0 && o.outputs.t1.findings[0].introduced_by === null && /^t1: lineage missing after one re-dispatch/.test(o.coverage_gaps[0])'
-check "a teammate in moves_checked skips the lineage check" "$(lin '' ',"prior_ids":["HIGH-001"],"moves_checked":["t1"]')" \
-  'o.redispatch.length === 0 && o.coverage_gaps.length === 0'
+check "a moves_checked teammate's bad lineage falls back at once, with a gap" "$(lin ',"siblings":"b:2"' ',"prior_ids":["HIGH-001"],"moves_checked":["t1"]')" \
+  'o.redispatch.length === 0 && o.outputs.t1.findings[0].siblings.length === 0 && o.outputs.t1.findings[0].introduced_by === null && /^t1: lineage missing/.test(o.coverage_gaps[0])'
+check "a moves_checked teammate with good lineage passes untouched" "$(lin ',"siblings":["b:2"],"introduced_by":"new"' ',"prior_ids":["HIGH-001"],"moves_checked":["t1"]')" \
+  'o.redispatch.length === 0 && o.coverage_gaps.length === 0 && o.outputs.t1.findings[0].introduced_by === "new"'
+check "round 1 drops an introduced_by the PE copied from the template" "$(lin ',"introduced_by":"MEDIUM-004"')" \
+  'o.redispatch.length === 0 && !("introduced_by" in o.outputs.t1.findings[0])'
+check "a sibling that is not a path:line re-dispatches" "$(lin ',"siblings":["the docs"]')" \
+  'o.redispatch.length === 1 && o.redispatch[0].kinds.join() === "lineage"'
+check "siblings: null reads as missing" "$(lin ',"siblings":null')" 'o.redispatch.length === 0'
+check "a path:start-end range is a sibling" "$(lin ',"siblings":["docs/a.md:3-9"]')" 'o.redispatch.length === 0'
 L='"category":"auth","title":"x","location":"a:1","recommendation":"r"'
 check "dedup unions siblings and keeps the top-severity copy's lineage" \
   "$(dd '{"outputs":{"a":{"pe":"pe-go","findings":[{"severity":"MEDIUM",'"$L"',"siblings":["b:2"],"introduced_by":"new","move":"M1"}]},"b":{"pe":"pe-vue","findings":[{"severity":"HIGH",'"$L"',"siblings":["c:3","b:2"],"introduced_by":"missed","move":"M4"}]}}}')" \

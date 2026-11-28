@@ -425,7 +425,7 @@ for f in v.advisory: render "  • [{f.severity}] {f.location} — {f.title} (ad
 Each invocation is one round; the engineer drives the loop by remediating and re-invoking. Gate 1 terminates by the convergence decision (round cap 8); Gate 2 runs until MERGEABLE (a CI hold means re-run Gate 2 once the checks on HEAD's code have finished and are readable).
 
 ```text
-d = session.convergence.decision if session.convergence else null
+d = session.convergence.decision if session.convergence else null; if v.gating: print review-moves.md § Remediation Pre-flight with each gating finding's location + siblings
 if session.gate == "Gate 2":
   render "{session.verdict} · {session.gate_status}"      # the PR review carries it; the author remediates
 elif d == "LOCKED":
@@ -443,7 +443,7 @@ elif d == "HUMAN_GATE" or session.verdict != "✅ APPROVED":
     if session.ledger: (b) "engineer override — proceed with findings open"   # a Staged / Files / Folder / Ad-hoc round is never part of Gate 1
     (c) "abort — the round is persisted; the gate stays OPEN"
   match user_response:
-    case (a): print review-moves.md § Remediation Pre-flight with each gating finding's location + siblings   # the engineer remediates and re-invokes
+    case (a): pass                                         # the engineer remediates and re-invokes
     case (b): run round-state.md § Engineer override       # it returns here at (a) when not confirmed
     case (c): run § Round teardown, then restore_stash(); exit
   NEVER mark a finding resolved without a real fix or a recorded override

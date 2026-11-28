@@ -243,7 +243,7 @@ function overview(counts) {
   return ['| Severity | In Scope | Out of Scope |', '| - | - | - |', ...rows].join('\n');
 }
 
-function findingEntry(f, level) {
+function findingEntry(f, level, priorRound) {
   const lines = [
     `${'#'.repeat(level)} ${EMOJI[f.severity]} ${f.id}: ${f.title}`,
     '',
@@ -252,7 +252,10 @@ function findingEntry(f, level) {
   ];
   if (f.locations?.length) lines.push(`**Also at:** ${f.locations.map(code).join(', ')}`);
   if (f.siblings?.length) lines.push(`**Siblings:** ${f.siblings.map(code).join(', ')}`);
-  if (f.introduced_by) lines.push(`**Introduced by:** ${f.introduced_by}`);
+  if (f.introduced_by) {
+    const by = String(f.introduced_by).replace(/\s+/g, ' ');
+    lines.push(`**Introduced by:** ${PRIOR_ID.test(by) && priorRound ? `round ${priorRound} ${by}` : by}`);
+  }
   lines.push('', balanced(f.description), '', labelled('**Recommendation:**', f.recommendation));
   return lines.join('\n');
 }
@@ -283,7 +286,7 @@ function bodySections(r, ids, level, initial) {
   sections.push(`${h} Acceptance-Criteria Conformance\n\n${acSection(r)}`);
   sections.push(`${h} Findings Overview\n\n${overview(verdict(r.findings).counts)}`);
   const sep = initial ? '\n\n---\n\n' : '\n\n';
-  const entries = ids.map((f) => findingEntry(f, level + 1)).join(sep);
+  const entries = ids.map((f) => findingEntry(f, level + 1, r.prior_round)).join(sep);
   sections.push(`${h} In Scope Findings\n\n${entries || 'None.'}`);
   if (advisory.length) sections.push(`${h} Advisory Findings\n\n${advisory.map(indexLine).join('\n')}`);
   if (initial || out.length) {
@@ -362,7 +365,7 @@ function renderRound(r, v, n, note) {
     ['Verdict', v],
     ['Date', r.date],
   ]);
-  const { sections } = bodySections(r, ids, 3, false);
+  const { sections } = bodySections({ ...r, prior_round: n - 1 }, ids, 3, false);
   const title = `## Review Round ${n}` + (note ? `  ${note}` : '');
   return `---\n\n${title}\n\n${meta}\n\n${sections.join('\n\n')}\n`;
 }

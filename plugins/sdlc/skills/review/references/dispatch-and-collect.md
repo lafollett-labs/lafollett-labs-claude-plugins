@@ -186,12 +186,16 @@ build_plans(pe) = [p for p in session.build_plans if p.pe == pe]
 
 ```text
 session.prior_ids = null
-if session.round_n > 1 and session.prior and session.prior.latest.reviewed_sha:   # REVIEW MOVES § Round 2+
-  session.prior_ids = ids in session.prior.latest.in_scope_findings ∪ session.prior.latest.advisory
+P = session.prior.latest.reviewed_sha if session.prior else null
+if session.round_n > 1 and scope.ledger and P                                   # a committed range: Branch Diff or PR Review
+   and `git -C "{session.review_root}" merge-base --is-ancestor {P} {session.head_sha}` succeeds:   # rebased or missing → no lineage
+  session.prior_ids = ids in session.prior.latest.in_scope_findings ∪ session.prior.latest.advisory   # the latest prior round's ids
   lines = "<rule> → N restatements checked[; kept <path:line> — <why>] @ <sha>" lines in the invocation text,
           the PR body, or a hand-off message
-  session.ripple.kept    = lines whose sha, lowercased, is 7–40 hex and a prefix of session.head_sha
-  session.ripple.dropped = the other lines                                         # HEAD or a branch name is not a sha
+  fixes = `git -C "{session.review_root}" rev-list {P}..{session.head_sha}`
+  session.ripple.kept    = lines whose sha, lowercased, is 7–40 hex and a prefix of a commit in fixes
+  session.ripple.dropped = lines whose sha is not hex or names no commit          # HEAD or a branch name is not a sha
+                                                                                 # a receipt from an earlier round is neither
 ```
 
 ## Dispatch input contract

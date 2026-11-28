@@ -30,9 +30,10 @@
  *   examined with a count (a digit), and is not wholly a <...> placeholder or the reference's own example; an n/a
  *   entry has a note. A finding's move is its leading M1..M7, else none. Teammates in moves_checked (a partial
  *   reply whose coverage Phase 4 already settled) skip the coverage and lineage checks.
- * Lineage (references/review-moves.md § Finding Keys): a finding's siblings, when present, is a list of path:line strings;
- *   when prior_ids is given (round 2+, the prior round's finding ids), its introduced_by is one of prior_ids or
- *   still-present | new | missed | pre-existing.
+ * Lineage (references/review-moves.md § Finding Keys): a finding's siblings, when present (null reads as missing),
+ *   is a list of path:line strings; when prior_ids is given (round 2+, the latest prior round's finding ids), its
+ *   introduced_by is one of prior_ids or still-present | new | missed | pre-existing; without prior_ids it is dropped.
+ *   A moves_checked teammate's bad lineage falls back at once, with a coverage_gaps entry.
  * dedup keeps the top-severity copy's move and introduced_by (on a tie, a prior id over still-present, new, missed,
  *   pre-existing) and unions siblings.
  *
@@ -53,6 +54,7 @@ const MOVES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'];
 const MOVES_EXAMPLE = '2 changed contracts → 9 consumers, 3 doc restatements; 1 fix → 4 sibling sites grepped';
 const moveOf = (v) => { const m = String(v || '').trim().toUpperCase().match(/^M[1-7](?![0-9])/); return m ? m[0] : null; };
 const LINEAGE = ['still-present', 'new', 'missed', 'pre-existing'];
+const PATH_LINE = /^[^\s:]+:\d+(-\d+)?$/;   // repo-relative path:line or path:start-end
 const oneLine = (v) => JSON.stringify(String(v ?? '')).slice(0, 80);   // PE text quoted on one line, never markdown
 
 // What is wrong with a PE's moves_coverage, as short phrases; [] when it is complete.
@@ -131,12 +133,13 @@ function validate(input) {
         severity: String(f.severity || '').toUpperCase().replace(/[^A-Z]/g, ''),
         category: String(f.category || '').trim().toLowerCase(),
         move: moveOf(f.move) || 'none',
+        ...(Array.isArray(input.prior_ids) ? {} : { introduced_by: undefined }),   // round 1 has no lineage to name
       };
     });
     const settled = (input.moves_checked || []).includes(name);
     const coverage = settled ? [] : coverageProblems(raw.moves_coverage);
     const priors = Array.isArray(input.prior_ids) ? input.prior_ids.map(String) : null;
-    const siblingsOk = (f) => f.siblings === undefined || (Array.isArray(f.siblings) && f.siblings.every((s) => typeof s === 'string' && s.trim()));
+    const siblingsOk = (f) => f.siblings == null || (Array.isArray(f.siblings) && f.siblings.every((s) => typeof s === 'string' && PATH_LINE.test(s.trim())));
     const lineageOk = (f) => siblingsOk(f)
       && (!priors || priors.includes(f.introduced_by) || LINEAGE.includes(f.introduced_by));
     const receipts = (raw.verification_receipts || []).map((r) => ({ ...r }));
@@ -146,9 +149,10 @@ function validate(input) {
       category: findings.filter((f) => !CATEGORIES.has(f.category)),
       claim: receipts.filter((r) => !CLAIMS.has(r.claim)),
       moves: coverage,
-      lineage: settled ? [] : findings.filter((f) => !lineageOk(f)),
+      lineage: findings.filter((f) => !lineageOk(f)),
     };
-    const pending = Object.keys(bad).filter((k) => bad[k].length && !(done[k] || []).includes(name));
+    // A settled partial reply (moves_checked) is never re-dispatched for lineage: it falls back at once.
+    const pending = Object.keys(bad).filter((k) => bad[k].length && !(done[k] || []).includes(name) && !(k === 'lineage' && settled));
     const out = { ...raw, expert: raw.pe, findings, verification_receipts: receipts };
     if (pending.length) {
       const noteFor = (k) => (k === 'moves' ? NOTES.moves(coverage.join('; ')) : NOTES[k](quoted(bad[k].map((x) => x.title))));

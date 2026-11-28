@@ -108,6 +108,7 @@ check_tree() {
   docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF 'FIX DIFF:' || echo "review: dispatch prompt does not carry FIX DIFF"
   docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF 'RIPPLE RECEIPTS:' || echo "review: dispatch prompt does not carry RIPPLE RECEIPTS"
   grep -qF 'prior_ids: session.prior_ids}' "$skill" || echo "review: validate does not get the prior round's ids"
+  grep -qF 'if v.gating: print review-moves.md § Remediation Pre-flight' "$skill" || echo "review: a round with gating findings does not print the remediation pre-flight"
   section "$proto" '^## Output Format' | grep -qF 'introduced_by:' || echo "protocol: Output Format missing introduced_by:"
   for want in '## Round 2+' '## Finding Keys' '## Remediation Pre-flight'; do
     grep -qxF -- "$want" "$root/skills/review/references/review-moves.md" 2>/dev/null || echo "moves: $want missing"
@@ -591,6 +592,9 @@ mutant fix-diff-not-dispatched \
 mutant prior-ids-not-validated \
   'sedall "s/, prior_ids: session.prior_ids}/}/"' \
   'review: validate does not get the prior round'"'"'s ids'
+mutant preflight-dropped \
+  'sedall "s/; if v.gating: print review-moves.md § Remediation Pre-flight[^#]*//"' \
+  'review: a round with gating findings does not print the remediation pre-flight'
 mutant finding-keys-dropped \
   'sedall "s/^## Finding Keys$/## Keys/"' \
   'moves: ## Finding Keys missing'
