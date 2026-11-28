@@ -61,10 +61,14 @@ These conventions are common in Go services of this shape. Confirm each against 
 - **Transaction exits.** `defer tx.Rollback(ctx)` belongs immediately after `Begin`; any early return or panic before that leaks the transaction and its connection. A read-then-write on the same row needs `FOR UPDATE` or an equivalent guard.
 - **Lambda container reuse.** Package-level state survives across invocations in a warm container, so a package-level map or cached client written per request is both a data race under concurrent goroutines and a cross-request (and potentially cross-tenant) leak.
 - **Context loss.** `context.Background()` inside a handler, or a goroutine started without the request context and a join (`errgroup`, `WaitGroup`), outlives the invocation and is frozen or killed with the container.
-- **JSON zero versus missing.** Value-typed fields cannot distinguish "not sent" from "sent as zero"; pointer fields distinguish them but need a nil check at every dereference.
-- **Error chains.** Wrapping with `%v` instead of `%w`, or matching on `err.Error()` text, breaks `errors.Is`/`errors.As` callers.
+- **JSON zero versus missing.** Value-typed fields cannot distinguish "not sent" from "sent as zero"; pointer fields distinguish them but need a nil check at every dereference. A nil slice or map marshals to `null`, not `[]` or `{}`, which breaks consumers that iterate the field.
+- **Error chains.** Wrapping with `%v` instead of `%w`, or matching on `err.Error()` text, breaks `errors.Is`/`errors.As` callers. A bare `defer f.Close()` on a writer discards the error that reports a failed flush.
+- **Panics.** `panic` in library code takes the caller's error path away; `recover` works only in the panicking goroutine, so a panic in a spawned goroutine kills the whole Lambda process.
 - **Dual writes.** A database commit followed by an EventBridge publish can partially fail; look for an outbox, retry, or explicit compensation.
+- **At-least-once delivery.** Async Lambda invocations, EventBridge targets, and SQS can deliver an event more than once; a handler with side effects needs an idempotency key or a conditional write.
+- **Query shape.** A `Query`/`QueryRow`/`Exec` inside a `for ... range` is an N+1; batch with `= ANY($1)` or a join. `SELECT *` scanned positionally breaks when a migration adds or reorders a column.
 - **Time arithmetic.** `Add(24*time.Hour)` is not `AddDate(0, 0, 1)` across DST; persisted times should be UTC or RFC3339 with offset.
+- **Test determinism.** Map iteration order is randomized, so output or assertions built from a `range` over a map flake; `t.Parallel()` subtests that share a fixture or database row race each other.
 
 ## Stack Lenses (Pass 4)
 

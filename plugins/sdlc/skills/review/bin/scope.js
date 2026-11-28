@@ -105,6 +105,18 @@ function angularProject(root) {
     }
   })();
 }
+// vite.config.* and *.webmanifest belong to pe-vue when the nearest package.json up the tree depends on vue.
+const isViteOrManifest = anyOf(['vite.config.*', '*.webmanifest']);
+function vueProject(root) {
+  return (f) => isViteOrManifest(f) && (() => {
+    for (let dir = path.posix.dirname(f); ; dir = path.posix.dirname(dir)) {
+      let pkg = null;
+      try { pkg = JSON.parse(fs.readFileSync(path.join(root, dir, 'package.json'), 'utf8')); } catch { /* absent or unreadable */ }
+      if (pkg) return Boolean({ ...pkg.dependencies, ...pkg.devDependencies }.vue);
+      if (dir === '.' || dir === '/') return false;
+    }
+  })();
+}
 function routingTable(root, mode) {
   return [
     [anyOf(['*.cs', '*.csproj', '*.sln']), 'pe-csharp'],
@@ -114,6 +126,7 @@ function routingTable(root, mode) {
     [anyOf(['*.go', 'go.mod', 'go.sum']), 'pe-go'],
     [anyOf(['*.rs', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain*', '.cargo/config.toml', '.cargo/config']), 'pe-rust'],
     [anyOf(['*.vue', 'nuxt.config.*', 'tailwind.config.*']), 'pe-vue'],
+    [vueProject(root), 'pe-vue'],
     [anyOf(['cdk.json', '*.tf', 'Dockerfile*', 'template.yml', '*.template.yaml']), 'pe-aws-infra'],
     [isDevScript, 'pe-devtools'],
     [anyOf(['.githooks/**', '.husky/**', 'lefthook.yml', 'lefthook.yaml', '.lefthook.yml', '.lefthook.yaml', 'lefthook-local.yml', 'lefthook-local.yaml']), 'pe-devtools'],

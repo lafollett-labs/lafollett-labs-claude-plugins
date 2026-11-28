@@ -48,7 +48,7 @@ For every schema or contract the diff defines or changes, grep its producers and
 
 ## Pass 2: Quality (lint-shaped checks + authoring standard)
 
-**Pseudocode integrity.** Every loop has a collection or condition defined above it and a body that reaches termination on every branch. Every variable a branch tests is set before that branch on all paths. Schema fields used downstream are defined, with matching spelling. Section references (`§N`, "see Step 7") resolve to a real heading. Commands an agent will execute are verbatim and syntactically valid, and their placeholders are bound by the surrounding pseudocode.
+**Pseudocode integrity.** Every loop has a collection or condition defined above it and a body that reaches termination on every branch. Every variable a branch tests is set before that branch on all paths. Schema fields used downstream are defined, with matching spelling. Section references (`§N`, "see Step 7") resolve to a real heading. Commands an agent will execute are verbatim and syntactically valid under the tool's real dialect (`\d` is not POSIX ERE, so `grep -E` patterns use `[0-9]`; git pathspecs have no `{a,b}` brace expansion), and their placeholders are bound by the surrounding pseudocode.
 
 ```bash
 grep -nE "§[0-9]+|\(see [A-Z][a-z]" <file>      # section refs to resolve
@@ -103,6 +103,7 @@ These lenses carry no default severity; rate what they surface from Severity Def
 - **pseudocode_termination** — For each loop, is the loop variable updated on every path, and is there a cap, timeout, or exit when a called tool can hang?
 - **frontmatter_body_drift** — Phrasing like "use X", "invoke X", or an implied tool need, where X is not in the frontmatter `tools` list.
 - **audit_trail_break** — An instructed action ("log to…", "notify…", "record…") with no concrete artifact or no one who reads it.
+- **silent_branch** — A pseudocode `else` or decision path that produces no observable outcome where it should escalate, a required tool listed with an alternative and no consequence, or a command (`gh`, a script, a file read) that can fail or be missing with no stated action, leaving the model to improvise.
 - **over_specification** — Judgment the diff turns into a checklist: imperative severity triggers, costume pseudocode, stacked emphasis, restated general knowledge. Each one makes current models over-apply the rule on every run; the fix is a prose heuristic.
 - **instruction_leak_across_personas** — A new rule scoped to the wrong roles, binding agents it should not, or duplicated where a shared rules file would serve.
 

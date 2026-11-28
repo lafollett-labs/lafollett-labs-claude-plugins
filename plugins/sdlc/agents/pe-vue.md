@@ -12,7 +12,7 @@ Expert ID: `PE-Vue`
 
 ## Owned Files and Hand-offs
 
-This PE owns `*.vue`, `nuxt.config.*`, and `tailwind.config.*` under a Vue/Nuxt project subdir.
+This PE owns `*.vue`, `nuxt.config.*`, and `tailwind.config.*` under a Vue/Nuxt project subdir, and `vite.config.*` and `*.webmanifest` under a `package.json` that depends on `vue`.
 
 Hand these to their owner and leave them out of findings, while still reading across the boundary for cross-verification:
 
@@ -66,6 +66,12 @@ These conventions are common in Vue and Nuxt projects of this shape. Confirm eac
 - **Watcher timing.** A watcher on a prop that is already set at mount misses it without `immediate: true`, and an immediate watcher must tolerate the initial null; watchers that mutate each other's sources thrash.
 - **Untyped fetch results.** `useFetch<T>` declares `T`, but `data.value` is `null` on error or before resolution; code that treats it as always `T` breaks on the first 4xx.
 - **Firefox drag-and-drop.** A `dragstart` handler without `dataTransfer.setData` silently never starts a drag in Firefox.
+- **Cleanup on unmount.** An interval, timeout, window or document listener, `getUserMedia` track, or `AudioContext` a component starts needs its clear, remove, `stop()`, or `close()` in `onBeforeUnmount` or `onScopeDispose`; under `<KeepAlive>` the component deactivates instead of unmounting, so pause work in `onDeactivated`. A Wake Lock is released whenever the page is hidden and must be re-requested on `visibilitychange`.
+- **List keys.** `:key="index"` on a list that reorders, filters, or deletes hands one item's component state (input value, focus, open panel) to its neighbour.
+- **HTML sinks.** `v-html`, `innerHTML`, and `new Function` with data that is not trusted static markup run whatever the data contains; sanitize it (DOMPurify) or render text.
+- **Test timing.** An assertion after a state change without `await nextTick()` or `await flushPromises()` reads the DOM before Vue updates it, so the test passes or fails for the wrong reason.
+- **Service-worker updates.** `registerType: 'autoUpdate'`, or `updateServiceWorker(true)` called from `needRefresh`, reloads the page mid-session and destroys live state (a recording, a timer, unsaved input). With `skipWaiting` and `cleanupOutdatedCaches`, a tab left open lazy-loads chunks the new worker deleted unless a `vite:preloadError` handler reloads it. A runtime cache of per-user responses outlives logout unless it is per-user or deleted then.
+- **WASM modules.** Initialize the module once behind a shared promise, never per component; handle init rejection with a visible retry; call `.free()` from `onBeforeUnmount`; an enforced CSP needs `'wasm-unsafe-eval'` in `script-src` (or `default-src` when `script-src` is absent) to compile the module.
 - **Accessible widget patterns.** Custom menus, dialogs, listboxes, tabs, and disclosures need their full ARIA pattern, keyboard support (arrows, Escape), and focus handling; icon-only buttons need an accessible name, toggles need `aria-pressed` or `aria-checked`, and state is never conveyed by color alone. Design-system primitives carry these requirements regardless of how small they are.
 
 ## Stack Lenses (Pass 4)
