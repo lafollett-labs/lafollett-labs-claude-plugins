@@ -265,7 +265,7 @@ check "matched_pes is the stack and domain union on an audio change" "$out" "$UN
 # --- Stack Map -----------------------------------------------------------------
 # on_main <repo> — commit and make that commit the base, so the Stack Map is read from main.
 on_main() { commit "$1"; git -C "$1" branch -f main HEAD; }
-HDR='| Path | Stack | Built-in PE | Test Command |
+HDR='| Path | Stack | PE | Test Command |
 | - | - | - | - |'
 R="$TMP/map"; new_repo "$R"
 cat > "$R/AGENTS.md" <<EOF
@@ -304,13 +304,45 @@ check "a domain-PE row adds files to domain_pes, keeps the default globs, and ne
   '["engine/synth/osc.rs","engine/fx/delay.rs","web/src/audio/Tuner.vue"].every(f => o.domain_pes["pe-audio"].files.includes(f)) && o.routing["engine/synth/osc.rs"] === "pe-rust" && !Object.values(o.routing).includes("pe-audio")'
 check "an unknown PE row is ignored with a note" "$out" \
   'o.routing["ops/run.py"] === "pe-general-purpose" && o.stack_map_notes.some(n => n.includes("row 7") && n.includes("unknown PE \"pe-python\"")) && o.stack_map_notes.some(n => n.includes("row 10") && n.includes("no paths"))'
-check "stack_commands lists each PE's commands from the rows that routed a changed file" "$out" \
-  'Object.keys(o.stack_commands).sort().join() === "pe-general-purpose,pe-go,pe-rust,pe-vue" && o.stack_commands["pe-go"].join("|") === "go vet ./...|go test ./lib/..." && o.stack_commands["pe-general-purpose"].join() === "make gen-check" && o.stack_commands["pe-rust"].join() === "cargo test -p special" && o.stack_commands["pe-vue"].join() === "cd frontend && npm test"'
+check "stack_map_routed lists exactly the files a stack row routed" "$out" \
+  '[...o.stack_map_routed].sort().join() === "docs/adr/0001.md,frontend/server.ts,gen/api/types.go,lib/core.go,lib/special/bind.go,lib/special/old/x.go"'
+check "a PE with any file outside a row that names commands gets no stack_commands" "$out" \
+  'Object.keys(o.stack_commands).length === 0'
+check "a code-reviewer: PE prefix adds the code-reviewer map warning" "$out" \
+  'o.stack_map_notes.some(n => n.includes("looks written for code-reviewer") && n.includes("/sdlc:init-project"))'
 check "stack_map names the file and the revision it was read from" "$out" \
   'o.stack_map.file === "AGENTS.md" && o.stack_map.from === "main" && o.stack_map.rows === 8'
 git -C "$R" branch -f main HEAD; put "$R" vendor/dep/b.go 1; commit "$R"
 classify "$R" >/dev/null; code=$?
 if [ "$code" -eq 3 ]; then pass "a diff of only (skip) files exits 3"; else fail "skip-only diff exit $code"; fi
+
+R="$TMP/map-cmds"; new_repo "$R"
+cat > "$R/AGENTS.md" <<EOF
+## Stack Map
+
+$HDR
+| svc/** | Go | pe-go | \`go test ./svc/...\` |
+| lib/** | Go | pe-go | \`go vet ./lib/...\`, \`n/a\`, \`# TODO\` |
+| web/** | Vue | pe-vue | \`npm test\` |
+| tools/** | Rust | pe-rust | n/a |
+| docs/** | Docs | pe-general-purpose | \`-\` |
+EOF
+on_main "$R"
+put "$R" svc/a.go 1; put "$R" lib/b.go 1; put "$R" web/A.vue 1; put "$R" other/C.vue 1; put "$R" tools/x.rs 1; put "$R" docs/a.md 1
+commit "$R"
+out="$(classify "$R")"
+check "stack_commands holds a PE's commands when every file it reviews came from a row with commands" "$out" \
+  'o.stack_commands["pe-go"].join("|") === "go test ./svc/...|go vet ./lib/..."'
+check "a backticked n/a, - or # TODO is no command" "$out" \
+  '!Object.values(o.stack_commands).flat().some(c => /^(n\/a|-|#)/.test(c)) && !("pe-general-purpose" in o.stack_commands)'
+check "a PE with a file from the built-in globs, or only rows without commands, gets no stack_commands" "$out" \
+  'o.routing["other/C.vue"] === "pe-vue" && !("pe-vue" in o.stack_commands) && !("pe-rust" in o.stack_commands) && Object.keys(o.stack_commands).join() === "pe-go"'
+check "an sdlc-authored map adds no code-reviewer warning" "$out" '!o.stack_map_notes.some(n => n.includes("code-reviewer"))'
+R="$TMP/map-legacy"; new_repo "$R"
+printf '## Stack Map\n\n| Path | Stack | Built-in PE | Test Command |\n| - | - | - | - |\n| src/** | Go | pe-go | n/a |\n' > "$R/AGENTS.md"; on_main "$R"
+put "$R" src/a.py 1; commit "$R"
+check "a Built-in PE header adds the code-reviewer map warning" "$(classify "$R")" \
+  'o.routing["src/a.py"] === "pe-go" && o.stack_map_notes.some(n => n.includes("looks written for code-reviewer"))'
 
 # The map is read from the range's base: a change cannot skip or re-route its own files.
 R="$TMP/map-base"; new_repo "$R"
@@ -324,6 +356,29 @@ check "a Stack Map added by the change applies once merged, with a note" "$(clas
   'o.stack_map === null && o.routing["src/a.py"] === "pe-general-purpose" && o.stack_map_notes.some(n => n.includes("apply once merged"))'
 check "files mode reads the working-tree Stack Map" "$(node "$CLI" classify --root "$R" --mode files --targets src,AGENTS.md)" \
   'o.excluded.join() === "src/a.py" && o.stack_map.from === "worktree"'
+R2="$TMP/map-typo"; new_repo "$R2"
+printf '# Projet\n\n## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$HDR" > "$R2/CLAUDE.md"; on_main "$R2"
+printf '# Project\n\n## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$HDR" > "$R2/CLAUDE.md"; put "$R2" src/a.py 1; commit "$R2"
+check "a CLAUDE.md edit that leaves the map unchanged prints no merge note" "$(classify "$R2")" \
+  'o.routing["src/a.py"] === "pe-go" && o.stack_map_notes.length === 0'
+
+R="$TMP/map-staged"; new_repo "$R"
+printf '## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$HDR" > "$R/AGENTS.md"; put "$R" src/a.py 1; git -C "$R" add -A
+printf '## Stack Map\n\n%s\n| src/** | Rust | pe-rust | n/a |\n' "$HDR" > "$R/AGENTS.md"
+check "staged mode reads the Stack Map from the index" "$(node "$CLI" classify --root "$R" --mode staged)" \
+  'o.routing["src/a.py"] === "pe-go" && o.stack_map.from === "index"'
+check "files mode reads the working tree, not the index" "$(node "$CLI" classify --root "$R" --mode files --targets src)" \
+  'o.routing["src/a.py"] === "pe-rust" && o.stack_map.from === "worktree"'
+
+R="$TMP/map-fence"; new_repo "$R"
+{
+  printf '````md\n```\n## Stack Map\n\n%s\n| src/** | Rust | pe-rust | n/a |\n````\n\n' "$HDR"
+  printf '```md\n~~~\n## Stack Map\n\n%s\n| src/** | Rust | pe-rust | n/a |\n```\n\n' "$HDR"
+  printf '```md\n```bash\n## Stack Map\n\n%s\n| src/** | Rust | pe-rust | n/a |\n```\n\n' "$HDR"
+  printf '## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$HDR"
+} > "$R/AGENTS.md"; on_main "$R"
+put "$R" src/a.py 1; commit "$R"
+check "a fence closes only on a bare run of its own character at least as long as the opening" "$(classify "$R")" 'o.routing["src/a.py"] === "pe-go"'
 
 R="$TMP/map-imports"; new_repo "$R"
 printf '@AGENTS.md\n' > "$R/CLAUDE.md"; printf '## Stack Map\n\n%s\n| src/** | Go | pe-go | n/a |\n' "$HDR" > "$R/AGENTS.md"; on_main "$R"

@@ -17,10 +17,11 @@
  *   domain_pes is { pe: { kind: "domain", files } } for each domain PE whose globs match a changed file;
  *   those files keep their routing entry, and matched_pes holds both kinds.
  *   A `## Stack Map` table in CLAUDE.md, else AGENTS.md (read from the range's base for branch / pr, so a
- *   change never re-routes or skips its own files; else the working tree) routes before the built-in
- *   globs: the first stack or (skip) row matching a file wins, in table order; (skip) excludes it; a
- *   domain-PE row adds files to domain_pes. stack_map is { file, from, rows } or null; stack_commands is
- *   { pe: [cmd] } from the rows that routed a changed file; stack_map_notes lists rows it ignored.
+ *   change never re-routes or skips its own files; the index for staged; else the working tree) routes
+ *   before the built-in globs: the first stack or (skip) row matching a file wins, in table order; (skip)
+ *   excludes it; a domain-PE row adds files to domain_pes. stack_map is { file, from, rows } or null;
+ *   stack_map_routed lists the files a row routed; stack_commands is { pe: [cmd] } for each PE whose files
+ *   all came from rows with commands; stack_map_notes lists rows it ignored and other warnings.
  *   diff_cmd is the command PEs run for their diff (null for files / adhoc); ledger says whether the
  *   round belongs in the branch findings ledger (branch, pr) or not (staged, files, adhoc: the index or a subset is not the branch HEAD).
  * pe-tiers prints { pe: tier }: a PE whose files are all non-code artifacts, none security- or
@@ -182,23 +183,28 @@ function mapMatcher(patterns) {
 const cells = (line) => line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, '|'));
 // Split on commas outside braces, so "**/{audio,dsp}/**" stays one glob.
 const pathList = (cell) => (cell.replace(/`/g, '').match(/(?:\{[^}]*\}|[^,])+/g) || []).map((p) => p.trim()).filter(Boolean);
+const NO_COMMAND = /^(|-|—|n\/a.*|none.*|#.*|todo.*)$/i;
 function commandList(cell) {
   const spans = [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1].trim());
-  if (spans.length) return spans;
-  return /^(|-|—|n\/a.*|none.*|#.*|todo.*)$/i.test(cell) ? [] : [cell];
+  if (spans.length) return spans.filter((s) => !NO_COMMAND.test(s));
+  return NO_COMMAND.test(cell) ? [] : [cell];
 }
 function peName(cell) {
   const name = cell.replace(/`/g, '').trim().toLowerCase().replace(/^(sdlc|code-reviewer):/, '');
   return name === 'generic' ? 'pe-general-purpose' : name;
 }
 // The first "## Stack Map" heading outside a code fence, then its table: header, separator, data rows.
+// A fence closes only on a bare run of its own character at least as long as the opening one.
 function parseStackMap(text) {
   const lines = text.split(/\r?\n/);
-  let fence = false;
+  let fence = null;
   let at = -1;
   for (let i = 0; i < lines.length && at < 0; i++) {
-    if (/^\s*(```|~~~)/.test(lines[i])) fence = !fence;
-    else if (!fence && /^##\s+Stack Map\s*$/i.test(lines[i])) at = i + 1;
+    const f = lines[i].match(/^\s*(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = null;
+    } else if (f) fence = f[1];
+    else if (/^##\s+Stack Map\s*$/i.test(lines[i])) at = i + 1;
   }
   if (at < 0) return null;
   while (at < lines.length && !lines[at].trim()) at++;
@@ -208,14 +214,18 @@ function parseStackMap(text) {
   const col = (re) => table[0].findIndex((h) => re.test(h));
   const [pathCol, peCol, cmdCol] = [col(/^paths?$/i), col(/\bpe\b/i), col(/test/i)];
   if (pathCol < 0 || peCol < 0) return { malformed: 'no Path or PE column' };
-  return { rows: table.slice(2).map((r, i) => ({ n: i + 1, paths: pathList(r[pathCol] || ''), pe: peName(r[peCol] || ''), cmds: cmdCol < 0 ? [] : commandList(r[cmdCol] || '') })) };
+  const data = table.slice(2);
+  return {
+    codeReviewer: /built-in pe/i.test(table[0][peCol]) || data.some((r) => /code-reviewer:/i.test(r[peCol] || '')),
+    rows: data.map((r, i) => ({ n: i + 1, paths: pathList(r[pathCol] || ''), pe: peName(r[peCol] || ''), cmds: cmdCol < 0 ? [] : commandList(r[cmdCol] || '') })),
+  };
 }
 // CLAUDE.md before AGENTS.md; a CLAUDE.md that only imports @AGENTS.md has no table, so AGENTS.md's is read.
-function loadStackMap(root, opts) {
-  const base = ['branch', 'pr'].includes(opts.mode) ? (opts.range || '').split(/\.\.\.?/)[0] : '';
+// rev "<ref>:" reads that commit, ":" the index, null the working tree.
+function loadStackMap(root, rev, from) {
   const read = (f) => {
     try {
-      return base ? execFileSync('git', ['-C', root, 'show', `${base}:${f}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      return rev ? execFileSync('git', ['-C', root, 'show', `${rev}${f}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
         : fs.readFileSync(path.join(root, f), 'utf8');
     } catch { return null; }   // absent at that revision
   };
@@ -225,6 +235,7 @@ function loadStackMap(root, opts) {
     const parsed = text === null ? null : parseStackMap(text);
     if (!parsed) continue;
     if (parsed.malformed) { notes.push(`${file}: Stack Map ignored (${parsed.malformed})`); continue; }
+    if (parsed.codeReviewer) notes.push(`${file}: Stack Map looks written for code-reviewer — sdlc routes each file by the first matching row only; run /sdlc:init-project to rewrite it`);
     const stack = [];
     const domain = [];
     for (const r of parsed.rows) {
@@ -233,10 +244,12 @@ function loadStackMap(root, opts) {
       else if (DOMAIN_PES.some(([pe]) => pe === r.pe)) domain.push({ ...r, match: mapMatcher(r.paths) });
       else notes.push(`${file}: Stack Map row ${r.n} ignored (unknown PE "${r.pe}")`);
     }
-    return { file, from: base || 'worktree', stack, domain, notes };
+    return { file, from, stack, domain, notes };
   }
-  return { file: null, from: base || 'worktree', stack: [], domain: [], notes };
+  return { file: null, from, stack: [], domain: [], notes };
 }
+// What a map routes, without line numbers: two maps that differ only outside the table are the same.
+const mapKey = (m) => JSON.stringify([m.file, ...[...m.stack, ...m.domain].map((r) => [r.paths, r.pe, r.cmds])]);
 
 class CliError extends Error {}
 
@@ -337,7 +350,10 @@ function classify(opts) {
       stack_map: null, stack_commands: {}, stack_map_notes: [],
     };
   }
-  const map = loadStackMap(opts.root, opts);
+  // branch / pr: the range's base, so a change never re-routes or skips its own files; staged: the index; files: the working tree.
+  const base = (opts.range || '').split(/\.\.\.?/)[0];
+  const map = ['branch', 'pr'].includes(opts.mode) ? loadStackMap(opts.root, `${base}:`, base)
+    : opts.mode === 'staged' ? loadStackMap(opts.root, ':', 'index') : loadStackMap(opts.root, null, 'worktree');
   const mapRow = (f) => map.stack.find((r) => r.match(f));
   const excluded = all.filter((r) => REVIEW_EXCLUDE.some((re) => re.test(r.file)) || mapRow(r.file)?.pe === '(skip)').map((r) => r.file);
   const kept = all.filter((r) => !excluded.includes(r.file));
@@ -374,28 +390,34 @@ function classify(opts) {
 
   const table = routingTable(opts.root, opts.mode);
   const routing = {};
-  const stackCommands = {};
+  const mapRouted = [];
   for (const f of changed) {
     const row = mapRow(f);
     routing[f] = row ? row.pe : (table.find(([m]) => m(f)) || [null, 'pe-general-purpose'])[1];
-    if (row) stackCommands[row.pe] = [...new Set([...(stackCommands[row.pe] || []), ...row.cmds])];
+    if (row) mapRouted.push(f);
   }
-  for (const pe of Object.keys(stackCommands)) if (!stackCommands[pe].length) delete stackCommands[pe];
+  // A PE gets the map's commands only when every file it reviews came from a row that names commands.
+  const stackCommands = {};
+  for (const pe of new Set(Object.values(routing))) {
+    const rows = [...new Set(changed.filter((f) => routing[f] === pe).map(mapRow))];
+    if (rows.every((r) => r && r.cmds.length)) stackCommands[pe] = [...new Set(rows.sort((a, b) => a.n - b.n).flatMap((r) => r.cmds))];
+  }
   const domainPes = {};
   for (const [pe, m] of DOMAIN_PES) {
     const rows = map.domain.filter((r) => r.pe === pe);
     const files = changed.filter((f) => m(f) || rows.some((r) => r.match(f)));
     if (files.length) domainPes[pe] = { kind: 'domain', files };
   }
-  if (map.from !== 'worktree' && all.some((r) => ['CLAUDE.md', 'AGENTS.md'].includes(r.file))) {
-    map.notes.push(`Stack Map read from ${map.from}; this change's edits to CLAUDE.md or AGENTS.md apply once merged`);
+  if (['branch', 'pr'].includes(opts.mode) && all.some((r) => ['CLAUDE.md', 'AGENTS.md'].includes(r.file))
+    && mapKey(map) !== mapKey(loadStackMap(opts.root, 'HEAD:', 'HEAD'))) {
+    map.notes.push(`Stack Map read from ${map.from}; this change's edits to it apply once merged`);
   }
   return {
     changed_files: changed, excluded, files_changed: changed.length, lines_added: added, lines_removed: removed,
     signals, security_files: securityFiles, tier, tier_source: 'classifier', tier_signals: evidence,
     routing, domain_pes: domainPes, matched_pes: [...new Set([...Object.values(routing), ...Object.keys(domainPes)])], diff_cmd: diffCmd, ledger,
     stack_map: map.file && { file: map.file, from: map.from, rows: map.stack.length + map.domain.length },
-    stack_commands: stackCommands, stack_map_notes: map.notes,
+    stack_commands: stackCommands, stack_map_routed: mapRouted, stack_map_notes: map.notes,
   };
 }
 

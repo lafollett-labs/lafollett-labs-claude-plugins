@@ -33,8 +33,12 @@ Read framework markers inside each stack root: `[workspace]` in a `Cargo.toml` (
 
 ```
 signals  = grep -rlE 'AudioContext|AudioWorkletProcessor|registerProcessor|getUserMedia|createMediaStreamSource|createOscillator|cpal::|rustfft|realfft|hound::' \
-             --include='*.rs' --include='*.ts' --include='*.js' --include='*.mjs' --include='*.vue' . (minus skip dirs)
-covered  = signals under a directory whose name holds the word audio, dsp or pitch, or whose basename contains "worklet"
+             --include='*.'{rs,vue,js,ts,cjs,mjs,cts,mts,jsx,tsx} . (minus skip dirs)
+words(d)   = d split on non-alphanumerics and at each lowercase-or-digit → uppercase boundary, lowercased
+covered(f) = (f ends in .rs .vue .js .ts .cjs .mjs .cts .mts .jsx or .tsx
+              and some directory segment d of f has audio, dsp or pitch in words(d))
+             or (f ends in .js .ts .cjs .mjs .cts .mts .jsx or .tsx and its basename contains "worklet", any case)
+covered  = signals where covered(f)
 fixtures = directories holding *.wav or *.flac whose path contains "fixture" or "testdata"
 extra    = signals − covered
 
@@ -74,9 +78,20 @@ Assign each top-level directory, and each significant subdirectory, to a stack. 
 | GitHub Actions | `.github/workflows/` | `actionlint` |
 | Python | `pyproject.toml`, `requirements*.txt` | `pytest` |
 | Java | `pom.xml` / `build.gradle` | `mvn test` / `./gradlew test` |
-| Governance, docs, audio (domain) | — | `n/a` |
+| Governance, docs, audio (domain) | — | n/a |
 
-When `package.json` or a `Makefile` exists in the stack root, use its real `test`, `typecheck`, `lint` and `build` script or target names instead of the defaults. A stack root below the repo root prefixes its command with `cd <dir> &&`. A stack with no test found gets `# TODO: no test command detected` in the command column and a line in the summary.
+```
+for each stack row:
+  if package.json or a Makefile exists in the stack root:
+    command = the Phase 3 default rebuilt from its real test, typecheck, lint and build script or target names
+  else:
+    command = the Phase 3 default
+  if the stack root is below the repo root:
+    command = "cd <dir> && " + command
+  if no test command is found:
+    command = # TODO: no test command detected        # written without backticks
+    summary += "No test command detected for <stack>"
+```
 
 ## Phase 4: Resolve the instruction file
 
@@ -104,7 +119,7 @@ else:
 | docs/code-reviews/**, vendor/**, **/*.generated.ts | Review docs, vendored and generated code | (skip) | n/a |
 | **/SKILL.md, **/agents/*.md, **/CLAUDE.md, **/AGENTS.md | Agent governance markdown | `pe-governance` | n/a |
 | svc/**/*.go, pkg/**/*.go, go.mod, go.sum | Go | `pe-go` | `go vet ./... && go test ./... -count=1 -race` |
-| engine/** | Rust (Cargo workspace, wasm32) | `pe-rust` | `cd engine && cargo test --workspace && cargo build -p engine-wasm --target wasm32-unknown-unknown --release` |
+| engine/** | Rust (Cargo workspace, wasm32) | `pe-rust` | `cd engine && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && cargo build -p engine-wasm --target wasm32-unknown-unknown --release` |
 | web/server/** | Node API | `pe-general-purpose` | `cd web && npm run test:server` |
 | web/**/*.vue, web/**/*.ts | Vue 3 + Vite | `pe-vue` | `cd web && npm run typecheck && npm test && npm run build` |
 | engine/crates/synth/**, fixtures/audio/** | Real-time audio / DSP (domain) | `pe-audio` | n/a (stack PE runs suites) |
@@ -121,8 +136,9 @@ How `scope.js` reads the table:
 | Order | the first stack or `(skip)` row matching a file wins, top to bottom, before the built-in globs |
 | `(skip)` | the file is excluded from review |
 | `pe-audio` row | adds files to the domain PE beside their stack PE; never routes |
-| Test Command | each backtick span is one command; `n/a`, `-`, `# TODO` or empty is none |
-| Source | branch and PR reviews read the map from the target branch, so a new or edited map applies once merged |
+| Test Command | each backtick span is one command; n/a, -, # TODO… or an empty cell is none (write these without backticks) |
+| Source | branch and PR reviews read the map from the target branch, so a new or edited map applies once merged; staged reviews read the index; file and folder reviews read the working tree |
+| code-reviewer map | a `Built-in PE` header or a `code-reviewer:` prefix adds a warning: sdlc uses only the first matching row, so rerun this skill to rewrite the map |
 
 Order rows: `(skip)` first, then `pe-governance` and `pe-devtools`, then narrower paths before broader ones. Keep every row's paths scoped so no row claims a file another row's stack owns.
 
@@ -141,7 +157,10 @@ for each row whose PE is pe-vue:
     summary += "WARNING: <row paths> would route <n> server-side files (e.g. <file>) to pe-vue — added <dirs> → pe-general-purpose"
 ```
 
-Markdown follows its audience: model-read files (skills, agents, CLAUDE.md, AGENTS.md, rules) → `pe-governance`; human docs (ADRs, runbooks, READMEs) → `pe-general-purpose` or `(skip)`.
+| Markdown audience | Examples | PE |
+| - | - | - |
+| Model | skills, agents, CLAUDE.md, AGENTS.md, rules | `pe-governance` |
+| Human | ADRs, runbooks, READMEs | `pe-general-purpose` or (skip) |
 
 ## Phase 6: Confirm and write
 
@@ -153,14 +172,9 @@ if existing:
   show the diff of existing → proposed (added, changed, removed rows)
 else:
   show proposed
-ask: "Write this Stack Map to {target}? (yes / edit / no)"
-match answer:
-  yes  → replace the existing table in place, or append `## Stack Map` + table to target (create it if absent)
-  edit → apply the engineer's changes, show the table again, ask again
-  no   → write nothing; print the table for manual use
 ```
 
-Never write before the engineer answers yes, and never remove an existing row the engineer did not approve removing.
+Ask "Write this Stack Map to {target}? (yes / edit / no)". On yes, replace the existing table in place, or append `## Stack Map` and the table to target, creating it if absent. On edit, apply the engineer's changes, show the table again, and ask again. On no, write nothing and print the table for manual use. Never write before the engineer answers yes, and never remove an existing row the engineer did not approve removing.
 
 ## Phase 7: Summary
 

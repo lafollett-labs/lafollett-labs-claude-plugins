@@ -268,7 +268,7 @@ and your agent's stack lenses (they augment, never replace them):
 {optional} PASTED CODE (Ad-hoc only — review this in full; there is no file or diff):
   {session.adhoc_code}
 {optional} PRIOR LEDGER:   {session.ledger_path if session.ledger_path and it exists}   # Gate 1 only; prior findings' raw title + category per round
-{optional} STACK COMMANDS: {stack_commands[pe], one per line}   # when the repo's Stack Map names commands for pe (Phase 1 binds stack_commands)
+{optional} STACK COMMANDS: {stack_commands[pe], one per line}   # when stack_commands[pe] and every file session.routing sends to pe is in stack_map_routed with routing_baseline[file] == pe; else omitted, so the PE runs its own Commands
 TEST BUDGET:     {test_budget(pe)}   # § Test budget + dispatch cap; PE PROTOCOL Inputs say what each value runs
 {optional} AUTHOR RECEIPTS: {receipts_for(pe), one per line}   # when test_budget(pe) == "targeted" and receipts_for(pe)
 {optional} BUILD PLAN:     one line per p in build_plans(pe): "- {p.dir} ({p.kind}): {p.status}{" · checks: skip" if p.checks == "skip" else ""} — {p.command or p.reason} · receipt: {p.receipt}"
