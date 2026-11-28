@@ -58,7 +58,7 @@
  *     findings: [{ severity, in_scope, title, location, locations?, domains, category,
  *                  description, recommendation }],
  *     dismissed?: [{ title, rationale, original_severity, outcome }],
- *     receipts?: [{ claim, title, location, attestation, missing_source? }], category_fallbacks?: [] }
+ *     receipts?: [{ claim, title, location, attestation, missing_source? }], category_fallbacks?: [], coverage_gaps?: [] }
  *
  * Exit codes: 0 success; 2 any error — stdout carries { error }.
  */
@@ -290,6 +290,7 @@ function bodySections(r, ids, level, initial) {
         x.missing_source ? ` (missing source: ${x.missing_source})` : '')),
       ...(r.category_fallbacks || []).map((c) => `- ${c}`),
     ]],
+    ['Review Moves Coverage Gaps', (r.coverage_gaps || []).map((c) => `- ${c}`)],
   ];
   for (const [title, lines] of optional) if (lines.length) sections.push(`${h} ${title}\n\n${lines.join('\n')}`);
   return { sections, sep: initial ? '\n\n---\n\n' : '\n\n' };

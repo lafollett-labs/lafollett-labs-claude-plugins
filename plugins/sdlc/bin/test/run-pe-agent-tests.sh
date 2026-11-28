@@ -95,6 +95,18 @@ check_tree() {
     || echo "review: dispatch prompt does not inline the PE protocol"
   grep -qF 'if PE_PROTOCOL is empty or lacks "## Output Format":' "$skill" \
     || echo "review: dispatch does not stop on an empty or unreadable PE protocol"
+  # the review moves reach every PE the same way, and the protocol asks for their coverage
+  # shellcheck disable=SC2016 # the literal ${CLAUDE_PLUGIN_ROOT} is the text under test
+  grep -qF 'REVIEW_MOVES       = read ${CLAUDE_PLUGIN_ROOT}/skills/review/references/review-moves.md' "$skill" \
+    || echo "review: SKILL.md does not read the review moves"
+  docs_section '^#+ Dispatch input contract' "${docs[@]}" | grep -qF '{REVIEW_MOVES}' \
+    || echo "review: dispatch prompt does not inline the review moves"
+  grep -qF 'if REVIEW_MOVES is empty or lacks "moves_coverage":' "$skill" \
+    || echo "review: dispatch does not stop on an empty or unreadable review moves file"
+  section "$proto" '^## Output Format' | grep -qF 'moves_coverage:' || echo "protocol: Output Format missing moves_coverage:"
+  for want in 'M1 Ripple' 'M2 Lifecycle' 'M3 Inputs' 'M4 Attack the guard' 'M5 Failure path' 'M6 Falsify the test' 'M7 Fact check'; do
+    grep -qF -- "| $want |" "$root/skills/review/references/review-moves.md" 2>/dev/null || echo "moves: $want missing from the move table"
+  done
 
   # AC1 — no valve relies on a severity downgrade (any casing / stem) or a silent drop.
   for f in "$proto" "$root"/agents/pe-*.md; do
@@ -551,6 +563,18 @@ mutant bar-only-outside-pass-5 \
 mutant protocol-not-read \
   'grepvall "PE_PROTOCOL        = read"' \
   'review: SKILL.md does not read the PE protocol'
+mutant moves-not-read \
+  'grepvall "REVIEW_MOVES       = read"' \
+  'review: SKILL.md does not read the review moves'
+mutant moves-not-dispatched \
+  'sedall "s/{REVIEW_MOVES}//"' \
+  'review: dispatch prompt does not inline the review moves'
+mutant moves-coverage-not-asked \
+  'grep -vF "moves_coverage:" skills/review/references/pe-protocol.md > t && mv t skills/review/references/pe-protocol.md' \
+  'protocol: Output Format missing moves_coverage:'
+mutant move-dropped \
+  'grep -vF "| M6 Falsify the test |" skills/review/references/review-moves.md > t && mv t skills/review/references/review-moves.md' \
+  'moves: M6 Falsify the test missing from the move table'
 mutant protocol-not-dispatched \
   'sedall "s/{PE_PROTOCOL}//"' \
   'review: dispatch prompt does not inline the PE protocol'

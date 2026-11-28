@@ -1,6 +1,6 @@
 # Dispatch and Collect
 
-Loaded by SKILL.md at Phase 3, after it has read the dispatch playbook and the PE protocol and bound `LENS_AUGMENTATIONS`, `TIER_CONTRACTS`, and `PE_PROTOCOL`. Covers everything from spawning the PE teammates to holding their validated output, including the Phase 4 tier-escalation check.
+Loaded by SKILL.md at Phase 3, after it has read the dispatch playbook, the PE protocol and the review moves and bound `LENS_AUGMENTATIONS`, `TIER_CONTRACTS`, `PE_PROTOCOL` and `REVIEW_MOVES`. Covers everything from spawning the PE teammates to holding their validated output, including the Phase 4 tier-escalation check.
 
 ## Contents
 
@@ -231,6 +231,9 @@ and your agent's stack lenses (they augment, never replace them):
 PE PROTOCOL — run it as written; your agent definition adds only stack knowledge
 (owned files, commands, stack heuristics, stack lenses):
 {PE_PROTOCOL}
+
+REVIEW MOVES — apply every move after the five passes; return move: on each finding and moves_coverage:
+{REVIEW_MOVES}
 
 Run the PE PROTOCOL's five passes (all five at every tier):
   Pass 1 — Architecture

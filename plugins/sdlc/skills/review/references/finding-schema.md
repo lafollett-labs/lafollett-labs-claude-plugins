@@ -26,6 +26,12 @@ findings:
       How to fix it with code example if helpful.
     verification_receipt: |                 # Pass 5 receipt — grep result, test output, code reference
       Confirmed by `grep -rn "..." src/` returning N matches; tests at tests/foo.spec.ts:42 cover this path.
+    move: M1|M2|M3|M4|M5|M6|M7|none          # the review move whose trigger it falls under; missing or unknown → none
+moves_coverage:                              # REQUIRED — review-moves.md § Output; M1..M7 once each
+  - move: M1
+    status: applied|n/a
+    checked: "2 changed contracts → 9 consumers grepped"   # REQUIRED when applied — what was examined, with a count
+    note: ""                                 # REQUIRED when n/a — why no unit triggered the move
 verification_receipts:                       # non-gating — items failing the PE REPORTING BAR + positive attestations; no recommendation
   - id: "RECEIPT-001"
     claim: absence|positive|below_bar|indeterminate   # REQUIRED — set by the PE; only absence is proof-checked (Phase 5)
@@ -48,6 +54,8 @@ finding without a concrete recommendation (empty, or opening with consider | rev
 finding with an invalid severity:           → normalized first ("🔴 CRITICAL" → CRITICAL); else re-dispatch once, then record as MEDIUM (findings.js)
 finding category outside the enum:                             → re-dispatch once, then record as general + note it (findings.js)
 receipt without a valid claim:                                 → re-dispatch once, then treat as claim: absence (findings.js)
+moves_coverage missing, short of a move, or an entry without its counted checked / note:
+                                            → re-dispatch once, then keep the findings and record the gap in coverage_gaps (findings.js)
 verification_receipts[] missing/empty:                         → ACCEPT (default to [])
 finding without a verification_receipt proving the problem:     → DEMOTE to a receipt with the original claim + missing proof, never dropped; disproven → dismissed (Phase 5)
 absence receipt without whole-claim evidence:                  → re-dispatch PE once, then retain as a receipt unless a finding proves an actual problem (Phase 5)
