@@ -1,0 +1,12 @@
+{
+  "number": 42,
+  "state": "OPEN",
+  "isDraft": false,
+  "headRefOid": "a87e4241f294c7a1ec7a30426f2e266693b4657c",
+  "headRefName": "feat/42-widget-cache",
+  "baseRefName": "main",
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "mergeCommit": null,
+  "url": "https://github.com/octo-org/octo-repo/pull/42"
+}

@@ -1,0 +1,9 @@
+[
+  [
+    { "sha": "8af201b3381aab5a0830c2f5ee16dcf7ae5f0b35", "commit": { "message": "feat: cache widget lookups (#42)" } },
+    { "sha": "7bec3981c5ff2f5a9a76989d4fe131a50a8db04f", "commit": { "message": "docs: #42 code review round 1" } },
+    { "sha": "80ea3bd71f9cc687650ca059f963d7716d652d7a", "commit": { "message": "fix: evict stale widgets on update (#42)" } },
+    { "sha": "1a456159657e2a1c9aecd798108955157f486891", "commit": { "message": "docs: #42 code review round 2" } },
+    { "sha": "a87e4241f294c7a1ec7a30426f2e266693b4657c", "commit": { "message": "docs: #42 code review findings ledger" } }
+  ]
+]

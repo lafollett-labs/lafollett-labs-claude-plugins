@@ -1,0 +1,3 @@
+{ "data": { "repository": { "pullRequest": { "reviewThreads": {
+  "nodes": [ { "isResolved": true }, { "isResolved": true }, { "isResolved": true } ],
+  "pageInfo": { "hasNextPage": false, "endCursor": "Y3Vyc29yOjM=" } } } } } }
