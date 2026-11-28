@@ -1,6 +1,6 @@
 {
   "name": "sdlc",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "GitHub-native SDLC loop: plan issues and sub-issues, implement on a conventional branch, review with Principal Engineer agents (pe-go, pe-rust, pe-vue, pe-csharp, pe-angular, pe-sql-server, pe-aws-infra, pe-github-actions, pe-governance, pe-devtools, pe-general-purpose, plus the pe-audio domain PE) under a five-pass protocol, open the pull request, run a Copilot review, and deliver it end to end — skills plan, implement, review, pull-request, copilot-review, deliver and init-project (a Stack Map routing paths to PEs), plus a plan-reviewer agent",
   "author": {
     "name": "LaFollett Labs"

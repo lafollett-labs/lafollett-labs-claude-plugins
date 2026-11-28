@@ -9,6 +9,13 @@ from the `changelog.d/` fragments: the heading is the marketplace version, and
 **Plugins** lists the plugin versions it bumped. Unreleased work lives in
 `changelog.d/`; never edit this file by hand.
 
+## [1.35.3] — 2026-11-28
+
+**Plugins:** sdlc 1.1.2
+
+### Fixed
+- **sdlc** review reads a Stack Map that has prose between its heading and its table, instead of ignoring it and routing every file by the built-in globs.
+
 ## [1.35.2] — 2026-11-28
 
 **Plugins:** sdlc 1.1.1
