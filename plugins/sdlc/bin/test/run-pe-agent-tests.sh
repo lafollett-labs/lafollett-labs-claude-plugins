@@ -147,7 +147,7 @@ check_tree() {
               'run the code under review on it' 'model output (agent YAML'; do
     printf '%s' "$p5" | grep -qF -- "$want" || echo "protocol: Pass 5 missing: $want"
   done
-  grep -qF "a green suite is never the review's conclusion" "$proto" || echo "protocol: Pass 2 lets a green suite end the review"
+  section "$proto" '^## Passes 1–3' | grep -qF "a green suite is never the review's conclusion" || echo "protocol: Pass 2 lets a green suite end the review"
   grep -qF 'a history rewrite (rebase, force-push' "$root/skills/review/references/review-moves.md" 2>/dev/null \
     || echo "moves: M2 skips history rewrites"
   printf '%s' "$p5" | grep -qi -- 'downgrade' && echo "protocol: Pass 5 severity_honesty says downgrade"
